@@ -1,0 +1,25 @@
+h1, .h1, h2, .h2, h3, .h3 {
+    margin-top: 20px;
+}
+
+.btn {
+    border-width: 0 0px 0px 0px;
+    font-weight: normal;
+    text-transform: ;
+}
+
+.btn-default {
+    color: #2ecc71;
+    background-color: #ffffff;
+    border-color: #ffffff;
+}
+
+#TOC {
+  opacity: 0.5;
+}
+
+#TOC:hover {
+  opacity: 1;
+}
+
+.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
