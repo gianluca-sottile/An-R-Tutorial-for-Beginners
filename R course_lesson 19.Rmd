@@ -238,9 +238,18 @@ __Code Explanation__
 
 We can summarize the different types of box plot in the table below:
 
-| Objective | Code |
-|:----------|:-----|
-| Basic box plot | ggplot(df, aes( x = x1, y =y)) + geom_boxplot() |
-| flip the side | ggplot(df, aes( x = x1, y =y)) + geom_boxplot() + coord_flip() |
-| Notched box plot | ggplot(df, aes( x = x1, y =y)) + geom_boxplot(notch = TRUE) |
-| Box plot with jittered dots | ggplot(df, aes( x = x1, y =y)) + geom_boxplot() + geom_jitter(position = position_jitter(0.21)) |
+```{r, echo=FALSE}
+library(knitr)
+library(kableExtra)
+dt <- data.frame(
+  "Objective" = c("Basic box plot", "Flip the side", "Notched box plot", "Box plot with jittered dots"), 
+  "Code" = c("ggplot(df, aes(x = x1, y = y)) + geom_boxplot()", "ggplot(df, aes(x = x1, y = y)) + geom_boxplot() + coord_flip()", "ggplot(df, aes(x = x1, y = y)) + geom_boxplot(notch = TRUE)", "ggplot(df, aes(x = x1, y = y)) + geom_boxplot() + geom_jitter(position = position_jitter(0.21))"))
+kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+<!-- | Objective | Code | -->
+<!-- |:----------|:-----| -->
+<!-- | Basic box plot | ggplot(df, aes( x = x1, y =y)) + geom_boxplot() | -->
+<!-- | flip the side | ggplot(df, aes( x = x1, y =y)) + geom_boxplot() + coord_flip() | -->
+<!-- | Notched box plot | ggplot(df, aes( x = x1, y =y)) + geom_boxplot(notch = TRUE) | -->
+<!-- | Box plot with jittered dots | ggplot(df, aes( x = x1, y =y)) + geom_boxplot() + geom_jitter(position = position_jitter(0.21)) | -->

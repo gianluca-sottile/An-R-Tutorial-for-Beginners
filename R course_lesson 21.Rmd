@@ -154,9 +154,20 @@ The t-test belongs to the family of inferential statistics. It is commonly emplo
 
 We can summarize the t-test is the table below:
 
-| test | Hypothesis to test | p-value | code | optional argument |
-|:-----|:-------------------|:--------|:-----|:------------------|
-| one-sample t-test | Mean of a vector is different from the theoretical mean | 0.05 | t.test(x, mu = mean) | |
-| paired sample t-test | Mean A is different from mean B for the same group | 0.05 | t.test(A, B, mu = mean) | var.equal = TRUE |
+```{r, echo=FALSE}
+library(knitr)
+library(kableExtra)
+dt <- data.frame(
+  "test" = c("one-sample t-test", "paired sample t-test"), 
+  "Hypothesis_to_test" = c("Mean of a vector is different from the theoretical mean", "Mean A is different from mean B for the same group"),
+  "code" = c("t.test(x, mu = mean)", "t.test(A, B, mu = mean)"),
+  "optional_argument" = c("", "var.equal = TRUE"))
+kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
 
-If we assume the variances are equal, we need to change the parameter var.equal = TRUE.
+<!-- | test | Hypothesis to test | p-value | code | optional argument | -->
+<!-- |:-----|:-------------------|:--------|:-----|:------------------| -->
+<!-- | one-sample t-test | Mean of a vector is different from the theoretical mean | 0.05 | t.test(x, mu = mean) | | -->
+<!-- | paired sample t-test | Mean A is different from mean B for the same group | 0.05 | t.test(A, B, mu = mean) | var.equal = TRUE | -->
+
+<!-- If we assume the variances are equal, we need to change the parameter var.equal = TRUE. -->

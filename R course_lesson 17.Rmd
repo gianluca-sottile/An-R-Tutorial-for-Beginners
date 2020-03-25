@@ -303,12 +303,47 @@ mapping = aes(color = children_fac): Move the list in upper = list(). We only wa
 # Summary
 We can summarize the function in the table below:
 
-| library | Objective | method | code |
-|:--------|:----------|:-------|:-----|
-| Base | bivariate correlation | Pearson | cor(dfx2, method = "pearson") |
-|  | bivariate correlation | Spearman | cor(dfx2, method = "spearman") |
-|  | Multivariate correlation | Pearson | cor(df, method = "pearson") |
-|  | Multivariate correlation | Spearman | cor(df, method = "spearman") |
-| Hmisc | P value | | rcorr(as.matrix(data[,1:9]))[["P"]] |
-| Ggally | heat map | | ggcorr(df) | 
-|  | Multivariate plots | | ggpairs(df) |
+```{r, echo=FALSE}
+library(knitr)
+library(kableExtra)
+dt <- data.frame(
+  "Library" = c("Base", 
+                  "", 
+                  "", 
+                  "", 
+                  "Hmisc", 
+                  "Ggally", 
+                  ""), 
+  "Objective" = c("bivariate correlation", 
+             "bivariate correlation", 
+             "Multivariate correlation", 
+             "Multivariate correlation", 
+             "P value",
+             "heat map", 
+             "Multivariate plots"),
+  "Method" = c("Pearson",
+               "Spearman",
+               "Pearson",
+               "Spearman",
+               "",
+               "",
+               ""),
+  "Code" = c("cor(dfx2, method = \"pearson\")",
+             "cor(dfx2, method = \"spearman\")",
+             "cor(df, method = \"pearson\")",
+             "cor(df, method = \"spearman\")",
+             "rcorr(as.matrix(data[,1:9]))[[\"P\"]]",
+             "ggcorr(df)",
+             "ggpairs(df)"))
+kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+<!-- | library | Objective | method | code | -->
+<!-- |:--------|:----------|:-------|:-----| -->
+<!-- | Base | bivariate correlation | Pearson | cor(dfx2, method = "pearson") | -->
+<!-- |  | bivariate correlation | Spearman | cor(dfx2, method = "spearman") | -->
+<!-- |  | Multivariate correlation | Pearson | cor(df, method = "pearson") | -->
+<!-- |  | Multivariate correlation | Spearman | cor(df, method = "spearman") | -->
+<!-- | Hmisc | P value | | rcorr(as.matrix(data[,1:9]))[["P"]] | -->
+<!-- | Ggally | heat map | | ggcorr(df) |  -->
+<!-- |  | Multivariate plots | | ggpairs(df) | -->

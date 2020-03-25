@@ -84,13 +84,22 @@ length(dt[, 1])
 ***
 R has an array of mathematical functions.
 
-| Operator | Description |
-|:---------|:------------|
-| abs(x) | Takes the absolute value of x |
-| log(x, base = y) | Takes the logarithm of x with base y; if base is not specified, returns the natural logarithm |
-| exp(x) | Returns the exponential of x |
-| sqrt(x) |	Returns the square root of x |
-| factorial(x) | Returns the factorial of x (x!)  |
+```{r, echo=FALSE}
+library(knitr)
+library(kableExtra)
+dt2 <- data.frame(
+  "Operator" = c("abs(x)", "log(x, base = y)", "exp(x)", "sqrt(x)", "factorial(x)"), 
+  "Description" = c("Takes the absolute value of x", "Takes the logarithm of x with base y; if base is not specified, returns the natural logarithm", "Returns the exponential of x", "Returns the square root of x", "Returns the factorial of x (x!)"))
+kable(dt2) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+<!-- | Operator | Description | -->
+<!-- |:---------|:------------| -->
+<!-- | abs(x) | Takes the absolute value of x | -->
+<!-- | log(x, base = y) | Takes the logarithm of x with base y; if base is not specified, returns the natural logarithm | -->
+<!-- | exp(x) | Returns the exponential of x | -->
+<!-- | sqrt(x) |	Returns the square root of x | -->
+<!-- | factorial(x) | Returns the factorial of x (x!)  | -->
 
 ```{r}
 # sequence of number from 44 to 55 both including incremented by 1
@@ -110,6 +119,15 @@ factorial(x_vector)
 R standard installation contains wide range of statistical functions. In this tutorial, we will briefly look at the most important function.
 
 __Basic statistic functions__
+
+```{r, echo=FALSE}
+library(knitr)
+library(kableExtra)
+dt2 <- data.frame(
+  "Operator" = c("mean(x)", "median(x)", "var(x)", "sd(x)", "scale(x)", "quantile(x)", "summary(x)"), 
+  "Description" = c("Mean of x", "Median of x", "Variance of x", "Standard deviation of x", "Standard scores (z-scores) of x", "The quartiles of x", "Summary of x: mean, min, max etc..."))
+kable(dt2) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
 
 | Operator | Description |
 |:---------|:------------|

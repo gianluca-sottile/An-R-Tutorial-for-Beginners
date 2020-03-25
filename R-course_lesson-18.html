@@ -23,6 +23,7 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -939,64 +940,121 @@ div.tocify {
 <div id="summary" class="section level1">
 <h1>Summary</h1>
 <p>You can summarize the arguments to create a scatter plot in the table below:</p>
-<table>
-<colgroup>
-<col width="64%" />
-<col width="35%" />
-</colgroup>
+<table class="table table-striped table-hover" style="margin-left: auto; margin-right: auto;">
 <thead>
-<tr class="header">
-<th align="left">Objective</th>
-<th align="left">Code</th>
+<tr>
+<th style="text-align:left;">
+Objective
+</th>
+<th style="text-align:left;">
+Code
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="left">Basic scatter plot</td>
-<td align="left">ggplot(df, aes(x = x1, y = y)) + geom_point()</td>
+<tr>
+<td style="text-align:left;">
+Basic scatter plot
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x = x1, y = y)) + geom_point()
+</td>
 </tr>
-<tr class="even">
-<td align="left">Scatter plot with color group</td>
-<td align="left">ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1)) + stat_smooth(method = “lm”)</td>
+<tr>
+<td style="text-align:left;">
+Scatter plot with color group
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1)) + stat_smooth(method = “lm”)
+</td>
 </tr>
-<tr class="odd">
-<td align="left">Add fitted values</td>
-<td align="left">ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1))</td>
+<tr>
+<td style="text-align:left;">
+Add fitted values
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1))
+</td>
 </tr>
-<tr class="even">
-<td align="left">Add title</td>
-<td align="left">ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(title = paste(“Hello Gianluca”))</td>
+<tr>
+<td style="text-align:left;">
+Add title
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(title = paste(“Hello Gianluca”))
+</td>
 </tr>
-<tr class="odd">
-<td align="left">Add subtitle</td>
-<td align="left">ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(subtitle = paste(“Hello Guru99”))</td>
+<tr>
+<td style="text-align:left;">
+Add subtitle
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(subtitle = paste(“Hello Gianluca”))
+</td>
 </tr>
-<tr class="even">
-<td align="left">Rename x</td>
-<td align="left">ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(x = “X1”)</td>
+<tr>
+<td style="text-align:left;">
+Rename x
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(x = “X1”)
+</td>
 </tr>
-<tr class="odd">
-<td align="left">Rename y</td>
-<td align="left">ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(y = “y1”)</td>
+<tr>
+<td style="text-align:left;">
+Rename y
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(y = “Y1”)
+</td>
 </tr>
-<tr class="even">
-<td align="left">Control the scale</td>
-<td align="left">ggplot(df, aes(x = x1, y = y)) + geom_point() + scale_y_continuous(breaks = seq(10, 35, by = 10)) + scale_x_continuous(breaks = seq(2, 5, by = 1)</td>
+<tr>
+<td style="text-align:left;">
+Control the scale
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x = x1, y = y)) + geom_point() + scale_y_continuous(breaks = seq(10, 35, by = 10)) + scale_x_continuous(breaks = seq(2, 5, by = 1)
+</td>
 </tr>
-<tr class="odd">
-<td align="left">Create logs</td>
-<td align="left">ggplot(df, aes(x =log(x1), y = log(y))) + geom_point()</td>
+<tr>
+<td style="text-align:left;">
+Create logs
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x =log(x1), y = log(y))) + geom_point()
+</td>
 </tr>
-<tr class="even">
-<td align="left">Theme</td>
-<td align="left">ggplot(df, aes(x = x1, y = y)) + geom_point() + theme_classic()</td>
+<tr>
+<td style="text-align:left;">
+Theme
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x = x1, y = y)) + geom_point() + theme_classic()
+</td>
 </tr>
-<tr class="odd">
-<td align="left">Save</td>
-<td align="left">ggsave(“my_fantastic_plot.png”)</td>
+<tr>
+<td style="text-align:left;">
+Save
+</td>
+<td style="text-align:left;">
+ggsave(“my_fantastic_plot.png”)
+</td>
 </tr>
 </tbody>
 </table>
+<!-- | Objective | Code | -->
+<!-- |:----------|:-----| -->
+<!-- | Basic scatter plot | ggplot(df, aes(x = x1, y = y)) + geom_point() | -->
+<!-- | Scatter plot with color group | ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1)) + stat_smooth(method = "lm") | -->
+<!-- | Add fitted values | ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1)) | -->
+<!-- | Add title | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(title = paste("Hello Gianluca")) | -->
+<!-- | Add subtitle | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(subtitle = paste("Hello Guru99")) | -->
+<!-- | Rename x | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(x = "X1") | -->
+<!-- | Rename y | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(y = "y1") | -->
+<!-- | Control the scale | ggplot(df, aes(x = x1, y = y)) + geom_point() + scale_y_continuous(breaks = seq(10, 35, by = 10)) + scale_x_continuous(breaks = seq(2, 5, by = 1) | -->
+<!-- | Create logs | ggplot(df, aes(x =log(x1), y = log(y))) + geom_point() | -->
+<!-- | Theme | ggplot(df, aes(x = x1, y = y)) + geom_point() + theme_classic() | -->
+<!-- | Save | ggsave("my_fantastic_plot.png") | -->
 </div>
 
 &nbsp;

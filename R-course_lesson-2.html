@@ -23,6 +23,7 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -771,36 +772,70 @@ div.tocify {
 <h1>Arithmetic Operators</h1>
 <hr />
 <p>We will first see the basic arithmetic operations in R. The following operators stand for:</p>
-<table>
+<table class="table table-striped table-hover" style="margin-left: auto; margin-right: auto;">
 <thead>
-<tr class="header">
-<th align="left">Operator</th>
-<th align="left">Description</th>
+<tr>
+<th style="text-align:left;">
+Operator
+</th>
+<th style="text-align:left;">
+Description
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="left">+</td>
-<td align="left">Addition</td>
+<tr>
+<td style="text-align:left;">
+<ul>
+<li></td>
+<td style="text-align:left;">
+Addition
+</td>
 </tr>
-<tr class="even">
-<td align="left">-</td>
-<td align="left">Subtraction</td>
+<tr>
+<td style="text-align:left;">
+<ul>
+<li></td>
+<td style="text-align:left;">
+Subtraction
+</td>
 </tr>
-<tr class="odd">
-<td align="left">*</td>
-<td align="left">Multiplication</td>
+<tr>
+<td style="text-align:left;">
+<ul>
+<li></td>
+<td style="text-align:left;">
+Multiplication
+</td>
 </tr>
-<tr class="even">
-<td align="left">/</td>
-<td align="left">Division</td>
+<tr>
+<td style="text-align:left;">
+/
+</td>
+<td style="text-align:left;">
+Division
+</td>
 </tr>
-<tr class="odd">
-<td align="left">^ or **</td>
-<td align="left">Exponentiation</td>
+<tr>
+<td style="text-align:left;">
+^ or **
+</td>
+<td style="text-align:left;">
+Exponentiation
+</td>
 </tr>
 </tbody>
-</table>
+</table></li>
+</ul></li>
+</ul></li>
+</ul>
+<!-- | Operator | Description |  -->
+<!-- |:---------|:------------| -->
+<!-- | + |  Addition | -->
+<!-- | - |  Subtraction | -->
+<!-- | * |  Multiplication | -->
+<!-- | / |  Division | -->
+<!-- | ^ or ** |    Exponentiation | -->
 <p>You can easily copy and paste the above R code into Rstudio Console. The <strong>output</strong> is displayed after the character #. For instance, we write the code print(‘Hello world’) the output will be ##[1] “Hello world”.</p>
 <p>The ## means we print an output and the number in the square bracket ([1]) is the number of the display</p>
 <p>The sentences starting with # <strong>annotation</strong>. We can use # inside an R script to add any comment we want. R won’t read it during the running time.</p>
@@ -839,52 +874,103 @@ div.tocify {
 <h1>Logical Operators</h1>
 <hr />
 <p>With logical operators, we want to return values inside the vector based on logical conditions. Following is a detailed list of logical operators available in R</p>
-<table>
+<table class="table table-striped table-hover" style="margin-left: auto; margin-right: auto;">
 <thead>
-<tr class="header">
-<th align="left">Operator</th>
-<th align="left">Description</th>
+<tr>
+<th style="text-align:left;">
+Operator
+</th>
+<th style="text-align:left;">
+Description
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="left">&lt;</td>
-<td align="left">Less than</td>
+<tr>
+<td style="text-align:left;">
+&lt;
+</td>
+<td style="text-align:left;">
+Less than
+</td>
 </tr>
-<tr class="even">
-<td align="left">&lt;=</td>
-<td align="left">Less than or equal to</td>
+<tr>
+<td style="text-align:left;">
+&lt;=
+</td>
+<td style="text-align:left;">
+Less than or equal to
+</td>
 </tr>
-<tr class="odd">
-<td align="left">&gt;</td>
-<td align="left">Greater than</td>
+<tr>
+<td style="text-align:left;">
+&gt;
+</td>
+<td style="text-align:left;">
+Greater than
+</td>
 </tr>
-<tr class="even">
-<td align="left">&gt;=</td>
-<td align="left">Greater than or equal to</td>
+<tr>
+<td style="text-align:left;">
+&gt;=
+</td>
+<td style="text-align:left;">
+Greater than or equal to
+</td>
 </tr>
-<tr class="odd">
-<td align="left">==</td>
-<td align="left">Exactly equal to</td>
+<tr>
+<td style="text-align:left;">
+==
+</td>
+<td style="text-align:left;">
+Exactly equal to
+</td>
 </tr>
-<tr class="even">
-<td align="left">!=</td>
-<td align="left">Not equal to</td>
+<tr>
+<td style="text-align:left;">
+!=
+</td>
+<td style="text-align:left;">
+Not equal to
+</td>
 </tr>
-<tr class="odd">
-<td align="left">!x</td>
-<td align="left">Not X</td>
+<tr>
+<td style="text-align:left;">
+!x
+</td>
+<td style="text-align:left;">
+Not x
+</td>
 </tr>
-<tr class="even">
-<td align="left">x &amp; y</td>
-<td align="left">x AND y</td>
+<tr>
+<td style="text-align:left;">
+x &amp; y
+</td>
+<td style="text-align:left;">
+x AND y
+</td>
 </tr>
-<tr class="odd">
-<td align="left">isTRUE(x)</td>
-<td align="left">Test if x is TRUE</td>
+<tr>
+<td style="text-align:left;">
+isTRUE(x
+</td>
+<td style="text-align:left;">
+Test if x is TRUE
+</td>
 </tr>
 </tbody>
 </table>
+<!-- | Operator | Description |  -->
+<!-- |:---------|:------------| -->
+<!-- | < |  Less than | -->
+<!-- | <= | Less than or equal to | -->
+<!-- | > |  Greater than | -->
+<!-- | >= | Greater than or equal to | -->
+<!-- | == | Exactly equal to | -->
+<!-- | != | Not equal to | -->
+<!-- | !x | Not X | -->
+<!-- | x & y |  x AND y | -->
+<!-- | isTRUE(x) |  Test if x is TRUE | -->
 <p>The logical statements in R are wrapped inside the <code>[ ]</code>. We can add many conditional statements as we like but we need to include them in a parenthesis. We can follow this structure to create a conditional statement:</p>
 <div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb35-1" data-line-number="1">variable_name[(conditional_statement)]</a></code></pre></div>
 <p>With variable_name referring to the variable, we want to use for the statement. We create the logical statement i.e. <code>variable_name &gt; 0</code>. Finally, we use the square bracket to finalize the logical statement. Below, an example of a logical statement.</p>

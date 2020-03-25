@@ -79,11 +79,21 @@ if (quantity < 20) {
 __Example:__
 VAT has different rate according to the product purchased. Imagine we have three different kind of products with different VAT applied:
 
-| Categories | Products |	VAT |
-|:-----------|:---------|:----|
-| A | Book, magazine, newspaper, etc.. | 8% |
-| B |	Vegetable, meat, beverage, etc.. | 10% |
-| C |	Tee-shirt, jean, pant, etc.. | 20% |
+```{r, echo=FALSE}
+library(knitr)
+library(kableExtra)
+dt <- data.frame(
+  "Categories" = c("A", "B", "C"), 
+  "Products" = c("Book, magazine, newspaper, etc..", "Vegetable, meat, beverage, etc..", "Tee-shirt, jean, pant, etc.."),
+  "VAT" = c("8%", "10%", "20%"))
+kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+<!-- | Categories | Products |	VAT | -->
+<!-- |:-----------|:---------|:----| -->
+<!-- | A | Book, magazine, newspaper, etc.. | 8% | -->
+<!-- | B |	Vegetable, meat, beverage, etc.. | 10% | -->
+<!-- | C |	Tee-shirt, jean, pant, etc.. | 20% | -->
 
 We can write a chain to apply the correct VAT rate to the product a customer bought.
 

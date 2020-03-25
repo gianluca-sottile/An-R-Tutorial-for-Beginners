@@ -293,11 +293,20 @@ __Code Explanation__
 
 A bar chart is useful when the x-axis is a categorical variable. The y-axis can be either a count or a summary statistic. The table below summarizes how to control bar chart with ggplot2:
 
-| Objective | Code |
-|:----------|:-----|
-| Count | ggplot(df, eas(x= factor(x1)) + geom_bar() |
-| Count with different color of fill | ggplot(df, eas(x= factor(x1), fill = factor(x1))) + geom_bar() |
-| Count with groups, stacked | ggplot(df, eas(x= factor(x1), fill = factor(x2))) + geom_bar(position=position_dodge()) |
-| Count with groups, side by side | ggplot(df, eas(x= factor(x1), fill = factor(x2))) + geom_bar() |
-| Count with groups, stacked in % | ggplot(df, eas(x= factor(x1), fill = factor(x2))) + geom_bar(position=position_dodge()) |
-| Values | ggplot(df, eas(x= factor(x1)+ y = x2) + geom_bar(stat="identity") |
+```{r, echo=FALSE}
+library(knitr)
+library(kableExtra)
+dt <- data.frame(
+  "Objective" = c("Count", "Count with different color of fill", "Count with groups, stacked", "Count with groups, side by side", "Count with groups, stacked in %", "Values"), 
+  "Code" = c("ggplot(df, eas(x= factor(x1)) + geom_bar()", "ggplot(df, eas(x= factor(x1), fill = factor(x1))) + geom_bar()", "ggplot(df, eas(x= factor(x1), fill = factor(x2))) + geom_bar(position=position_dodge())", "ggplot(df, eas(x= factor(x1), fill = factor(x2))) + geom_bar()", "ggplot(df, eas(x= factor(x1), fill = factor(x2))) + geom_bar(position=position_dodge())", "ggplot(df, eas(x= factor(x1)+ y = x2) + geom_bar(stat=\"identity\")"))
+kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+<!-- | Objective | Code | -->
+<!-- |:----------|:-----| -->
+<!-- | Count | ggplot(df, eas(x= factor(x1)) + geom_bar() | -->
+<!-- | Count with different color of fill | ggplot(df, eas(x= factor(x1), fill = factor(x1))) + geom_bar() | -->
+<!-- | Count with groups, stacked | ggplot(df, eas(x= factor(x1), fill = factor(x2))) + geom_bar(position=position_dodge()) | -->
+<!-- | Count with groups, side by side | ggplot(df, eas(x= factor(x1), fill = factor(x2))) + geom_bar() | -->
+<!-- | Count with groups, stacked in % | ggplot(df, eas(x= factor(x1), fill = factor(x2))) + geom_bar(position=position_dodge()) | -->
+<!-- | Values | ggplot(df, eas(x= factor(x1)+ y = x2) + geom_bar(stat="identity") | -->

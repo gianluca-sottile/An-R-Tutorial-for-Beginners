@@ -167,17 +167,39 @@ We have three methods to deal with missing values:
 
 The following table summarizes how to remove all the missing observations
 
-| Library |	Objective |	Code |
-|:--------|:----------|:-----|
-| base | List missing observations | colnames(df)[apply(df, 2, anyNA)] |
-| dplyr |	Remove all missing values	| na.omit(df) |
+```{r, echo=FALSE}
+library(knitr)
+library(kableExtra)
+dt <- data.frame(
+  "Library" = c("Base", "dplyr"), 
+  "Objective" = c("List missing observations", "Remove all missing values"),
+  "Code" = c("colnames(df)[apply(df, 2, anyNA)]", "na.omit(df)"))
+kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+<!-- | Library |	Objective |	Code | -->
+<!-- |:--------|:----------|:-----| -->
+<!-- | base | List missing observations | colnames(df)[apply(df, 2, anyNA)] | -->
+<!-- | dplyr |	Remove all missing values	| na.omit(df) | -->
 
 Imputation with mean or median can be done in two ways
 
 - Using apply
 - Using sapply
 
-| Method | Details | Advantages | Disadvantages |
-|:-------|:--------|:-----------|:--------------|
-| Step by step with apply |	Check columns with missing, compute mean/median, store the value, replace with mutate() | You know the value of means/median |	More execution time. Can be slow with big dataset |
-| Quick way with sapply |	Use sapply() and data.frame() to automatically search and replace missing values with mean/median | Short code and fast | Don't know the imputation values |
+```{r, echo=FALSE}
+library(knitr)
+library(kableExtra)
+dt <- data.frame(
+  "Method" = c("Step by step with apply", "Quick way with sapply"), 
+  "Details" = c("Check columns with missing, compute mean/median, store the value, replace with mutate()", 
+             "Use sapply() and data.frame() to automatically search and replace missing values with mean/median"),
+  "Advantages" = c("You know the value of means/median", "Short code and fast"),
+  "Disadvantages" = c("More execution time. Can be slow with big dataset", "Don't know the imputation values"))
+kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+<!-- | Method | Details | Advantages | Disadvantages | -->
+<!-- |:-------|:--------|:-----------|:--------------| -->
+<!-- | Step by step with apply |	Check columns with missing, compute mean/median, store the value, replace with mutate() | You know the value of means/median |	More execution time. Can be slow with big dataset | -->
+<!-- | Quick way with sapply |	Use sapply() and data.frame() to automatically search and replace missing values with mean/median | Short code and fast | Don't know the imputation values | -->

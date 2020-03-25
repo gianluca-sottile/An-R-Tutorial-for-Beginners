@@ -23,6 +23,7 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -851,36 +852,58 @@ div.tocify {
 <div id="summary" class="section level1">
 <h1>Summary</h1>
 <p>We can summarize the different types of box plot in the table below:</p>
-<table>
-<colgroup>
-<col width="64%" />
-<col width="35%" />
-</colgroup>
+<table class="table table-striped table-hover" style="margin-left: auto; margin-right: auto;">
 <thead>
-<tr class="header">
-<th align="left">Objective</th>
-<th align="left">Code</th>
+<tr>
+<th style="text-align:left;">
+Objective
+</th>
+<th style="text-align:left;">
+Code
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="left">Basic box plot</td>
-<td align="left">ggplot(df, aes( x = x1, y =y)) + geom_boxplot()</td>
+<tr>
+<td style="text-align:left;">
+Basic box plot
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x = x1, y = y)) + geom_boxplot()
+</td>
 </tr>
-<tr class="even">
-<td align="left">flip the side</td>
-<td align="left">ggplot(df, aes( x = x1, y =y)) + geom_boxplot() + coord_flip()</td>
+<tr>
+<td style="text-align:left;">
+Flip the side
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x = x1, y = y)) + geom_boxplot() + coord_flip()
+</td>
 </tr>
-<tr class="odd">
-<td align="left">Notched box plot</td>
-<td align="left">ggplot(df, aes( x = x1, y =y)) + geom_boxplot(notch = TRUE)</td>
+<tr>
+<td style="text-align:left;">
+Notched box plot
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x = x1, y = y)) + geom_boxplot(notch = TRUE)
+</td>
 </tr>
-<tr class="even">
-<td align="left">Box plot with jittered dots</td>
-<td align="left">ggplot(df, aes( x = x1, y =y)) + geom_boxplot() + geom_jitter(position = position_jitter(0.21))</td>
+<tr>
+<td style="text-align:left;">
+Box plot with jittered dots
+</td>
+<td style="text-align:left;">
+ggplot(df, aes(x = x1, y = y)) + geom_boxplot() + geom_jitter(position = position_jitter(0.21))
+</td>
 </tr>
 </tbody>
 </table>
+<!-- | Objective | Code | -->
+<!-- |:----------|:-----| -->
+<!-- | Basic box plot | ggplot(df, aes( x = x1, y =y)) + geom_boxplot() | -->
+<!-- | flip the side | ggplot(df, aes( x = x1, y =y)) + geom_boxplot() + coord_flip() | -->
+<!-- | Notched box plot | ggplot(df, aes( x = x1, y =y)) + geom_boxplot(notch = TRUE) | -->
+<!-- | Box plot with jittered dots | ggplot(df, aes( x = x1, y =y)) + geom_boxplot() + geom_jitter(position = position_jitter(0.21)) | -->
 </div>
 
 &nbsp;

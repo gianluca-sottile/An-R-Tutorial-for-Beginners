@@ -356,16 +356,45 @@ open_folder <- function(dir) {
 # Summary
 You can summarize the arguments to create a scatter plot in the table below:
 
-| Objective | Code |
-|:----------|:-----|
-| Basic scatter plot | ggplot(df, aes(x = x1, y = y)) + geom_point() |
-| Scatter plot with color group | ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1)) + stat_smooth(method = "lm") |
-| Add fitted values | ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1)) |
-| Add title | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(title = paste("Hello Gianluca")) |
-| Add subtitle | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(subtitle = paste("Hello Guru99")) |
-| Rename x | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(x = "X1") |
-| Rename y | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(y = "y1") |
-| Control the scale | ggplot(df, aes(x = x1, y = y)) + geom_point() + scale_y_continuous(breaks = seq(10, 35, by = 10)) + scale_x_continuous(breaks = seq(2, 5, by = 1) |
-| Create logs | ggplot(df, aes(x =log(x1), y = log(y))) + geom_point() |
-| Theme | ggplot(df, aes(x = x1, y = y)) + geom_point() + theme_classic() |
-| Save | ggsave("my_fantastic_plot.png") |
+```{r, echo=FALSE}
+library(knitr)
+library(kableExtra)
+dt <- data.frame(
+  "Objective" = c("Basic scatter plot", 
+                  "Scatter plot with color group", 
+                  "Add fitted values", 
+                  "Add title", 
+                  "Add subtitle", 
+                  "Rename x", 
+                  "Rename y", 
+                  "Control the scale", 
+                  "Create logs", 
+                  "Theme", 
+                  "Save"), 
+  "Code" = c("ggplot(df, aes(x = x1, y = y)) + geom_point()", 
+             "ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1)) + stat_smooth(method = \"lm\")", 
+             "ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1))", 
+             "ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(title = paste(\"Hello Gianluca\"))", 
+             "ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(subtitle = paste(\"Hello Gianluca\"))",
+             "ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(x = \"X1\")", 
+             "ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(y = \"Y1\")", 
+             "ggplot(df, aes(x = x1, y = y)) + geom_point() + scale_y_continuous(breaks = seq(10, 35, by = 10)) + scale_x_continuous(breaks = seq(2, 5, by = 1)", 
+             "ggplot(df, aes(x =log(x1), y = log(y))) + geom_point()", 
+             "ggplot(df, aes(x = x1, y = y)) + geom_point() + theme_classic()", 
+             "ggsave(\"my_fantastic_plot.png\")"))
+kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+<!-- | Objective | Code | -->
+<!-- |:----------|:-----| -->
+<!-- | Basic scatter plot | ggplot(df, aes(x = x1, y = y)) + geom_point() | -->
+<!-- | Scatter plot with color group | ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1)) + stat_smooth(method = "lm") | -->
+<!-- | Add fitted values | ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1)) | -->
+<!-- | Add title | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(title = paste("Hello Gianluca")) | -->
+<!-- | Add subtitle | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(subtitle = paste("Hello Guru99")) | -->
+<!-- | Rename x | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(x = "X1") | -->
+<!-- | Rename y | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(y = "y1") | -->
+<!-- | Control the scale | ggplot(df, aes(x = x1, y = y)) + geom_point() + scale_y_continuous(breaks = seq(10, 35, by = 10)) + scale_x_continuous(breaks = seq(2, 5, by = 1) | -->
+<!-- | Create logs | ggplot(df, aes(x =log(x1), y = log(y))) + geom_point() | -->
+<!-- | Theme | ggplot(df, aes(x = x1, y = y)) + geom_point() + theme_classic() | -->
+<!-- | Save | ggsave("my_fantastic_plot.png") | -->

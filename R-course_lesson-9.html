@@ -23,6 +23,7 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -701,40 +702,67 @@ div.tocify {
 <h1>Math functions</h1>
 <hr />
 <p>R has an array of mathematical functions.</p>
-<table>
-<colgroup>
-<col width="43%" />
-<col width="56%" />
-</colgroup>
+<table class="table table-striped table-hover" style="margin-left: auto; margin-right: auto;">
 <thead>
-<tr class="header">
-<th align="left">Operator</th>
-<th align="left">Description</th>
+<tr>
+<th style="text-align:left;">
+Operator
+</th>
+<th style="text-align:left;">
+Description
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="left">abs(x)</td>
-<td align="left">Takes the absolute value of x</td>
+<tr>
+<td style="text-align:left;">
+abs(x)
+</td>
+<td style="text-align:left;">
+Takes the absolute value of x
+</td>
 </tr>
-<tr class="even">
-<td align="left">log(x, base = y)</td>
-<td align="left">Takes the logarithm of x with base y; if base is not specified, returns the natural logarithm</td>
+<tr>
+<td style="text-align:left;">
+log(x, base = y)
+</td>
+<td style="text-align:left;">
+Takes the logarithm of x with base y; if base is not specified, returns the natural logarithm
+</td>
 </tr>
-<tr class="odd">
-<td align="left">exp(x)</td>
-<td align="left">Returns the exponential of x</td>
+<tr>
+<td style="text-align:left;">
+exp(x)
+</td>
+<td style="text-align:left;">
+Returns the exponential of x
+</td>
 </tr>
-<tr class="even">
-<td align="left">sqrt(x)</td>
-<td align="left">Returns the square root of x</td>
+<tr>
+<td style="text-align:left;">
+sqrt(x)
+</td>
+<td style="text-align:left;">
+Returns the square root of x
+</td>
 </tr>
-<tr class="odd">
-<td align="left">factorial(x)</td>
-<td align="left">Returns the factorial of x (x!)</td>
+<tr>
+<td style="text-align:left;">
+factorial(x)
+</td>
+<td style="text-align:left;">
+Returns the factorial of x (x!)
+</td>
 </tr>
 </tbody>
 </table>
+<!-- | Operator | Description | -->
+<!-- |:---------|:------------| -->
+<!-- | abs(x) | Takes the absolute value of x | -->
+<!-- | log(x, base = y) | Takes the logarithm of x with base y; if base is not specified, returns the natural logarithm | -->
+<!-- | exp(x) | Returns the exponential of x | -->
+<!-- | sqrt(x) |    Returns the square root of x | -->
+<!-- | factorial(x) | Returns the factorial of x (x!)  | -->
 <div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb7-1" data-line-number="1"><span class="co"># sequence of number from 44 to 55 both including incremented by 1</span></a>
 <a class="sourceLine" id="cb7-2" data-line-number="2">x_vector &lt;-<span class="st"> </span><span class="kw">seq</span>(<span class="dv">45</span>, <span class="dv">55</span>, <span class="dt">by =</span> <span class="dv">1</span>)</a>
 <a class="sourceLine" id="cb7-3" data-line-number="3"><span class="co">#logarithm</span></a>
@@ -761,6 +789,76 @@ div.tocify {
 <hr />
 <p>R standard installation contains wide range of statistical functions. In this tutorial, we will briefly look at the most important function.</p>
 <p><strong>Basic statistic functions</strong></p>
+<table class="table table-striped table-hover" style="margin-left: auto; margin-right: auto;">
+<thead>
+<tr>
+<th style="text-align:left;">
+Operator
+</th>
+<th style="text-align:left;">
+Description
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+mean(x)
+</td>
+<td style="text-align:left;">
+Mean of x
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+median(x)
+</td>
+<td style="text-align:left;">
+Median of x
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+var(x)
+</td>
+<td style="text-align:left;">
+Variance of x
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+sd(x)
+</td>
+<td style="text-align:left;">
+Standard deviation of x
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+scale(x)
+</td>
+<td style="text-align:left;">
+Standard scores (z-scores) of x
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+quantile(x)
+</td>
+<td style="text-align:left;">
+The quartiles of x
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+summary(x)
+</td>
+<td style="text-align:left;">
+Summary of x: mean, min, max etc…
+</td>
+</tr>
+</tbody>
+</table>
 <table>
 <thead>
 <tr class="header">
@@ -885,31 +983,31 @@ div.tocify {
 ##  [25] &quot;df&quot;                     &quot;df_titanic&quot;             &quot;df_titanic_drop&quot;       
 ##  [28] &quot;df_titanic_impute_mean&quot; &quot;df_titanic_replace&quot;     &quot;diff_ts&quot;               
 ##  [31] &quot;directory&quot;              &quot;dt&quot;                     &quot;dt_l&quot;                  
-##  [34] &quot;dt_s&quot;                   &quot;example&quot;                &quot;example_1&quot;             
-##  [37] &quot;example_2&quot;              &quot;factor_color&quot;           &quot;factor_day&quot;            
-##  [40] &quot;factor_gender_vector&quot;   &quot;fcars&quot;                  &quot;fruit&quot;                 
-##  [43] &quot;gender_vector&quot;          &quot;graph&quot;                  &quot;i&quot;                     
-##  [46] &quot;img&quot;                    &quot;iris&quot;                   &quot;iris_na&quot;               
-##  [49] &quot;iris_no_header&quot;         &quot;iris_row_no_header&quot;     &quot;iris_row_with_header&quot;  
-##  [52] &quot;list&quot;                   &quot;list_na&quot;                &quot;lmn_cars&quot;              
-##  [55] &quot;lmxcars&quot;                &quot;logical_vector&quot;         &quot;loop&quot;                  
-##  [58] &quot;m1&quot;                     &quot;m2&quot;                     &quot;m3&quot;                    
-##  [61] &quot;mat&quot;                    &quot;mat_1&quot;                  &quot;mat_2&quot;                 
-##  [64] &quot;matrix_a&quot;               &quot;matrix_a1&quot;              &quot;matrix_a2&quot;             
-##  [67] &quot;matrix_b&quot;               &quot;matrix_c&quot;               &quot;matrix_d&quot;              
-##  [70] &quot;mean_mpg&quot;               &quot;median_missing&quot;         &quot;movies&quot;                
-##  [73] &quot;movies_lower&quot;           &quot;my_graph&quot;               &quot;my_list&quot;               
-##  [76] &quot;open_folder&quot;            &quot;p&quot;                      &quot;p_value&quot;               
-##  [79] &quot;PATH&quot;                   &quot;PATH_sas&quot;               &quot;PATH_spss&quot;             
-##  [82] &quot;PATH_stata&quot;             &quot;price&quot;                  &quot;producers&quot;             
-##  [85] &quot;quake&quot;                  &quot;quake_1&quot;                &quot;quantity&quot;              
-##  [88] &quot;r&quot;                      &quot;slice_vector&quot;           &quot;smn_cars&quot;              
-##  [91] &quot;smxcars&quot;                &quot;speed&quot;                  &quot;stock&quot;                 
-##  [94] &quot;sugar_cookie&quot;           &quot;sum_vect&quot;               &quot;ts&quot;                    
-##  [97] &quot;vec_bool&quot;               &quot;vec_chr&quot;                &quot;vec_num&quot;               
-## [100] &quot;vect&quot;                   &quot;vect_1&quot;                 &quot;vect_2&quot;                
-## [103] &quot;x&quot;                      &quot;x_vector&quot;               &quot;y&quot;                     
-## [106] &quot;z&quot;</code></pre>
+##  [34] &quot;dt_s&quot;                   &quot;dt2&quot;                    &quot;example&quot;               
+##  [37] &quot;example_1&quot;              &quot;example_2&quot;              &quot;factor_color&quot;          
+##  [40] &quot;factor_day&quot;             &quot;factor_gender_vector&quot;   &quot;fcars&quot;                 
+##  [43] &quot;fruit&quot;                  &quot;gender_vector&quot;          &quot;graph&quot;                 
+##  [46] &quot;i&quot;                      &quot;img&quot;                    &quot;iris&quot;                  
+##  [49] &quot;iris_na&quot;                &quot;iris_no_header&quot;         &quot;iris_row_no_header&quot;    
+##  [52] &quot;iris_row_with_header&quot;   &quot;list&quot;                   &quot;list_na&quot;               
+##  [55] &quot;lmn_cars&quot;               &quot;lmxcars&quot;                &quot;logical_vector&quot;        
+##  [58] &quot;loop&quot;                   &quot;m1&quot;                     &quot;m2&quot;                    
+##  [61] &quot;m3&quot;                     &quot;mat&quot;                    &quot;mat_1&quot;                 
+##  [64] &quot;mat_2&quot;                  &quot;matrix_a&quot;               &quot;matrix_a1&quot;             
+##  [67] &quot;matrix_a2&quot;              &quot;matrix_b&quot;               &quot;matrix_c&quot;              
+##  [70] &quot;matrix_d&quot;               &quot;mean_mpg&quot;               &quot;median_missing&quot;        
+##  [73] &quot;movies&quot;                 &quot;movies_lower&quot;           &quot;my_graph&quot;              
+##  [76] &quot;my_list&quot;                &quot;open_folder&quot;            &quot;p&quot;                     
+##  [79] &quot;p_value&quot;                &quot;PATH&quot;                   &quot;PATH_sas&quot;              
+##  [82] &quot;PATH_spss&quot;              &quot;PATH_stata&quot;             &quot;price&quot;                 
+##  [85] &quot;producers&quot;              &quot;quake&quot;                  &quot;quake_1&quot;               
+##  [88] &quot;quantity&quot;               &quot;r&quot;                      &quot;slice_vector&quot;          
+##  [91] &quot;smn_cars&quot;               &quot;smxcars&quot;                &quot;speed&quot;                 
+##  [94] &quot;stock&quot;                  &quot;sugar_cookie&quot;           &quot;sum_vect&quot;              
+##  [97] &quot;ts&quot;                     &quot;vec_bool&quot;               &quot;vec_chr&quot;               
+## [100] &quot;vec_num&quot;                &quot;vect&quot;                   &quot;vect_1&quot;                
+## [103] &quot;vect_2&quot;                 &quot;x&quot;                      &quot;x_vector&quot;              
+## [106] &quot;y&quot;                      &quot;z&quot;</code></pre>
 <p>The above list will vary for you based on the historic code you execute in R Studio.</p>
 <p>Note that n, the argument of the square_function function is <strong>not in this global environment</strong>.</p>
 <p>A <strong>new</strong> environment is created for each function. In the above example, the function <code>square_function()</code> creates a new environment inside the global environment.</p>
@@ -1051,65 +1149,150 @@ div.tocify {
 <div class="sourceCode" id="cb63"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb63-1" data-line-number="1">train_df &lt;-<span class="st"> </span>airquality[split, ] </a>
 <a class="sourceLine" id="cb63-2" data-line-number="2"><span class="kw">head</span>(train_df)</a></code></pre></div>
 <div class="kable-table">
+
 <table>
 <thead>
-<tr class="header">
-<th align="right">Ozone</th>
-<th align="right">Solar.R</th>
-<th align="right">Wind</th>
-<th align="right">Temp</th>
-<th align="right">Month</th>
-<th align="right">Day</th>
+<tr>
+<th style="text-align:right;">
+Ozone
+</th>
+<th style="text-align:right;">
+Solar.R
+</th>
+<th style="text-align:right;">
+Wind
+</th>
+<th style="text-align:right;">
+Temp
+</th>
+<th style="text-align:right;">
+Month
+</th>
+<th style="text-align:right;">
+Day
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="right">41</td>
-<td align="right">190</td>
-<td align="right">7.4</td>
-<td align="right">67</td>
-<td align="right">5</td>
-<td align="right">1</td>
+<tr>
+<td style="text-align:right;">
+41
+</td>
+<td style="text-align:right;">
+190
+</td>
+<td style="text-align:right;">
+7.4
+</td>
+<td style="text-align:right;">
+67
+</td>
+<td style="text-align:right;">
+5
+</td>
+<td style="text-align:right;">
+1
+</td>
 </tr>
-<tr class="even">
-<td align="right">36</td>
-<td align="right">118</td>
-<td align="right">8.0</td>
-<td align="right">72</td>
-<td align="right">5</td>
-<td align="right">2</td>
+<tr>
+<td style="text-align:right;">
+36
+</td>
+<td style="text-align:right;">
+118
+</td>
+<td style="text-align:right;">
+8.0
+</td>
+<td style="text-align:right;">
+72
+</td>
+<td style="text-align:right;">
+5
+</td>
+<td style="text-align:right;">
+2
+</td>
 </tr>
-<tr class="odd">
-<td align="right">12</td>
-<td align="right">149</td>
-<td align="right">12.6</td>
-<td align="right">74</td>
-<td align="right">5</td>
-<td align="right">3</td>
+<tr>
+<td style="text-align:right;">
+12
+</td>
+<td style="text-align:right;">
+149
+</td>
+<td style="text-align:right;">
+12.6
+</td>
+<td style="text-align:right;">
+74
+</td>
+<td style="text-align:right;">
+5
+</td>
+<td style="text-align:right;">
+3
+</td>
 </tr>
-<tr class="even">
-<td align="right">18</td>
-<td align="right">313</td>
-<td align="right">11.5</td>
-<td align="right">62</td>
-<td align="right">5</td>
-<td align="right">4</td>
+<tr>
+<td style="text-align:right;">
+18
+</td>
+<td style="text-align:right;">
+313
+</td>
+<td style="text-align:right;">
+11.5
+</td>
+<td style="text-align:right;">
+62
+</td>
+<td style="text-align:right;">
+5
+</td>
+<td style="text-align:right;">
+4
+</td>
 </tr>
-<tr class="odd">
-<td align="right">NA</td>
-<td align="right">NA</td>
-<td align="right">14.3</td>
-<td align="right">56</td>
-<td align="right">5</td>
-<td align="right">5</td>
+<tr>
+<td style="text-align:right;">
+NA
+</td>
+<td style="text-align:right;">
+NA
+</td>
+<td style="text-align:right;">
+14.3
+</td>
+<td style="text-align:right;">
+56
+</td>
+<td style="text-align:right;">
+5
+</td>
+<td style="text-align:right;">
+5
+</td>
 </tr>
-<tr class="even">
-<td align="right">28</td>
-<td align="right">NA</td>
-<td align="right">14.9</td>
-<td align="right">66</td>
-<td align="right">5</td>
-<td align="right">6</td>
+<tr>
+<td style="text-align:right;">
+28
+</td>
+<td style="text-align:right;">
+NA
+</td>
+<td style="text-align:right;">
+14.9
+</td>
+<td style="text-align:right;">
+66
+</td>
+<td style="text-align:right;">
+5
+</td>
+<td style="text-align:right;">
+6
+</td>
 </tr>
 </tbody>
 </table>
@@ -1118,72 +1301,170 @@ div.tocify {
 <div class="sourceCode" id="cb64"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb64-1" data-line-number="1">test_df &lt;-<span class="st"> </span>airquality[<span class="op">-</span>split, ] </a>
 <a class="sourceLine" id="cb64-2" data-line-number="2"><span class="kw">head</span>(test_df)</a></code></pre></div>
 <div class="kable-table">
+
 <table>
 <thead>
-<tr class="header">
-<th></th>
-<th align="right">Ozone</th>
-<th align="right">Solar.R</th>
-<th align="right">Wind</th>
-<th align="right">Temp</th>
-<th align="right">Month</th>
-<th align="right">Day</th>
+<tr>
+<th style="text-align:left;">
+</th>
+<th style="text-align:right;">
+Ozone
+</th>
+<th style="text-align:right;">
+Solar.R
+</th>
+<th style="text-align:right;">
+Wind
+</th>
+<th style="text-align:right;">
+Temp
+</th>
+<th style="text-align:right;">
+Month
+</th>
+<th style="text-align:right;">
+Day
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td>123</td>
-<td align="right">85</td>
-<td align="right">188</td>
-<td align="right">6.3</td>
-<td align="right">94</td>
-<td align="right">8</td>
-<td align="right">31</td>
+<tr>
+<td style="text-align:left;">
+123
+</td>
+<td style="text-align:right;">
+85
+</td>
+<td style="text-align:right;">
+188
+</td>
+<td style="text-align:right;">
+6.3
+</td>
+<td style="text-align:right;">
+94
+</td>
+<td style="text-align:right;">
+8
+</td>
+<td style="text-align:right;">
+31
+</td>
 </tr>
-<tr class="even">
-<td>124</td>
-<td align="right">96</td>
-<td align="right">167</td>
-<td align="right">6.9</td>
-<td align="right">91</td>
-<td align="right">9</td>
-<td align="right">1</td>
+<tr>
+<td style="text-align:left;">
+124
+</td>
+<td style="text-align:right;">
+96
+</td>
+<td style="text-align:right;">
+167
+</td>
+<td style="text-align:right;">
+6.9
+</td>
+<td style="text-align:right;">
+91
+</td>
+<td style="text-align:right;">
+9
+</td>
+<td style="text-align:right;">
+1
+</td>
 </tr>
-<tr class="odd">
-<td>125</td>
-<td align="right">78</td>
-<td align="right">197</td>
-<td align="right">5.1</td>
-<td align="right">92</td>
-<td align="right">9</td>
-<td align="right">2</td>
+<tr>
+<td style="text-align:left;">
+125
+</td>
+<td style="text-align:right;">
+78
+</td>
+<td style="text-align:right;">
+197
+</td>
+<td style="text-align:right;">
+5.1
+</td>
+<td style="text-align:right;">
+92
+</td>
+<td style="text-align:right;">
+9
+</td>
+<td style="text-align:right;">
+2
+</td>
 </tr>
-<tr class="even">
-<td>126</td>
-<td align="right">73</td>
-<td align="right">183</td>
-<td align="right">2.8</td>
-<td align="right">93</td>
-<td align="right">9</td>
-<td align="right">3</td>
+<tr>
+<td style="text-align:left;">
+126
+</td>
+<td style="text-align:right;">
+73
+</td>
+<td style="text-align:right;">
+183
+</td>
+<td style="text-align:right;">
+2.8
+</td>
+<td style="text-align:right;">
+93
+</td>
+<td style="text-align:right;">
+9
+</td>
+<td style="text-align:right;">
+3
+</td>
 </tr>
-<tr class="odd">
-<td>127</td>
-<td align="right">91</td>
-<td align="right">189</td>
-<td align="right">4.6</td>
-<td align="right">93</td>
-<td align="right">9</td>
-<td align="right">4</td>
+<tr>
+<td style="text-align:left;">
+127
+</td>
+<td style="text-align:right;">
+91
+</td>
+<td style="text-align:right;">
+189
+</td>
+<td style="text-align:right;">
+4.6
+</td>
+<td style="text-align:right;">
+93
+</td>
+<td style="text-align:right;">
+9
+</td>
+<td style="text-align:right;">
+4
+</td>
 </tr>
-<tr class="even">
-<td>128</td>
-<td align="right">47</td>
-<td align="right">95</td>
-<td align="right">7.4</td>
-<td align="right">87</td>
-<td align="right">9</td>
-<td align="right">5</td>
+<tr>
+<td style="text-align:left;">
+128
+</td>
+<td style="text-align:right;">
+47
+</td>
+<td style="text-align:right;">
+95
+</td>
+<td style="text-align:right;">
+7.4
+</td>
+<td style="text-align:right;">
+87
+</td>
+<td style="text-align:right;">
+9
+</td>
+<td style="text-align:right;">
+5
+</td>
 </tr>
 </tbody>
 </table>

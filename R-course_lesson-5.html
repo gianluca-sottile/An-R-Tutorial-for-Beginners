@@ -663,39 +663,80 @@ div.tocify {
 <a class="sourceLine" id="cb2-7" data-line-number="7">df &lt;-<span class="st"> </span><span class="kw">data.frame</span>(a,b,c,d)</a>
 <a class="sourceLine" id="cb2-8" data-line-number="8">df</a></code></pre></div>
 <div class="kable-table">
+
 <table>
 <thead>
-<tr class="header">
-<th align="right">a</th>
-<th align="left">b</th>
-<th align="left">c</th>
-<th align="right">d</th>
+<tr>
+<th style="text-align:right;">
+a
+</th>
+<th style="text-align:left;">
+b
+</th>
+<th style="text-align:left;">
+c
+</th>
+<th style="text-align:right;">
+d
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="right">10</td>
-<td align="left">book</td>
-<td align="left">TRUE</td>
-<td align="right">2.5</td>
+<tr>
+<td style="text-align:right;">
+10
+</td>
+<td style="text-align:left;">
+book
+</td>
+<td style="text-align:left;">
+TRUE
+</td>
+<td style="text-align:right;">
+2.5
+</td>
 </tr>
-<tr class="even">
-<td align="right">20</td>
-<td align="left">pen</td>
-<td align="left">FALSE</td>
-<td align="right">8.0</td>
+<tr>
+<td style="text-align:right;">
+20
+</td>
+<td style="text-align:left;">
+pen
+</td>
+<td style="text-align:left;">
+FALSE
+</td>
+<td style="text-align:right;">
+8.0
+</td>
 </tr>
-<tr class="odd">
-<td align="right">30</td>
-<td align="left">textbook</td>
-<td align="left">TRUE</td>
-<td align="right">10.0</td>
+<tr>
+<td style="text-align:right;">
+30
+</td>
+<td style="text-align:left;">
+textbook
+</td>
+<td style="text-align:left;">
+TRUE
+</td>
+<td style="text-align:right;">
+10.0
+</td>
 </tr>
-<tr class="even">
-<td align="right">40</td>
-<td align="left">pencil_case</td>
-<td align="left">FALSE</td>
-<td align="right">7.0</td>
+<tr>
+<td style="text-align:right;">
+40
+</td>
+<td style="text-align:left;">
+pencil_case
+</td>
+<td style="text-align:left;">
+FALSE
+</td>
+<td style="text-align:right;">
+7.0
+</td>
 </tr>
 </tbody>
 </table>
@@ -705,39 +746,80 @@ div.tocify {
 <a class="sourceLine" id="cb3-2" data-line-number="2"><span class="kw">names</span>(df) &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&#39;ID&#39;</span>, <span class="st">&#39;items&#39;</span>, <span class="st">&#39;store&#39;</span>, <span class="st">&#39;price&#39;</span>)</a>
 <a class="sourceLine" id="cb3-3" data-line-number="3">df</a></code></pre></div>
 <div class="kable-table">
+
 <table>
 <thead>
-<tr class="header">
-<th align="right">ID</th>
-<th align="left">items</th>
-<th align="left">store</th>
-<th align="right">price</th>
+<tr>
+<th style="text-align:right;">
+ID
+</th>
+<th style="text-align:left;">
+items
+</th>
+<th style="text-align:left;">
+store
+</th>
+<th style="text-align:right;">
+price
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="right">10</td>
-<td align="left">book</td>
-<td align="left">TRUE</td>
-<td align="right">2.5</td>
+<tr>
+<td style="text-align:right;">
+10
+</td>
+<td style="text-align:left;">
+book
+</td>
+<td style="text-align:left;">
+TRUE
+</td>
+<td style="text-align:right;">
+2.5
+</td>
 </tr>
-<tr class="even">
-<td align="right">20</td>
-<td align="left">pen</td>
-<td align="left">FALSE</td>
-<td align="right">8.0</td>
+<tr>
+<td style="text-align:right;">
+20
+</td>
+<td style="text-align:left;">
+pen
+</td>
+<td style="text-align:left;">
+FALSE
+</td>
+<td style="text-align:right;">
+8.0
+</td>
 </tr>
-<tr class="odd">
-<td align="right">30</td>
-<td align="left">textbook</td>
-<td align="left">TRUE</td>
-<td align="right">10.0</td>
+<tr>
+<td style="text-align:right;">
+30
+</td>
+<td style="text-align:left;">
+textbook
+</td>
+<td style="text-align:left;">
+TRUE
+</td>
+<td style="text-align:right;">
+10.0
+</td>
 </tr>
-<tr class="even">
-<td align="right">40</td>
-<td align="left">pencil_case</td>
-<td align="left">FALSE</td>
-<td align="right">7.0</td>
+<tr>
+<td style="text-align:right;">
+40
+</td>
+<td style="text-align:left;">
+pencil_case
+</td>
+<td style="text-align:left;">
+FALSE
+</td>
+<td style="text-align:right;">
+7.0
+</td>
 </tr>
 </tbody>
 </table>
@@ -773,27 +855,52 @@ div.tocify {
 <div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="co">## Select Rows 1 to 2</span></a>
 <a class="sourceLine" id="cb8-2" data-line-number="2">df[<span class="dv">1</span><span class="op">:</span><span class="dv">2</span>, ]</a></code></pre></div>
 <div class="kable-table">
+
 <table>
 <thead>
-<tr class="header">
-<th align="right">ID</th>
-<th align="left">items</th>
-<th align="left">store</th>
-<th align="right">price</th>
+<tr>
+<th style="text-align:right;">
+ID
+</th>
+<th style="text-align:left;">
+items
+</th>
+<th style="text-align:left;">
+store
+</th>
+<th style="text-align:right;">
+price
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="right">10</td>
-<td align="left">book</td>
-<td align="left">TRUE</td>
-<td align="right">2.5</td>
+<tr>
+<td style="text-align:right;">
+10
+</td>
+<td style="text-align:left;">
+book
+</td>
+<td style="text-align:left;">
+TRUE
+</td>
+<td style="text-align:right;">
+2.5
+</td>
 </tr>
-<tr class="even">
-<td align="right">20</td>
-<td align="left">pen</td>
-<td align="left">FALSE</td>
-<td align="right">8.0</td>
+<tr>
+<td style="text-align:right;">
+20
+</td>
+<td style="text-align:left;">
+pen
+</td>
+<td style="text-align:left;">
+FALSE
+</td>
+<td style="text-align:right;">
+8.0
+</td>
 </tr>
 </tbody>
 </table>
@@ -805,29 +912,50 @@ div.tocify {
 <div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb11-1" data-line-number="1"><span class="co"># Slice with columns name</span></a>
 <a class="sourceLine" id="cb11-2" data-line-number="2">df[, <span class="kw">c</span>(<span class="st">&#39;ID&#39;</span>, <span class="st">&#39;store&#39;</span>)]</a></code></pre></div>
 <div class="kable-table">
+
 <table>
 <thead>
-<tr class="header">
-<th align="right">ID</th>
-<th align="left">store</th>
+<tr>
+<th style="text-align:right;">
+ID
+</th>
+<th style="text-align:left;">
+store
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="right">10</td>
-<td align="left">TRUE</td>
+<tr>
+<td style="text-align:right;">
+10
+</td>
+<td style="text-align:left;">
+TRUE
+</td>
 </tr>
-<tr class="even">
-<td align="right">20</td>
-<td align="left">FALSE</td>
+<tr>
+<td style="text-align:right;">
+20
+</td>
+<td style="text-align:left;">
+FALSE
+</td>
 </tr>
-<tr class="odd">
-<td align="right">30</td>
-<td align="left">TRUE</td>
+<tr>
+<td style="text-align:right;">
+30
+</td>
+<td style="text-align:left;">
+TRUE
+</td>
 </tr>
-<tr class="even">
-<td align="right">40</td>
-<td align="left">FALSE</td>
+<tr>
+<td style="text-align:right;">
+40
+</td>
+<td style="text-align:left;">
+FALSE
+</td>
 </tr>
 </tbody>
 </table>
@@ -844,44 +972,95 @@ div.tocify {
 <a class="sourceLine" id="cb12-5" data-line-number="5">df<span class="op">$</span>quantity &lt;-<span class="st"> </span>quantity</a>
 <a class="sourceLine" id="cb12-6" data-line-number="6">df</a></code></pre></div>
 <div class="kable-table">
+
 <table>
 <thead>
-<tr class="header">
-<th align="right">ID</th>
-<th align="left">items</th>
-<th align="left">store</th>
-<th align="right">price</th>
-<th align="right">quantity</th>
+<tr>
+<th style="text-align:right;">
+ID
+</th>
+<th style="text-align:left;">
+items
+</th>
+<th style="text-align:left;">
+store
+</th>
+<th style="text-align:right;">
+price
+</th>
+<th style="text-align:right;">
+quantity
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="right">10</td>
-<td align="left">book</td>
-<td align="left">TRUE</td>
-<td align="right">2.5</td>
-<td align="right">10</td>
+<tr>
+<td style="text-align:right;">
+10
+</td>
+<td style="text-align:left;">
+book
+</td>
+<td style="text-align:left;">
+TRUE
+</td>
+<td style="text-align:right;">
+2.5
+</td>
+<td style="text-align:right;">
+10
+</td>
 </tr>
-<tr class="even">
-<td align="right">20</td>
-<td align="left">pen</td>
-<td align="left">FALSE</td>
-<td align="right">8.0</td>
-<td align="right">35</td>
+<tr>
+<td style="text-align:right;">
+20
+</td>
+<td style="text-align:left;">
+pen
+</td>
+<td style="text-align:left;">
+FALSE
+</td>
+<td style="text-align:right;">
+8.0
+</td>
+<td style="text-align:right;">
+35
+</td>
 </tr>
-<tr class="odd">
-<td align="right">30</td>
-<td align="left">textbook</td>
-<td align="left">TRUE</td>
-<td align="right">10.0</td>
-<td align="right">40</td>
+<tr>
+<td style="text-align:right;">
+30
+</td>
+<td style="text-align:left;">
+textbook
+</td>
+<td style="text-align:left;">
+TRUE
+</td>
+<td style="text-align:right;">
+10.0
+</td>
+<td style="text-align:right;">
+40
+</td>
 </tr>
-<tr class="even">
-<td align="right">40</td>
-<td align="left">pencil_case</td>
-<td align="left">FALSE</td>
-<td align="right">7.0</td>
-<td align="right">5</td>
+<tr>
+<td style="text-align:right;">
+40
+</td>
+<td style="text-align:left;">
+pencil_case
+</td>
+<td style="text-align:left;">
+FALSE
+</td>
+<td style="text-align:right;">
+7.0
+</td>
+<td style="text-align:right;">
+5
+</td>
 </tr>
 </tbody>
 </table>
@@ -916,41 +1095,89 @@ div.tocify {
 <div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb18-1" data-line-number="1"><span class="co"># Select price above 5</span></a>
 <a class="sourceLine" id="cb18-2" data-line-number="2"><span class="kw">subset</span>(df, <span class="dt">subset =</span> price <span class="op">&gt;</span><span class="st"> </span><span class="dv">5</span>)</a></code></pre></div>
 <div class="kable-table">
+
 <table>
 <thead>
-<tr class="header">
-<th></th>
-<th align="right">ID</th>
-<th align="left">items</th>
-<th align="left">store</th>
-<th align="right">price</th>
-<th align="right">quantity</th>
+<tr>
+<th style="text-align:left;">
+</th>
+<th style="text-align:right;">
+ID
+</th>
+<th style="text-align:left;">
+items
+</th>
+<th style="text-align:left;">
+store
+</th>
+<th style="text-align:right;">
+price
+</th>
+<th style="text-align:right;">
+quantity
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td>2</td>
-<td align="right">20</td>
-<td align="left">pen</td>
-<td align="left">FALSE</td>
-<td align="right">8</td>
-<td align="right">35</td>
+<tr>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:right;">
+20
+</td>
+<td style="text-align:left;">
+pen
+</td>
+<td style="text-align:left;">
+FALSE
+</td>
+<td style="text-align:right;">
+8
+</td>
+<td style="text-align:right;">
+35
+</td>
 </tr>
-<tr class="even">
-<td>3</td>
-<td align="right">30</td>
-<td align="left">textbook</td>
-<td align="left">TRUE</td>
-<td align="right">10</td>
-<td align="right">40</td>
+<tr>
+<td style="text-align:left;">
+3
+</td>
+<td style="text-align:right;">
+30
+</td>
+<td style="text-align:left;">
+textbook
+</td>
+<td style="text-align:left;">
+TRUE
+</td>
+<td style="text-align:right;">
+10
+</td>
+<td style="text-align:right;">
+40
+</td>
 </tr>
-<tr class="odd">
-<td>4</td>
-<td align="right">40</td>
-<td align="left">pencil_case</td>
-<td align="left">FALSE</td>
-<td align="right">7</td>
-<td align="right">5</td>
+<tr>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:right;">
+40
+</td>
+<td style="text-align:left;">
+pencil_case
+</td>
+<td style="text-align:left;">
+FALSE
+</td>
+<td style="text-align:right;">
+7
+</td>
+<td style="text-align:right;">
+5
+</td>
 </tr>
 </tbody>
 </table>

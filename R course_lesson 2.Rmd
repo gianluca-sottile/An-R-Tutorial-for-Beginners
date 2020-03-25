@@ -146,13 +146,22 @@ c(1:10)
 ***
 We will first see the basic arithmetic operations in R. The following operators stand for:
 
-| Operator | Description | 
-|:---------|:------------|
-| + |	Addition |
-| - |	Subtraction |
-| * |	Multiplication |
-| / |	Division |
-| ^ or ** |	Exponentiation |
+```{r, echo=FALSE}
+library(knitr)
+library(kableExtra)
+dt <- data.frame(
+  "Operator" = c("+", "-", "*", "/", "^ or **"), 
+  "Description" = c("Addition", "Subtraction", "Multiplication", "Division", "Exponentiation"))
+kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+<!-- | Operator | Description |  -->
+<!-- |:---------|:------------| -->
+<!-- | + |	Addition | -->
+<!-- | - |	Subtraction | -->
+<!-- | * |	Multiplication | -->
+<!-- | / |	Division | -->
+<!-- | ^ or ** |	Exponentiation | -->
 
 You can easily copy and paste the above R code into Rstudio Console. The __output__ is displayed after the character #. For instance, we write the code print('Hello world') the output will be ##[1] "Hello world".
 
@@ -194,17 +203,26 @@ The sentences starting with # __annotation__. We can use # inside an R script to
 ***
 With logical operators, we want to return values inside the vector based on logical conditions. Following is a detailed list of logical operators available in R
 
-| Operator | Description | 
-|:---------|:------------|
-| < |	Less than |
-| <= | Less than or equal to |
-| > |	Greater than |
-| >= | Greater than or equal to |
-| == | Exactly equal to |
-| != | Not equal to |
-| !x | Not X |
-| x & y |	x AND y |
-| isTRUE(x) |	Test if x is TRUE |
+```{r, echo=FALSE}
+library(knitr)
+library(kableExtra)
+dt <- data.frame(
+  "Operator" = c("<", "<=", ">", ">=", "==", "!=", "!x", "x & y", "isTRUE(x"), 
+  "Description" = c("Less than", "Less than or equal to", "Greater than", "Greater than or equal to", "Exactly equal to", "Not equal to", "Not x", "x AND y", "Test if x is TRUE"))
+kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+<!-- | Operator | Description |  -->
+<!-- |:---------|:------------| -->
+<!-- | < |	Less than | -->
+<!-- | <= | Less than or equal to | -->
+<!-- | > |	Greater than | -->
+<!-- | >= | Greater than or equal to | -->
+<!-- | == | Exactly equal to | -->
+<!-- | != | Not equal to | -->
+<!-- | !x | Not X | -->
+<!-- | x & y |	x AND y | -->
+<!-- | isTRUE(x) |	Test if x is TRUE | -->
 
 The logical statements in R are wrapped inside the `[ ]`. We can add many conditional statements as we like but we need to include them in a parenthesis. We can follow this structure to create a conditional statement:
 
