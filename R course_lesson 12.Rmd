@@ -1,0 +1,75 @@
+---
+pagetitle: "Lesson 12"
+title: "While Loop in R with Example"
+# author: "Dott. Gianluca Sottile"
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+```
+
+# While Loop in R with Example {#buttons .tabset .tabset-fade .tabset-pills}
+A loop is a statement that keeps running until a condition is satisfied. The syntax for a while loop is the following:
+```{r, dont-eval, eval=FALSE}
+while (condition) {
+     Exp	
+}
+```
+
+<p align="center">
+![While Loop Flow Chart](imgblock12/img1.png)
+</p>
+
+__Note:__ Remember to write a closing condition at some point otherwise the loop will go on indefinitely.
+
+## Example 1:
+Let's go through a very simple example to understand the concept of while loop. You will create a loop and after each run add 1 to the stored variable. You need to close the loop, therefore we explicitely tells R to stop looping when the variable reached 10.
+
+__Note:__ If you want to see current loop value, you need to wrap the variable inside the function print().
+
+```{r}
+#Create a variable with value 1
+begin <- 1
+
+#Create the loop
+while (begin <= 10){
+
+#See which we are  
+cat('This is loop number',begin)
+
+#add 1 to the variable begin after each loop
+begin <- begin+1
+print(begin)
+}
+```
+
+## Example 2:
+You bought a stock at price of 50 dollars. If the price goes below 45, we want to short it. Otherwise, we keep it in our portfolio. The price can fluctuate between -10 to +10 around 50 after each loop. You can write the code as follow:
+
+```{r}
+set.seed(123)
+# Set variable stock and price
+stock <- 50
+price <- 50
+
+# Loop variable counts the number of loops 
+loop <- 1
+
+# Set the while statement
+while (price > 45){
+
+# Create a random price between 40 and 60
+price <- stock + sample(-10:10, 1)
+
+# Count the number of loop
+loop = loop +1 
+
+# Print the number of loop
+print(loop)
+}
+
+cat('it took',loop,'loop before we short the price. The lowest price is',price)
+```
+

@@ -1,0 +1,126 @@
+---
+pagetitle: "Lesson 8"
+title: "Merge Data Frames in R: Full and Partial Match"
+# author: "Dott. Gianluca Sottile"
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+```
+
+<br>
+
+Very often, we have data from multiple sources. To perform an analysis, we need to __merge__ two dataframes together with one or more __common key variables__.
+
+# Full match
+***
+A full match returns values that have a counterpart in the destination table. The values that are not match won't be return in the new data frame. The partial match, however, return the missing values as NA.
+
+We will see a simple __inner join__. The inner join keyword selects records that have matching values in both tables. To join two datasets, we can use `merge()` function. We will use three arguments :
+
+```{r, dont-eval, eval=FALSE}
+merge(x, y, by.x = x, by.y = y)
+```
+
+__Arguments:__
+
++ x: The origin data frame
++ y: The data frame to merge
++ by.x: The column used for merging in x data frame. Column x to merge on
++ by.y: The column used for merging in y data frame. Column y to merge on
+
+__Example:__
+
+Create First Dataset with variables
++ surname
++ nationality
+
+Create Second Dataset with variables
++ surname
++ movies
+
+The common key variable is surname. We can merge both data and check if the dimensionality is 7x3.
+
+We add `stringsAsFactors = FALSE` in the data frame because we don't want R to convert string as factor, we want the variable to be treated as character.
+
+```{r}
+# Create origin dataframe(
+
+producers <- data.frame(   
+    surname =  c("Spielberg","Scorsese","Hitchcock","Tarantino","Polanski"),    
+    nationality = c("US","US","UK","US","Poland"),    
+    stringsAsFactors=FALSE)
+
+# Create destination dataframe
+movies <- data.frame(    
+    surname = c("Spielberg",
+		"Scorsese",
+                "Hitchcock",
+              	"Hitchcock",
+                "Spielberg",
+                "Tarantino",
+                "Polanski"),    
+    title = c("Super 8",
+    		"Taxi Driver",
+    		"Psycho",
+    		"North by Northwest",
+    		"Catch Me If You Can",
+    		"Reservoir Dogs","Chinatown"),                
+     		stringsAsFactors=FALSE)
+
+# Merge two datasets
+m1 <- merge(producers, movies, by.x = "surname")
+m1
+dim(m1)
+```
+
+Let's merge data frames when the common key variables have different names.
+
+We change surname to name in the movies data frame. We use the function `identical(x1, x2)` to check if both dataframes are identical.
+
+```{r}
+# Change name of ` movies ` dataframe
+colnames(movies)[colnames(movies) == 'surname'] <- 'name'
+# Merge with different key value
+m2 <- merge(producers, movies, by.x = "surname", by.y = "name")
+# Print head of the data
+head(m2)
+# Check if data are identical
+identical(m1, m2)
+```
+
+This shows that merge operation is performed even if the column names are different.
+
+# Partial match
+***
+It is not surprising that two dataframes do not have the same common key variables. In the __full matching__, the dataframe returns __only__ rows found in both x and y data frame. With __partial merging__, it is possible to keep the rows with no matching rows in the other data frame. These rows will have NA in those columns that are usually filled with values from y. We can do that by setting `all.x = TRUE`.
+
+For instance, we can add a new producer, Lucas, in the producer data frame without the movie references in movies data frame. If we set `all.x = FALSE`, R will join only the matching values in both data set. In our case, the producer Lucas will not be join to the merge because it is missing from one dataset.
+
+Let's see the dimension of each output when we specify all.x= TRUE and when we don't.
+
+```{r, results='hide'}
+# Create a new producer
+add_producer <-  c('Lucas', 'US')
+#  Append it to the ` producer` dataframe
+producers <- rbind(producers, add_producer)
+# Use a partial merge 
+m3 <- merge(producers, movies, by.x = "surname", by.y = "name", all.x = TRUE)
+m3
+```
+
+<p align="center">
+![](imgblock8/img1.png)
+</p>
+
+```{r}
+# Compare the dimension of each data frame
+dim(m1)
+dim(m2)
+dim(m3)
+```
+
+As we can see, the dimension of the new data frame 8x3 compared with 7x3 for m1 and m2. R includes NA for the missing author in the books data frame.
+

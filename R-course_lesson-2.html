@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+
+
+<title>Lesson 2</title>
+
+<script src="site_libs/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/flatly.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<script src="site_libs/jqueryui-1.11.4/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
+<link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="1504">
+  <!-- this script changes the anchor position -->
+  <!-- http://jsfiddle.net/ianclark001/rkocah23/ -->
+<script>
+(function(document, history, location) {
+  var HISTORY_SUPPORT = !!(history && history.pushState);
+
+  var anchorScrolls = {
+    ANCHOR_REGEX: /^#[^ ]+$/,
+    OFFSET_HEIGHT_PX: 65,
+
+    /**
+     * Establish events, and fix initial scroll position if a hash is provided.
+     */
+    init: function() {
+      this.scrollToCurrent();
+      $(window).on('hashchange', $.proxy(this, 'scrollToCurrent'));
+      $('body').on('click', 'a', $.proxy(this, 'delegateAnchors'));
+    },
+
+    /**
+     * Return the offset amount to deduct from the normal scroll position.
+     * Modify as appropriate to allow for dynamic calculations
+     */
+    getFixedOffset: function() {
+      return this.OFFSET_HEIGHT_PX;
+    },
+
+    /**
+     * If the provided href is an anchor which resolves to an element on the
+     * page, scroll to it.
+     * @param  {String} href
+     * @return {Boolean} - Was the href an anchor.
+     */
+    scrollIfAnchor: function(href, pushToHistory) {
+      var match, anchorOffset;
+
+      if(!this.ANCHOR_REGEX.test(href)) {
+        return false;
+      }
+
+      match = document.getElementById(href.slice(1));
+
+      if(match) {
+        anchorOffset = $(match).offset().top - this.getFixedOffset();
+        $('html, body').animate({ scrollTop: anchorOffset});
+
+        // Add the state to history as-per normal anchor links
+        if(HISTORY_SUPPORT && pushToHistory) {
+          history.pushState({}, document.title, location.pathname + href);
+        }
+      }
+
+      return !!match;
+    },
+    
+    /**
+     * Attempt to scroll to the current location's hash.
+     */
+    scrollToCurrent: function(e) {
+      if(this.scrollIfAnchor(window.location.hash) && e) {
+        e.preventDefault();
+      }
+    },
+
+    /**
+     * If the click event's target was an anchor, fix the scroll position.
+     */
+    delegateAnchors: function(e) {
+      var elem = e.target;
+
+      if(this.scrollIfAnchor(elem.getAttribute('href'), true)) {
+        e.preventDefault();
+      }
+    }
+  };
+
+    $(document).ready($.proxy(anchorScrolls, 'init'));
+})(window.document, window.history, window.location);
+</script>
+
+</head>
+<body>
+</body>
+</html>
+
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css" data-origin="pandoc">
+a.sourceLine { display: inline-block; line-height: 1.25; }
+a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
+a.sourceLine:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode { white-space: pre; position: relative; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+code.sourceCode { white-space: pre-wrap; }
+a.sourceLine { text-indent: -1em; padding-left: 1em; }
+}
+pre.numberSource a.sourceLine
+  { position: relative; left: -4em; }
+pre.numberSource a.sourceLine::before
+  { content: attr(data-line-number);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; pointer-events: all; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {  }
+@media screen {
+a.sourceLine::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    for (var j = 0; j < rules.length; j++) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") continue;
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') continue;
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+<link rel="stylesheet" href="style.css" type="text/css" />
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+</style>
+
+
+<style type="text/css">
+/* padding for bootstrap navbar */
+body {
+  padding-top: 60px;
+  padding-bottom: 40px;
+}
+/* offset scroll position for anchor links (for fixed navbar)  */
+.section h1 {
+  padding-top: 65px;
+  margin-top: -65px;
+}
+.section h2 {
+  padding-top: 65px;
+  margin-top: -65px;
+}
+.section h3 {
+  padding-top: 65px;
+  margin-top: -65px;
+}
+.section h4 {
+  padding-top: 65px;
+  margin-top: -65px;
+}
+.section h5 {
+  padding-top: 65px;
+  margin-top: -65px;
+}
+.section h6 {
+  padding-top: 65px;
+  margin-top: -65px;
+}
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #ffffff;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script>
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.parent().addClass('active');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row-fluid">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">An R Tutorial for Beginners</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">
+    <span class="fa fa-home"></span>
+     
+    Home
+  </a>
+</li>
+<li>
+  <a href="about.html">
+    <span class="fa fa-info-circle"></span>
+     
+    About
+  </a>
+</li>
+<li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
+    <span class="fa fa-bars"></span>
+     
+    Lessons
+     
+    <span class="caret"></span>
+  </a>
+  <ul class="dropdown-menu" role="menu">
+    <li class="dropdown-submenu">
+      <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">Introduction</a>
+      <ul class="dropdown-menu" role="menu">
+        <li>
+          <a href="R-course_lesson-1.html">Lesson 1</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-2.html">Lesson 2</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-3.html">Lesson 3</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-4.html">Lesson 4</a>
+        </li>
+      </ul>
+    </li>
+    <li class="dropdown-submenu">
+      <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">Data Preparation</a>
+      <ul class="dropdown-menu" role="menu">
+        <li>
+          <a href="R-course_lesson-5.html">Lesson 5</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-6.html">Lesson 6</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-7.html">Lesson 7</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-8.html">Lesson 8</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-9.html">Lesson 9</a>
+        </li>
+      </ul>
+    </li>
+    <li class="dropdown-submenu">
+      <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">Programming</a>
+      <ul class="dropdown-menu" role="menu">
+        <li>
+          <a href="R-course_lesson-10.html">Lesson 10</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-11.html">Lesson 11</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-12.html">Lesson 12</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-13.html">Lesson 13</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-14.html">Lesson 14</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-15.html">Lesson 15</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-16.html">Lesson 16</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-17.html">Lesson 17</a>
+        </li>
+      </ul>
+    </li>
+    <li class="dropdown-submenu">
+      <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">Data Analysis</a>
+      <ul class="dropdown-menu" role="menu">
+        <li>
+          <a href="R-course_lesson-18.html">Lesson 18</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-19.html">Lesson 19</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-20.html">Lesson 20</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-21.html">Lesson 21</a>
+        </li>
+      </ul>
+    </li>
+  </ul>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div class="fluid-row" id="header">
+
+
+
+<h1 class="title toc-ignore">R Data Types, Arithmetic &amp; Logical Operators with Example</h1>
+
+</div>
+
+
+<p><br></p>
+<div id="buttons" class="section level1 tabset tabset-fade tabset-pills">
+<h1>Basic data types</h1>
+<hr />
+<p>R Programming works with numerous data types, including</p>
+<ul>
+<li>Scalars</li>
+<li>Vectors (numerical, character, logical)</li>
+<li>Matrices</li>
+<li>Data frames</li>
+<li>Lists</li>
+</ul>
+<p><strong>Basics types</strong></p>
+<ul>
+<li>4.5 is a decimal value called numerics.</li>
+<li>4 is a natural value called integers. Integers are also numerics.</li>
+<li>TRUE or FALSE is a Boolean value called logical.</li>
+<li>The value inside &quot; &quot; or ’ ’ are text (string). They are called characters.</li>
+</ul>
+<p>We can check the type of a variable with the class function</p>
+<div id="example-1" class="section level2">
+<h2>Example 1:</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="co"># Declare variables of different types</span></a>
+<a class="sourceLine" id="cb1-2" data-line-number="2"><span class="co"># Numeric</span></a>
+<a class="sourceLine" id="cb1-3" data-line-number="3">x &lt;-<span class="st"> </span><span class="dv">28</span></a>
+<a class="sourceLine" id="cb1-4" data-line-number="4"><span class="kw">class</span>(x)</a></code></pre></div>
+<pre><code>## [1] &quot;numeric&quot;</code></pre>
+</div>
+<div id="example-2" class="section level2">
+<h2>Example 2:</h2>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" data-line-number="1"><span class="co"># String</span></a>
+<a class="sourceLine" id="cb3-2" data-line-number="2">y &lt;-<span class="st"> &quot;R is Fantastic&quot;</span></a>
+<a class="sourceLine" id="cb3-3" data-line-number="3"><span class="kw">class</span>(y)</a></code></pre></div>
+<pre><code>## [1] &quot;character&quot;</code></pre>
+</div>
+<div id="example-3" class="section level2">
+<h2>Example 3:</h2>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1"><span class="co"># Boolean</span></a>
+<a class="sourceLine" id="cb5-2" data-line-number="2">z &lt;-<span class="st"> </span><span class="ot">TRUE</span></a>
+<a class="sourceLine" id="cb5-3" data-line-number="3"><span class="kw">class</span>(z)</a></code></pre></div>
+<pre><code>## [1] &quot;logical&quot;</code></pre>
+</div>
+</div>
+<div id="buttons1" class="section level1 tabset tabset-fade tabset-pills">
+<h1>Variables</h1>
+<hr />
+<p>Variables store values and are an important component in programming, especially for a data scientist. A variable can store a number, an object, a statistical result, vector, dataset, a model prediction basically anything R outputs. We can use that variable later simply by calling the name of the variable.</p>
+<p>To declare a variable, we need to assign a variable name. The name should not have space. We can use _ to connect to words.</p>
+<p>To add a value to the variable, use &lt;- or =.</p>
+<p>Here is the syntax:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb7-1" data-line-number="1"><span class="co"># First way to declare a variable:  use the `&lt;-`</span></a>
+<a class="sourceLine" id="cb7-2" data-line-number="2">name_of_variable &lt;-<span class="st"> </span>value</a>
+<a class="sourceLine" id="cb7-3" data-line-number="3"><span class="co"># Second way to declare a variable:  use the `=`</span></a>
+<a class="sourceLine" id="cb7-4" data-line-number="4">name_of_variable =<span class="st"> </span>value</a></code></pre></div>
+<p>In the command line, we can write the following codes to see what happens:</p>
+<div id="example-1-1" class="section level2">
+<h2>Example 1:</h2>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="co"># Print variable x</span></a>
+<a class="sourceLine" id="cb8-2" data-line-number="2">x &lt;-<span class="st"> </span><span class="dv">42</span></a></code></pre></div>
+</div>
+<div id="example-2-1" class="section level2">
+<h2>Example 2:</h2>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" data-line-number="1">y  &lt;-<span class="st"> </span><span class="dv">10</span></a>
+<a class="sourceLine" id="cb9-2" data-line-number="2">y</a></code></pre></div>
+<pre><code>## [1] 10</code></pre>
+</div>
+<div id="example-3-1" class="section level2">
+<h2>Example 3:</h2>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb11-1" data-line-number="1"><span class="co"># We call x and y and apply a subtraction</span></a>
+<a class="sourceLine" id="cb11-2" data-line-number="2">x <span class="op">-</span><span class="st"> </span>y</a></code></pre></div>
+<pre><code>## [1] 32</code></pre>
+</div>
+</div>
+<div id="buttons2" class="section level1 tabset tabset-fade tabset-pills">
+<h1>Vectors</h1>
+<hr />
+<p>A vector is a one-dimensional array. We can create a vector with all the basic data type we learnt before. The simplest way to build a vector in R, is to use the c command.</p>
+<div id="example-1-2" class="section level2">
+<h2>Example 1:</h2>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb13-1" data-line-number="1"><span class="co"># Numerical</span></a>
+<a class="sourceLine" id="cb13-2" data-line-number="2">vec_num &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span>, <span class="dv">10</span>, <span class="dv">49</span>)</a>
+<a class="sourceLine" id="cb13-3" data-line-number="3">vec_num</a></code></pre></div>
+<pre><code>## [1]  1 10 49</code></pre>
+</div>
+<div id="example-2-2" class="section level2">
+<h2>Example 2:</h2>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb15-1" data-line-number="1"><span class="co"># Character </span></a>
+<a class="sourceLine" id="cb15-2" data-line-number="2">vec_chr &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>, <span class="st">&quot;c&quot;</span>)</a>
+<a class="sourceLine" id="cb15-3" data-line-number="3">vec_chr</a></code></pre></div>
+<pre><code>## [1] &quot;a&quot; &quot;b&quot; &quot;c&quot;</code></pre>
+</div>
+<div id="example-3-2" class="section level2">
+<h2>Example 3:</h2>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb17-1" data-line-number="1"><span class="co"># Boolean </span></a>
+<a class="sourceLine" id="cb17-2" data-line-number="2">vec_bool &lt;-<span class="st">  </span><span class="kw">c</span>(<span class="ot">TRUE</span>, <span class="ot">FALSE</span>, <span class="ot">TRUE</span>)</a>
+<a class="sourceLine" id="cb17-3" data-line-number="3">vec_bool</a></code></pre></div>
+<pre><code>## [1]  TRUE FALSE  TRUE</code></pre>
+</div>
+<div id="example-4" class="section level2">
+<h2>Example 4:</h2>
+<p>We can do arithmetic calculations on vectors.</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb19-1" data-line-number="1"><span class="co"># Create the vectors</span></a>
+<a class="sourceLine" id="cb19-2" data-line-number="2">vect_<span class="dv">1</span> &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span>, <span class="dv">3</span>, <span class="dv">5</span>)</a>
+<a class="sourceLine" id="cb19-3" data-line-number="3">vect_<span class="dv">2</span> &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">6</span>)</a>
+<a class="sourceLine" id="cb19-4" data-line-number="4"><span class="co"># Take the sum of A_vector and B_vector</span></a>
+<a class="sourceLine" id="cb19-5" data-line-number="5">sum_vect &lt;-<span class="st"> </span>vect_<span class="dv">1</span> <span class="op">+</span><span class="st"> </span>vect_<span class="dv">2</span></a>
+<a class="sourceLine" id="cb19-6" data-line-number="6"><span class="co"># Print out total_vector</span></a>
+<a class="sourceLine" id="cb19-7" data-line-number="7">sum_vect</a></code></pre></div>
+<pre><code>## [1]  3  7 11</code></pre>
+</div>
+<div id="example-5" class="section level2">
+<h2>Example 5:</h2>
+<p>In R, it is possible to slice a vector. In some occasion, we are interested in only the first five rows of a vector. We can use the <code>[1:5]</code> command to extract the value 1 to 5.</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb21-1" data-line-number="1"><span class="co"># Slice the first five rows of the vector</span></a>
+<a class="sourceLine" id="cb21-2" data-line-number="2">slice_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">5</span>, <span class="dv">6</span>, <span class="dv">7</span>, <span class="dv">8</span>, <span class="dv">9</span>, <span class="dv">10</span>)</a>
+<a class="sourceLine" id="cb21-3" data-line-number="3">slice_vector[<span class="dv">1</span><span class="op">:</span><span class="dv">5</span>]</a></code></pre></div>
+<pre><code>## [1] 1 2 3 4 5</code></pre>
+</div>
+<div id="example-6" class="section level2">
+<h2>Example 6:</h2>
+<p>The shortest way to create a range of value is to use the: between two numbers. For instance, from the above example, we can write <code>c(1:10)</code> to create a vector of value from one to ten.</p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb23-1" data-line-number="1"><span class="co"># Faster way to create adjacent values</span></a>
+<a class="sourceLine" id="cb23-2" data-line-number="2"><span class="kw">c</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</a></code></pre></div>
+<pre><code>##  [1]  1  2  3  4  5  6  7  8  9 10</code></pre>
+</div>
+</div>
+<div id="buttons3" class="section level1 tabset tabset-fade tabset-pills">
+<h1>Arithmetic Operators</h1>
+<hr />
+<p>We will first see the basic arithmetic operations in R. The following operators stand for:</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Operator</th>
+<th align="left">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">+</td>
+<td align="left">Addition</td>
+</tr>
+<tr class="even">
+<td align="left">-</td>
+<td align="left">Subtraction</td>
+</tr>
+<tr class="odd">
+<td align="left">*</td>
+<td align="left">Multiplication</td>
+</tr>
+<tr class="even">
+<td align="left">/</td>
+<td align="left">Division</td>
+</tr>
+<tr class="odd">
+<td align="left">^ or **</td>
+<td align="left">Exponentiation</td>
+</tr>
+</tbody>
+</table>
+<p>You can easily copy and paste the above R code into Rstudio Console. The <strong>output</strong> is displayed after the character #. For instance, we write the code print(‘Hello world’) the output will be ##[1] “Hello world”.</p>
+<p>The ## means we print an output and the number in the square bracket ([1]) is the number of the display</p>
+<p>The sentences starting with # <strong>annotation</strong>. We can use # inside an R script to add any comment we want. R won’t read it during the running time.</p>
+<div id="example-1-3" class="section level2">
+<h2>Example 1:</h2>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb25-1" data-line-number="1"><span class="co"># An addition</span></a>
+<a class="sourceLine" id="cb25-2" data-line-number="2"><span class="dv">3</span> <span class="op">+</span><span class="st"> </span><span class="dv">4</span></a></code></pre></div>
+<pre><code>## [1] 7</code></pre>
+</div>
+<div id="example-2-3" class="section level2">
+<h2>Example 2:</h2>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb27-1" data-line-number="1"><span class="co"># A multiplication</span></a>
+<a class="sourceLine" id="cb27-2" data-line-number="2"><span class="dv">3</span> <span class="op">*</span><span class="st"> </span><span class="dv">5</span></a></code></pre></div>
+<pre><code>## [1] 15</code></pre>
+</div>
+<div id="example-3-3" class="section level2">
+<h2>Example 3:</h2>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb29-1" data-line-number="1"><span class="co"># A division</span></a>
+<a class="sourceLine" id="cb29-2" data-line-number="2">(<span class="dv">5</span> <span class="op">+</span><span class="st"> </span><span class="dv">5</span>) <span class="op">/</span><span class="st"> </span><span class="dv">2</span></a></code></pre></div>
+<pre><code>## [1] 5</code></pre>
+</div>
+<div id="example-4-1" class="section level2">
+<h2>Example 4:</h2>
+<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb31-1" data-line-number="1"><span class="co"># Exponentiation</span></a>
+<a class="sourceLine" id="cb31-2" data-line-number="2"><span class="dv">2</span><span class="op">^</span><span class="dv">5</span></a></code></pre></div>
+<pre><code>## [1] 32</code></pre>
+</div>
+<div id="example-5-1" class="section level2">
+<h2>Example 5:</h2>
+<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb33-1" data-line-number="1"><span class="co"># Modulo</span></a>
+<a class="sourceLine" id="cb33-2" data-line-number="2"><span class="dv">28</span> <span class="op">%%</span><span class="st"> </span><span class="dv">6</span></a></code></pre></div>
+<pre><code>## [1] 4</code></pre>
+</div>
+</div>
+<div id="buttons4" class="section level1 tabset tabset-fade tabset-pills">
+<h1>Logical Operators</h1>
+<hr />
+<p>With logical operators, we want to return values inside the vector based on logical conditions. Following is a detailed list of logical operators available in R</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Operator</th>
+<th align="left">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">&lt;</td>
+<td align="left">Less than</td>
+</tr>
+<tr class="even">
+<td align="left">&lt;=</td>
+<td align="left">Less than or equal to</td>
+</tr>
+<tr class="odd">
+<td align="left">&gt;</td>
+<td align="left">Greater than</td>
+</tr>
+<tr class="even">
+<td align="left">&gt;=</td>
+<td align="left">Greater than or equal to</td>
+</tr>
+<tr class="odd">
+<td align="left">==</td>
+<td align="left">Exactly equal to</td>
+</tr>
+<tr class="even">
+<td align="left">!=</td>
+<td align="left">Not equal to</td>
+</tr>
+<tr class="odd">
+<td align="left">!x</td>
+<td align="left">Not X</td>
+</tr>
+<tr class="even">
+<td align="left">x &amp; y</td>
+<td align="left">x AND y</td>
+</tr>
+<tr class="odd">
+<td align="left">isTRUE(x)</td>
+<td align="left">Test if x is TRUE</td>
+</tr>
+</tbody>
+</table>
+<p>The logical statements in R are wrapped inside the <code>[ ]</code>. We can add many conditional statements as we like but we need to include them in a parenthesis. We can follow this structure to create a conditional statement:</p>
+<div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb35-1" data-line-number="1">variable_name[(conditional_statement)]</a></code></pre></div>
+<p>With variable_name referring to the variable, we want to use for the statement. We create the logical statement i.e. <code>variable_name &gt; 0</code>. Finally, we use the square bracket to finalize the logical statement. Below, an example of a logical statement.</p>
+<div id="example-1-4" class="section level2">
+<h2>Example 1:</h2>
+<div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb36-1" data-line-number="1"><span class="co"># Create a vector from 1 to 10</span></a>
+<a class="sourceLine" id="cb36-2" data-line-number="2">logical_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</a>
+<a class="sourceLine" id="cb36-3" data-line-number="3">logical_vector <span class="op">&gt;</span><span class="st"> </span><span class="dv">5</span></a></code></pre></div>
+<pre><code>##  [1] FALSE FALSE FALSE FALSE FALSE  TRUE  TRUE  TRUE  TRUE  TRUE</code></pre>
+<p>In the output above, R reads each value and compares it to the statement <code>logical_vector &gt; 5</code>. If the value is strictly superior to five, then the condition is TRUE, otherwise FALSE. R returns a vector of TRUE and FALSE.</p>
+</div>
+<div id="example-2-4" class="section level2">
+<h2>Example 2:</h2>
+<p>In the example below, we want to extract the values that only meet the condition ‘is strictly superior to five’. For that, we can wrap the condition inside a square bracket precede by the vector containing the values.</p>
+<div class="sourceCode" id="cb38"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb38-1" data-line-number="1"><span class="co"># Print value strictly above 5</span></a>
+<a class="sourceLine" id="cb38-2" data-line-number="2">logical_vector[(logical_vector <span class="op">&gt;</span><span class="st"> </span><span class="dv">5</span>)]</a></code></pre></div>
+<pre><code>## [1]  6  7  8  9 10</code></pre>
+</div>
+<div id="example-3-4" class="section level2">
+<h2>Example 3:</h2>
+<div class="sourceCode" id="cb40"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb40-1" data-line-number="1"><span class="co"># Print 5 and 6</span></a>
+<a class="sourceLine" id="cb40-2" data-line-number="2">logical_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</a>
+<a class="sourceLine" id="cb40-3" data-line-number="3">logical_vector[(logical_vector <span class="op">&gt;</span><span class="st"> </span><span class="dv">4</span>) <span class="op">&amp;</span><span class="st"> </span>(logical_vector <span class="op">&lt;</span><span class="st"> </span><span class="dv">7</span>)]</a></code></pre></div>
+<pre><code>## [1] 5 6</code></pre>
+</div>
+</div>
+
+&nbsp;
+<hr />
+<p style="text-align: center;">A work by <a href="https://www.unipa.it/persone/docenti/s/gianluca.sottile">Gianluca Sottile</a></p>
+<p style="text-align: center;"><span style="color: #808080;"><em>gianluca.sottile@unipa.it</em></span></p>
+
+<!-- Add icon library -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+
+&nbsp;
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open')
+  });
+});
+</script>
+
+<!-- code folding -->
+
+<script>
+$(document).ready(function ()  {
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

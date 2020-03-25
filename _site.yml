@@ -1,0 +1,79 @@
+name: "An R Tutorial for Beginners"
+output_dir: "."
+navbar:
+  title: "An R Tutorial for Beginners"
+  left:
+    - text: "Home"
+      icon: fa-home
+      href: index.html
+    - text: "About"
+      icon: fa-info-circle
+      href: about.html
+    - text: "Lessons"
+      icon: fa-bars
+      menu:
+        - text: "Introduction"
+          menu:
+          - text: "Lesson 1"
+            href: R-course_lesson-1.html
+          - text: "Lesson 2"
+            href: R-course_lesson-2.html
+          - text: "Lesson 3"
+            href: R-course_lesson-3.html
+          - text: "Lesson 4"
+            href: R-course_lesson-4.html
+        - text: "Data Preparation"
+          menu:
+          - text: "Lesson 5"
+            href: R-course_lesson-5.html
+          - text: "Lesson 6"
+            href: R-course_lesson-6.html
+          - text: "Lesson 7"
+            href: R-course_lesson-7.html
+          - text: "Lesson 8"
+            href: R-course_lesson-8.html
+          - text: "Lesson 9"
+            href: R-course_lesson-9.html
+        - text: "Programming"
+          menu:
+          - text: "Lesson 10"
+            href: R-course_lesson-10.html
+          - text: "Lesson 11"
+            href: R-course_lesson-11.html
+          - text: "Lesson 12"
+            href: R-course_lesson-12.html
+          - text: "Lesson 13"
+            href: R-course_lesson-13.html
+          - text: "Lesson 14"
+            href: R-course_lesson-14.html
+          - text: "Lesson 15"
+            href: R-course_lesson-15.html
+          - text: "Lesson 16"
+            href: R-course_lesson-16.html
+          - text: "Lesson 17"
+            href: R-course_lesson-17.html
+        - text: "Data Analysis"
+          menu:
+          - text: "Lesson 18"
+            href: R-course_lesson-18.html
+          - text: "Lesson 19"
+            href: R-course_lesson-19.html
+          - text: "Lesson 20"
+            href: R-course_lesson-20.html
+          - text: "Lesson 21"
+            href: R-course_lesson-21.html
+
+          
+output:
+  html_document:
+    theme: flatly
+    highlight: pygments
+    df_print: kable
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    include:
+      after_body: footer.html
+      in_header: header.html
+    css: style.css
+    self_contained: true

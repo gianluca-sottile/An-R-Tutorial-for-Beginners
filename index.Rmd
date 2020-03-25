@@ -1,0 +1,36 @@
+---
+pagetitle: "An R Tutorial for Beginners"
+author: "by Gianluca Sottile"
+mail: "gianluca.sottile@unipa.it"
+github: "gianluca-sottile"
+home: "https://www.unipa.it/persone/docenti/s/gianluca.sottile"
+---
+
+<br>
+
+<!-- <center> -->
+<!-- ![](R_logo.png) -->
+<!-- </center> -->
+<!-- <br><br> -->
+<!-- <img src="R_logo.png" width=400 height=350 align="left"/> -->
+<!-- <p align="center"> -->
+<!-- ![](R_logo.png) -->
+<!-- </p> -->
+
+```{r fig.width=5, fig.height=5, fig.align='center',cache=TRUE,fig.cap="",fig.asp=0.50,echo=FALSE}
+library(png)
+library(grid)
+img <- readPNG("R_logo.png")
+grid.raster(img)
+```
+
+<br>
+
+R is a programming language widely used by data scientists and major corporations like Google, Airbnb, Facebook etc. for data analysis. This is a complete course on R for beginners and covers basics to advance topics like machine learning algorithm, linear regression, time series, statistical inference etc.
+
+
+<!-- Hello, Website! -->
+
+<!-- For more information about simple R Markdown websites, please read the documentation at https://bookdown.org/yihui/rmarkdown/rmarkdown-site.html. -->
+
+<!-- Please also note that simple R Markdown sites are _not_ based on **blogdown**. They are probably good for websites with only a few Rmd documents. For larger-scale and more sophisticated websites (such as blogs), you may want to use **blogdown** instead: https://github.com/rstudio/blogdown. -->

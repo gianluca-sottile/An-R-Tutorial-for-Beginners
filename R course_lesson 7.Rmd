@@ -1,0 +1,62 @@
+---
+pagetitle: "Lesson 7"
+title: "R Sort a Data Frame using Order()"
+# author: "Dott. Gianluca Sottile"
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+```
+
+<br>
+
+In data analysis you can sort your data according to a certain variable in the dataset. In R, we can use the help of the function order(). In R, we can easily sort a vector of continuous variable or factor variable. Arranging the data can be of ascending or descending order.
+
+__Syntax:__
+
+```{r, dont-eval, eval=FALSE}
+sort(x, decreasing = FALSE, na.last = TRUE)
+```
+
+__Argument:__
+
++ x: A vector containing continuous or factor variable
++ decreasing: Control for the order of the sort method. By default, decreasing is set to `FALSE`.
++ last: Indicates whether the `NA` 's value should be put last or not
+
+__Example 1__
+For instance, we can create a tibble data frame and sort one or multiple variables. A tibble data frame is a new approach to data frame. It improves the syntax of data frame and avoid frustrating data type formatting, especially for character to factor. It is also a convenient way to create a data frame by hand, which is our purpose here. To learn more about tibble, please refer to the vignette: <https://cran.r-project.org/web/packages/tibble/vignettes/tibble.html>
+
+```{r}
+library(dplyr)
+set.seed(1234)
+data_frame <- tibble(  
+	c1 = rnorm(50, 5, 1.5),   
+	c2 = rnorm(50, 5, 1.5),  
+	c3 = rnorm(50, 5, 1.5),
+	c4 = rnorm(50, 5, 1.5), 	
+	c5 = rnorm(50, 5, 1.5)
+)
+# Sort by c1
+df <- data_frame[order(data_frame$c1), ]
+head(df)
+```
+
+__Example2__
+
+```{r}
+# Sort by c3 and c4
+df <- data_frame[order(data_frame$c3, data_frame$c4), ]
+head(df)
+```
+
+__Example 3__
+
+```{r}
+# Sort by c3(descending) and c4(acending)
+df <- data_frame[order(-data_frame$c3, data_frame$c4), ]
+head(df)
+```
+

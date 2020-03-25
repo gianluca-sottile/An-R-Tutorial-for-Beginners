@@ -1,0 +1,158 @@
+---
+pagetitle: "Lesson 16"
+title: "R Exporting Data to Excel, CSV, SAS, STATA, Text File"
+# author: "Dott. Gianluca Sottile"
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align="center", message=FALSE)
+```
+
+To export data to the hard drive, you need the file path and an extension. First of all, the path is the location where the data will be stored. In this tutorial, you will see how to store data on the hard drive. Secondly, R allows the users to export the data into different types of files. We cover the essential file's extension:
+
+- csv
+- xlsx
+- RDS
+- SAS
+- SPSS
+- STATA
+
+Overall, it is not difficult to export data from R.
+
+# Export to Hard drive
+To begin with, you can save the data directly into the working directory. The following code prints the path of your working directory:
+
+```{r}
+directory <- getwd()
+directory
+```
+
+By default, the file will be saved in the below path.
+
+For Mac OS:
+
+`/Users/USERNAME`
+
+For Windows:
+
+`C:\Users\USERNAME`
+
+You can, of course, set a different path. For instance, you can change the path to the download folder.
+
+# Create data frame
+First of all, let's import the mtcars dataset and get the mean of mpg and disp grouped by gear.
+
+```{r}
+library(dplyr)
+df <- mtcars %>%
+    select(mpg, disp, gear) %>%
+    group_by(gear) %>%
+    summarise(mean_mpg = mean(mpg), mean_disp = mean(disp))
+df
+```
+
+The table contains three rows and three columns. You can create a CSV file with the function write.csv().
+
+# Export CSV
+The basic syntax is:
+
+```{r, dont-eval, eval=FALSE}
+write.csv(df, path)
+```
+
+__Arguments__
+
+- df: Dataset to save. Need to be the same name of the data frame in the environment.
+- path: A string. Set the destination path. Path + filename + extension i.e. "/Users/USERNAME/Downloads/mydata.csv" or the filename + extension if the folder is the same as the working directory
+
+__Example:__
+
+```{r, dont-eval1, eval=FALSE}
+write.csv(df, "table_car.csv")
+```
+
+__Code Explanation__
+
++ `write.csv(df, "table_car.csv")`: Create a CSV file in the hard drive:
+  + df: name of the data frame in the environment
+  + "table_car.csv": Name the file table_car and store it as csv
+
+__Note:__ You can use the function write.csv2() to separate the rows with a semicolon.
+
+```{r, dont-eval2, eval=FALSE}
+write.csv2(df, "table_car.csv")
+```
+
+__Note:__ For pedagogical purpose only, we created a function called open_folder() to open the directory folder for you. You just need to run the code below and see where the csv file is stored. You should see a file names table_car.csv.
+
+```{r, dont-eval3, eval=FALSE}
+# Run this code to create the function
+open_folder <-function(dir){
+	if (.Platform['OS.type'] == "windows"){
+	  shell.exec(dir)  
+	} else {
+	  system(paste(Sys.getenv("R_BROWSER"), dir))
+  }
+}
+# Call the function to open the folder
+open_folder(directory)
+```
+
+# Export to Excel file
+Export data to Excel is trivial for Windows users and trickier for Mac OS user. Both users will use the library xlsx to create an Excel file. The slight difference comes from the installation of the library. Indeed, the library xlsx uses Java to create the file. Java needs to be installed if not present in your machine.
+
+You can install the library directly with
+
+`install.packages("xlsx")`
+
+Once the library installed, you can use the function write.xlsx(). A new Excel workbook is created in the working directory
+
+```{r, dont-eval4, eval=FALSE}
+library(xlsx)
+write.xlsx(df, "table_car.xlsx")
+```
+
+# Export to different software
+Exporting data to different software is as simple as importing them. The library "haven" provides a convenient way to export data to
+
+- spss
+- sas
+- stata
+
+First of all, import the library. If you don't have "haven", you can install it `install.packages(haven)`.
+
+```{r}
+library(haven)	
+```
+
+## SPSS file
+Below is the code to export the data to SPSS software:
+
+```{r, dont-eval5, eval=FALSE}
+write_sav(df, "table_car.sav")	
+```
+
+## Export SAS file
+Just as simple as spss, you can export to sas
+
+```{r, dont-eval6, eval=FALSE}
+write_sas(df, "table_car.sas7bdat")
+```
+
+## Export STATA file
+Finally, haven library allows writing .dta file.
+
+```{r, dont-eval7, eval=FALSE}
+write_dta(df, "table_car.dta")
+```
+
+## R
+If you want to save a data frame or any other R object, you can use the save() function.
+
+```{r, dont-eval8, eval=FALSE}
+save(df, file ='table_car.RData')
+```
+
+You can check the files created above in the present working directory.
