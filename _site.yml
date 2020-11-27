@@ -62,6 +62,8 @@ navbar:
             href: R-course_lesson-20.html
           - text: "Lesson 21"
             href: R-course_lesson-21.html
+          - text: "Lesson 22"
+            href: R-course_lesson-22.html
           
 output:
   html_document:

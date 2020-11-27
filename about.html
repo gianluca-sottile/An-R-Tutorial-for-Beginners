@@ -23,6 +23,7 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -529,6 +530,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -604,7 +608,7 @@ div.tocify {
 </tr>
 <tr class="even">
 <td align="center">5</td>
-<td align="left">If - else statement in R. For loop in R (with examples for list and matrix). While loop in R. apply(), lapply(), sapply(), tapply() functions in R. Import data into R (read CSV, Excel, SPSS, Stata, SAS files). How to replace missing values (NA) in R. R exporting data (write CSV, Excel, SPSS, Stata, SAS files). Correlation in R: Pearson and Spearman with matrix. Scatter plot, boxplot, bar chart and histogram in R. T-test in R (one sample and paired). R ANOVA tutorial (one way and two way. Simple and multiple linear regression in R. Generalized linear model (GLM) in R. Quantile regression in R. Some notes on regularized models. Decision tree model in R. R random forest tutorial. K-means clustering in R. Applications to real world (case studies, groupwork and discussions about the results).</td>
+<td align="left">If - else statement in R. For loop in R (with examples for list and matrix). While loop in R. apply(), lapply(), sapply(), tapply() functions in R. Import data into R (read CSV, Excel, SPSS, Stata, SAS files). How to replace missing values (NA) in R. R exporting data (write CSV, Excel, SPSS, Stata, SAS files). Correlation in R: Pearson and Spearman with matrix. Scatter plot, boxplot, bar chart and histogram in R. T-test in R (one sample and paired). R ANOVA tutorial (one way and two way. Simple and multiple linear regression in R. Generalized linear model (GLM) in R. K-means clustering in R. Applications to real world (case studies, groupwork and discussions about the results).</td>
 </tr>
 </tbody>
 </table>
@@ -670,7 +674,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0
