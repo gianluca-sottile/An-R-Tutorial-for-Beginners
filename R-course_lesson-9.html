@@ -640,6 +640,20 @@ div.tocify {
         </li>
       </ul>
     </li>
+    <li class="dropdown-submenu">
+      <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">Data Analysis 2</a>
+      <ul class="dropdown-menu" role="menu">
+        <li>
+          <a href="R-course_lesson-23.html">Lesson 23</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-24.html">Lesson 24</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-25.html">Lesson 25</a>
+        </li>
+      </ul>
+    </li>
   </ul>
 </li>
       </ul>
@@ -784,18 +798,22 @@ Returns the factorial of x (x!)
 <span id="cb7-2"><a href="#cb7-2"></a>x_vector &lt;-<span class="st"> </span><span class="kw">seq</span>(<span class="dv">45</span>, <span class="dv">55</span>, <span class="dt">by =</span> <span class="dv">1</span>)</span>
 <span id="cb7-3"><a href="#cb7-3"></a><span class="co">#logarithm</span></span>
 <span id="cb7-4"><a href="#cb7-4"></a><span class="kw">log</span>(x_vector)</span></code></pre></div>
-<pre><code>##  [1] 3.806662 3.828641 3.850148 3.871201 3.891820 3.912023 3.931826 3.951244 3.970292 3.988984 4.007333</code></pre>
+<pre><code>##  [1] 3.806662 3.828641 3.850148 3.871201 3.891820 3.912023 3.931826 3.951244
+##  [9] 3.970292 3.988984 4.007333</code></pre>
 <div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a><span class="co">#exponential</span></span>
 <span id="cb9-2"><a href="#cb9-2"></a><span class="kw">exp</span>(x_vector)</span></code></pre></div>
-<pre><code>##  [1] 3.493427e+19 9.496119e+19 2.581313e+20 7.016736e+20 1.907347e+21 5.184706e+21 1.409349e+22 3.831008e+22 1.041376e+23
-## [10] 2.830753e+23 7.694785e+23</code></pre>
+<pre><code>##  [1] 3.493427e+19 9.496119e+19 2.581313e+20 7.016736e+20 1.907347e+21
+##  [6] 5.184706e+21 1.409349e+22 3.831008e+22 1.041376e+23 2.830753e+23
+## [11] 7.694785e+23</code></pre>
 <div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a><span class="co">#squared root</span></span>
 <span id="cb11-2"><a href="#cb11-2"></a><span class="kw">sqrt</span>(x_vector)</span></code></pre></div>
-<pre><code>##  [1] 6.708204 6.782330 6.855655 6.928203 7.000000 7.071068 7.141428 7.211103 7.280110 7.348469 7.416198</code></pre>
+<pre><code>##  [1] 6.708204 6.782330 6.855655 6.928203 7.000000 7.071068 7.141428 7.211103
+##  [9] 7.280110 7.348469 7.416198</code></pre>
 <div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1"></a><span class="co">#factorial</span></span>
 <span id="cb13-2"><a href="#cb13-2"></a><span class="kw">factorial</span>(x_vector)</span></code></pre></div>
-<pre><code>##  [1] 1.196222e+56 5.502622e+57 2.586232e+59 1.241392e+61 6.082819e+62 3.041409e+64 1.551119e+66 8.065818e+67 4.274883e+69
-## [10] 2.308437e+71 1.269640e+73</code></pre>
+<pre><code>##  [1] 1.196222e+56 5.502622e+57 2.586232e+59 1.241392e+61 6.082819e+62
+##  [6] 3.041409e+64 1.551119e+66 8.065818e+67 4.274883e+69 2.308437e+71
+## [11] 1.269640e+73</code></pre>
 </div>
 <div id="statistical-functions" class="section level1">
 <h1>Statistical functions</h1>
@@ -912,8 +930,8 @@ Summary of x: mean, min, max etc…
 </table>
 <div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1"></a>speed &lt;-<span class="st"> </span>dt<span class="op">$</span>speed</span>
 <span id="cb15-2"><a href="#cb15-2"></a>speed</span></code></pre></div>
-<pre><code>##  [1]  4  4  7  7  8  9 10 10 10 11 11 12 12 12 12 13 13 13 13 14 14 14 14 15 15 15 16 16 17 17 17 18 18 18 18 19 19 19 20
-## [40] 20 20 20 20 22 23 24 24 24 24 25</code></pre>
+<pre><code>##  [1]  4  4  7  7  8  9 10 10 10 11 11 12 12 12 12 13 13 13 13 14 14 14 14 15 15
+## [26] 15 16 16 17 17 17 18 18 18 18 19 19 19 20 20 20 20 20 22 23 24 24 24 24 25</code></pre>
 <div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1"></a><span class="co"># Mean speed of cars dataset</span></span>
 <span id="cb17-2"><a href="#cb17-2"></a><span class="kw">mean</span>(speed)</span></code></pre></div>
 <pre><code>## [1] 15.4</code></pre>
@@ -985,34 +1003,59 @@ Summary of x: mean, min, max etc…
 <p>The top-level environment available is the <strong>global environment</strong>, called <code>R_GlobalEnv</code>. And we have the <strong>local environment</strong>.</p>
 <p>We can list the content of the current environment.</p>
 <div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb36-1"><a href="#cb36-1"></a><span class="kw">ls</span>(<span class="kw">environment</span>())</span></code></pre></div>
-<pre><code>##   [1] &quot;a&quot;                      &quot;A&quot;                      &quot;add_producer&quot;           &quot;add_row&quot;               
-##   [5] &quot;anova_one_way&quot;          &quot;anova_two_way&quot;          &quot;average_missing&quot;        &quot;avg&quot;                   
-##   [9] &quot;b&quot;                      &quot;B&quot;                      &quot;begin&quot;                  &quot;below_ave&quot;             
-##  [13] &quot;box_plot&quot;               &quot;c&quot;                      &quot;category&quot;               &quot;col&quot;                   
-##  [17] &quot;color_vector&quot;           &quot;d&quot;                      &quot;data&quot;                   &quot;data_air&quot;              
-##  [21] &quot;data_air_nona&quot;          &quot;data_frame&quot;             &quot;data_histogram&quot;         &quot;data_rcorr&quot;            
-##  [25] &quot;dataset&quot;                &quot;day_vector&quot;             &quot;df&quot;                     &quot;df_titanic&quot;            
-##  [29] &quot;df_titanic_drop&quot;        &quot;df_titanic_impute_mean&quot; &quot;df_titanic_replace&quot;     &quot;diff_ts&quot;               
-##  [33] &quot;directory&quot;              &quot;dt&quot;                     &quot;dt_l&quot;                   &quot;dt_s&quot;                  
-##  [37] &quot;dt2&quot;                    &quot;example&quot;                &quot;example_1&quot;              &quot;example_2&quot;             
-##  [41] &quot;factor_color&quot;           &quot;factor_day&quot;             &quot;factor_gender_vector&quot;   &quot;fcars&quot;                 
-##  [45] &quot;fruit&quot;                  &quot;gender_vector&quot;          &quot;graph&quot;                  &quot;i&quot;                     
-##  [49] &quot;img&quot;                    &quot;iris&quot;                   &quot;iris_na&quot;                &quot;iris_no_header&quot;        
-##  [53] &quot;iris_row_no_header&quot;     &quot;iris_row_with_header&quot;   &quot;list&quot;                   &quot;list_na&quot;               
-##  [57] &quot;lmn_cars&quot;               &quot;lmxcars&quot;                &quot;logical_vector&quot;         &quot;loop&quot;                  
-##  [61] &quot;m1&quot;                     &quot;m2&quot;                     &quot;m3&quot;                     &quot;mat&quot;                   
-##  [65] &quot;mat_1&quot;                  &quot;mat_2&quot;                  &quot;matrix_a&quot;               &quot;matrix_a1&quot;             
-##  [69] &quot;matrix_a2&quot;              &quot;matrix_b&quot;               &quot;matrix_c&quot;               &quot;matrix_d&quot;              
-##  [73] &quot;mean_mpg&quot;               &quot;median_missing&quot;         &quot;movies&quot;                 &quot;movies_lower&quot;          
-##  [77] &quot;my_graph&quot;               &quot;my_list&quot;                &quot;open_folder&quot;            &quot;p&quot;                     
-##  [81] &quot;p_value&quot;                &quot;PATH&quot;                   &quot;PATH_sas&quot;               &quot;PATH_spss&quot;             
-##  [85] &quot;PATH_stata&quot;             &quot;price&quot;                  &quot;producers&quot;              &quot;quake&quot;                 
-##  [89] &quot;quake_1&quot;                &quot;quantity&quot;               &quot;r&quot;                      &quot;slice_vector&quot;          
-##  [93] &quot;smn_cars&quot;               &quot;smxcars&quot;                &quot;speed&quot;                  &quot;stock&quot;                 
-##  [97] &quot;sugar_cookie&quot;           &quot;sum_vect&quot;               &quot;ts&quot;                     &quot;vec_bool&quot;              
-## [101] &quot;vec_chr&quot;                &quot;vec_num&quot;                &quot;vect&quot;                   &quot;vect_1&quot;                
-## [105] &quot;vect_2&quot;                 &quot;x&quot;                      &quot;x_vector&quot;               &quot;y&quot;                     
-## [109] &quot;z&quot;</code></pre>
+<pre><code>##   [1] &quot;a&quot;                      &quot;A&quot;                      &quot;accuracy_Test&quot;         
+##   [4] &quot;add_producer&quot;           &quot;add_row&quot;                &quot;alpha&quot;                 
+##   [7] &quot;anova&quot;                  &quot;anova_one_way&quot;          &quot;anova_two_way&quot;         
+##  [10] &quot;average_missing&quot;        &quot;avg&quot;                    &quot;b&quot;                     
+##  [13] &quot;B&quot;                      &quot;begin&quot;                  &quot;below_ave&quot;             
+##  [16] &quot;beta&quot;                   &quot;box_plot&quot;               &quot;c&quot;                     
+##  [19] &quot;category&quot;               &quot;center&quot;                 &quot;center_df&quot;             
+##  [22] &quot;center_reshape&quot;         &quot;cluster&quot;                &quot;col&quot;                   
+##  [25] &quot;color_vector&quot;           &quot;continuous&quot;             &quot;corr&quot;                  
+##  [28] &quot;create_train_test&quot;      &quot;d&quot;                      &quot;data&quot;                  
+##  [31] &quot;data_adult&quot;             &quot;data_adult_drop&quot;        &quot;data_adult_rescale&quot;    
+##  [34] &quot;data_air&quot;               &quot;data_air_nona&quot;          &quot;data_frame&quot;            
+##  [37] &quot;data_histogram&quot;         &quot;data_rcorr&quot;             &quot;data_test&quot;             
+##  [40] &quot;data_train&quot;             &quot;dataset&quot;                &quot;day_vector&quot;            
+##  [43] &quot;df&quot;                     &quot;df_titanic&quot;             &quot;df_titanic_drop&quot;       
+##  [46] &quot;df_titanic_impute_mean&quot; &quot;df_titanic_replace&quot;     &quot;diff_ts&quot;               
+##  [49] &quot;directory&quot;              &quot;dt&quot;                     &quot;dt_l&quot;                  
+##  [52] &quot;dt_s&quot;                   &quot;dt2&quot;                    &quot;elbow&quot;                 
+##  [55] &quot;example&quot;                &quot;example_1&quot;              &quot;example_2&quot;             
+##  [58] &quot;f1&quot;                     &quot;f1_2&quot;                   &quot;factor&quot;                
+##  [61] &quot;factor_color&quot;           &quot;factor_day&quot;             &quot;factor_gender_vector&quot;  
+##  [64] &quot;fcars&quot;                  &quot;fit&quot;                    &quot;formula&quot;               
+##  [67] &quot;formula_2&quot;              &quot;fruit&quot;                  &quot;gender_vector&quot;         
+##  [70] &quot;graph&quot;                  &quot;hm.palette&quot;             &quot;i&quot;                     
+##  [73] &quot;img&quot;                    &quot;iris&quot;                   &quot;iris_na&quot;               
+##  [76] &quot;iris_no_header&quot;         &quot;iris_row_no_header&quot;     &quot;iris_row_with_header&quot;  
+##  [79] &quot;kmean_withinss&quot;         &quot;list&quot;                   &quot;list_na&quot;               
+##  [82] &quot;lmn_cars&quot;               &quot;lmxcars&quot;                &quot;logical_vector&quot;        
+##  [85] &quot;logit&quot;                  &quot;logit_2&quot;                &quot;loop&quot;                  
+##  [88] &quot;m1&quot;                     &quot;m2&quot;                     &quot;m3&quot;                    
+##  [91] &quot;mat&quot;                    &quot;mat_1&quot;                  &quot;mat_2&quot;                 
+##  [94] &quot;matrix_a&quot;               &quot;matrix_a1&quot;              &quot;matrix_a2&quot;             
+##  [97] &quot;matrix_b&quot;               &quot;matrix_c&quot;               &quot;matrix_d&quot;              
+## [100] &quot;max_k&quot;                  &quot;mean_mpg&quot;               &quot;median_missing&quot;        
+## [103] &quot;model&quot;                  &quot;movies&quot;                 &quot;movies_lower&quot;          
+## [106] &quot;my_graph&quot;               &quot;my_list&quot;                &quot;open_folder&quot;           
+## [109] &quot;p&quot;                      &quot;p_value&quot;                &quot;path&quot;                  
+## [112] &quot;PATH&quot;                   &quot;PATH_sas&quot;               &quot;PATH_spss&quot;             
+## [115] &quot;PATH_stata&quot;             &quot;pc_cluster&quot;             &quot;pc_cluster_2&quot;          
+## [118] &quot;prec&quot;                   &quot;precision&quot;              &quot;precision_2&quot;           
+## [121] &quot;predict&quot;                &quot;predict_2&quot;              &quot;price&quot;                 
+## [124] &quot;producers&quot;              &quot;quake&quot;                  &quot;quake_1&quot;               
+## [127] &quot;quantity&quot;               &quot;r&quot;                      &quot;rec&quot;                   
+## [130] &quot;recall&quot;                 &quot;recall_2&quot;               &quot;recast_data&quot;           
+## [133] &quot;rescale_df&quot;             &quot;ROCRperf&quot;               &quot;ROCRpred&quot;              
+## [136] &quot;slice_vector&quot;           &quot;smn_cars&quot;               &quot;smxcars&quot;               
+## [139] &quot;speed&quot;                  &quot;stock&quot;                  &quot;sugar_cookie&quot;          
+## [142] &quot;sum_vect&quot;               &quot;table_mat&quot;              &quot;table_mat_2&quot;           
+## [145] &quot;test&quot;                   &quot;top_one_percent&quot;        &quot;ts&quot;                    
+## [148] &quot;vec_bool&quot;               &quot;vec_chr&quot;                &quot;vec_num&quot;               
+## [151] &quot;vect&quot;                   &quot;vect_1&quot;                 &quot;vect_2&quot;                
+## [154] &quot;wss&quot;                    &quot;x&quot;                      &quot;x_vector&quot;              
+## [157] &quot;y&quot;                      &quot;z&quot;</code></pre>
 <p>The above list will vary for you based on the historic code you execute in R Studio.</p>
 <p>Note that n, the argument of the square_function function is <strong>not in this global environment</strong>.</p>
 <p>A <strong>new</strong> environment is created for each function. In the above example, the function <code>square_function()</code> creates a new environment inside the global environment.</p>
@@ -1105,11 +1148,14 @@ Summary of x: mean, min, max etc…
 <span id="cb50-10"><a href="#cb50-10"></a>}</span></code></pre></div>
 <p>Let’s test our function with the variable c1:</p>
 <div class="sourceCode" id="cb51"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb51-1"><a href="#cb51-1"></a><span class="kw">normalize</span>(data_frame<span class="op">$</span>c1)</span></code></pre></div>
-<pre><code>##  [1] 0.2886787 0.2804736 0.4703763 0.4491567 0.0000000 0.6670762 0.5201213 0.9226957 0.6010405 0.3906637 0.9935270
-## [12] 1.0000000 0.2472571 0.5608726 0.4344636 0.5084751 0.5159993 0.2392318 0.5267855 0.7987615 0.4432263 0.4434425
-## [23] 0.7335992 0.6406569 0.1673950 0.5161877 0.7809786 0.7367032 0.5517526 0.6077342 0.2513036 0.5294877 0.2963623
-## [34] 0.3886087 0.6475707 0.2624606 0.5233160 0.5533098 0.4839211 0.8123155 0.2837454 0.5863482 0.4571924 0.4252497
-## [45] 0.5599546 0.2841072 0.2296527 0.3818332 0.7992279 0.4840796</code></pre>
+<pre><code>##  [1] 0.2886787 0.2804736 0.4703763 0.4491567 0.0000000 0.6670762 0.5201213
+##  [8] 0.9226957 0.6010405 0.3906637 0.9935270 1.0000000 0.2472571 0.5608726
+## [15] 0.4344636 0.5084751 0.5159993 0.2392318 0.5267855 0.7987615 0.4432263
+## [22] 0.4434425 0.7335992 0.6406569 0.1673950 0.5161877 0.7809786 0.7367032
+## [29] 0.5517526 0.6077342 0.2513036 0.5294877 0.2963623 0.3886087 0.6475707
+## [36] 0.2624606 0.5233160 0.5533098 0.4839211 0.8123155 0.2837454 0.5863482
+## [43] 0.4571924 0.4252497 0.5599546 0.2841072 0.2296527 0.3818332 0.7992279
+## [50] 0.4840796</code></pre>
 <p>It works perfectly. We created our first function.</p>
 <p>Functions are more comprehensive way to perform a repetitive task. We can use the normalize formula over different columns, like below:</p>
 <div class="sourceCode" id="cb53"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb53-1"><a href="#cb53-1"></a>data_frame<span class="op">$</span>c1_norm_function &lt;-<span class="st"> </span><span class="kw">normalize</span>(data_frame<span class="op">$</span>c1)</span>

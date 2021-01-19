@@ -638,6 +638,20 @@ div.tocify {
         </li>
       </ul>
     </li>
+    <li class="dropdown-submenu">
+      <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">Data Analysis 2</a>
+      <ul class="dropdown-menu" role="menu">
+        <li>
+          <a href="R-course_lesson-23.html">Lesson 23</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-24.html">Lesson 24</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-25.html">Lesson 25</a>
+        </li>
+      </ul>
+    </li>
   </ul>
 </li>
       </ul>
@@ -726,8 +740,8 @@ div.tocify {
 <p>A matrix has 2-dimension, rows and columns. To iterate over a matrix, we have to define two for loop, namely one for the rows and another for the column.</p>
 <div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a><span class="co"># Create a matrix</span></span>
 <span id="cb8-2"><a href="#cb8-2"></a>mat &lt;-<span class="st"> </span><span class="kw">matrix</span>(<span class="dt">data =</span> <span class="kw">seq</span>(<span class="dv">10</span>, <span class="dv">20</span>, <span class="dt">by=</span><span class="dv">1</span>), <span class="dt">nrow =</span> <span class="dv">6</span>, <span class="dt">ncol =</span><span class="dv">2</span>)</span></code></pre></div>
-<pre><code>## Warning in matrix(data = seq(10, 20, by = 1), nrow = 6, ncol = 2): data length [11] is not a sub-multiple or multiple of
-## the number of rows [6]</code></pre>
+<pre><code>## Warning in matrix(data = seq(10, 20, by = 1), nrow = 6, ncol = 2): data length
+## [11] is not a sub-multiple or multiple of the number of rows [6]</code></pre>
 <div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a><span class="co"># Create the loop with r and c to iterate over the matrix</span></span>
 <span id="cb10-2"><a href="#cb10-2"></a><span class="cf">for</span> (r <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="kw">nrow</span>(mat))   </span>
 <span id="cb10-3"><a href="#cb10-3"></a>    <span class="cf">for</span> (c <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="kw">ncol</span>(mat))  </span>

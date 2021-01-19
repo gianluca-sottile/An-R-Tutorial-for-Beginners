@@ -640,6 +640,20 @@ div.tocify {
         </li>
       </ul>
     </li>
+    <li class="dropdown-submenu">
+      <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">Data Analysis 2</a>
+      <ul class="dropdown-menu" role="menu">
+        <li>
+          <a href="R-course_lesson-23.html">Lesson 23</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-24.html">Lesson 24</a>
+        </li>
+        <li>
+          <a href="R-course_lesson-25.html">Lesson 25</a>
+        </li>
+      </ul>
+    </li>
   </ul>
 </li>
       </ul>
@@ -694,11 +708,11 @@ div.tocify {
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="kw">glimpse</span>(data_air)</span></code></pre></div>
 <pre><code>## Rows: 153
 ## Columns: 5
-## $ Ozone   &lt;int&gt; 41, 36, 12, 18, NA, 28, 23, 19, 8, NA, 7, 16, 11, 14, 18, 14, 34, 6, 30, 11, 1, 11, 4, 32, NA, NA, NA,…
-## $ Wind    &lt;dbl&gt; 7.4, 8.0, 12.6, 11.5, 14.3, 14.9, 8.6, 13.8, 20.1, 8.6, 6.9, 9.7, 9.2, 10.9, 13.2, 11.5, 12.0, 18.4, 1…
-## $ Month   &lt;ord&gt; May, May, May, May, May, May, May, May, May, May, May, May, May, May, May, May, May, May, May, May, Ma…
-## $ Day     &lt;int&gt; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,…
-## $ day_cat &lt;fct&gt; Begin, Begin, Begin, Begin, Begin, Begin, Begin, Begin, Begin, Middle, Middle, Middle, Middle, Middle,…</code></pre>
+## $ Ozone   &lt;int&gt; 41, 36, 12, 18, NA, 28, 23, 19, 8, NA, 7, 16, 11, 14, 18, 14,…
+## $ Wind    &lt;dbl&gt; 7.4, 8.0, 12.6, 11.5, 14.3, 14.9, 8.6, 13.8, 20.1, 8.6, 6.9, …
+## $ Month   &lt;ord&gt; May, May, May, May, May, May, May, May, May, May, May, May, M…
+## $ Day     &lt;int&gt; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18…
+## $ day_cat &lt;fct&gt; Begin, Begin, Begin, Begin, Begin, Begin, Begin, Begin, Begin…</code></pre>
 <p>There are NA’s in the dataset. Removing them is wise.</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="co"># Step 5</span></span>
 <span id="cb4-2"><a href="#cb4-2"></a>data_air_nona &lt;-<span class="st"> </span>data_air <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">na.omit</span>() </span></code></pre></div>

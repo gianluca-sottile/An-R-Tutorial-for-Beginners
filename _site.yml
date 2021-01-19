@@ -64,6 +64,15 @@ navbar:
             href: R-course_lesson-21.html
           - text: "Lesson 22"
             href: R-course_lesson-22.html
+        - text: "Data Analysis 2"
+          menu:
+          - text: "Lesson 23"
+            href: R-course_lesson-23.html
+          - text: "Lesson 24"
+            href: R-course_lesson-24.html
+          - text: "Lesson 25"
+            href: R-course_lesson-25.html
+
           
 output:
   html_document:
