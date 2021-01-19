@@ -23,6 +23,7 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -118,12 +119,21 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -133,14 +143,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -149,9 +161,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -238,6 +250,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -518,21 +531,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -620,6 +633,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -644,9 +660,9 @@ div.tocify {
 <div id="buttons" class="section level1 tabset tabset-fade tabset-pills">
 <h1>For Loop Syntax and Examples</h1>
 <hr />
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="cf">for</span> (i <span class="cf">in</span> vector) {</a>
-<a class="sourceLine" id="cb1-2" data-line-number="2">    Exp </a>
-<a class="sourceLine" id="cb1-3" data-line-number="3">}</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="cf">for</span> (i <span class="cf">in</span> vector) {</span>
+<span id="cb1-2"><a href="#cb1-2"></a>    Exp </span>
+<span id="cb1-3"><a href="#cb1-3"></a>}</span></code></pre></div>
 <p>Here, R will loop over all the variables in vector and do the computation written inside the exp.</p>
 <p align="center">
 <img src="imgblock11/img1.png" />
@@ -655,12 +671,12 @@ div.tocify {
 <div id="example-1" class="section level2">
 <h2>Example 1:</h2>
 <p>We iterate over all the elements of a vector and print the current value.</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" data-line-number="1"><span class="co"># Create fruit vector</span></a>
-<a class="sourceLine" id="cb2-2" data-line-number="2">fruit &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&#39;Apple&#39;</span>, <span class="st">&#39;Orange&#39;</span>, <span class="st">&#39;Passion fruit&#39;</span>, <span class="st">&#39;Banana&#39;</span>)</a>
-<a class="sourceLine" id="cb2-3" data-line-number="3"><span class="co"># Create the for statement</span></a>
-<a class="sourceLine" id="cb2-4" data-line-number="4"><span class="cf">for</span> ( i <span class="cf">in</span> fruit){ </a>
-<a class="sourceLine" id="cb2-5" data-line-number="5"> <span class="kw">print</span>(i)</a>
-<a class="sourceLine" id="cb2-6" data-line-number="6">}</a></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="co"># Create fruit vector</span></span>
+<span id="cb2-2"><a href="#cb2-2"></a>fruit &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&#39;Apple&#39;</span>, <span class="st">&#39;Orange&#39;</span>, <span class="st">&#39;Passion fruit&#39;</span>, <span class="st">&#39;Banana&#39;</span>)</span>
+<span id="cb2-3"><a href="#cb2-3"></a><span class="co"># Create the for statement</span></span>
+<span id="cb2-4"><a href="#cb2-4"></a><span class="cf">for</span> ( i <span class="cf">in</span> fruit){ </span>
+<span id="cb2-5"><a href="#cb2-5"></a> <span class="kw">print</span>(i)</span>
+<span id="cb2-6"><a href="#cb2-6"></a>}</span></code></pre></div>
 <pre><code>## [1] &quot;Apple&quot;
 ## [1] &quot;Orange&quot;
 ## [1] &quot;Passion fruit&quot;
@@ -669,14 +685,24 @@ div.tocify {
 <div id="example-2" class="section level2">
 <h2>Example 2:</h2>
 <p>creates a non-linear function by using the polynomial of x between 1 and 4 and we store it in a list</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb4-1" data-line-number="1"><span class="co"># Create an empty list</span></a>
-<a class="sourceLine" id="cb4-2" data-line-number="2">list &lt;-<span class="st"> </span><span class="kw">c</span>()</a>
-<a class="sourceLine" id="cb4-3" data-line-number="3"><span class="co"># Create a for statement to populate the list</span></a>
-<a class="sourceLine" id="cb4-4" data-line-number="4"><span class="cf">for</span> (i <span class="cf">in</span> <span class="kw">seq</span>(<span class="dv">1</span>, <span class="dv">4</span>, <span class="dt">by=</span><span class="dv">1</span>)) {</a>
-<a class="sourceLine" id="cb4-5" data-line-number="5">  list[[i]] &lt;-<span class="st"> </span>i<span class="op">*</span>i</a>
-<a class="sourceLine" id="cb4-6" data-line-number="6">}</a>
-<a class="sourceLine" id="cb4-7" data-line-number="7"><span class="kw">print</span>(list)</a></code></pre></div>
-<pre><code>## [1]  1  4  9 16</code></pre>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="co"># Create an empty list</span></span>
+<span id="cb4-2"><a href="#cb4-2"></a>list &lt;-<span class="st"> </span><span class="kw">c</span>()</span>
+<span id="cb4-3"><a href="#cb4-3"></a><span class="co"># Create a for statement to populate the list</span></span>
+<span id="cb4-4"><a href="#cb4-4"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="kw">seq</span>(<span class="dv">1</span>, <span class="dv">4</span>, <span class="dt">by=</span><span class="dv">1</span>)) {</span>
+<span id="cb4-5"><a href="#cb4-5"></a>  list[[i]] &lt;-<span class="st"> </span>i<span class="op">*</span>i</span>
+<span id="cb4-6"><a href="#cb4-6"></a>}</span>
+<span id="cb4-7"><a href="#cb4-7"></a><span class="kw">print</span>(list)</span></code></pre></div>
+<pre><code>## [[1]]
+## [1] 1
+## 
+## [[2]]
+## [1] 4
+## 
+## [[3]]
+## [1] 9
+## 
+## [[4]]
+## [1] 16</code></pre>
 <p>The for loop is very valuable for machine learning tasks. After we have trained a model, we need to regularize the model to avoid over-fitting. Regularization is a very tedious task because we need to find the value that minimizes the loss function. To help us detect those values, we can make use of a for loop to iterate over a range of values and define the best candidate.</p>
 </div>
 </div>
@@ -684,13 +710,13 @@ div.tocify {
 <h1>For Loop over a list</h1>
 <hr />
 <p>Looping over a list is just as easy and convenient as looping over a vector. Let’s see an example</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="co"># Create a list with three vectors</span></a>
-<a class="sourceLine" id="cb6-2" data-line-number="2">fruit &lt;-<span class="st"> </span><span class="kw">list</span>(<span class="dt">Basket =</span> <span class="kw">c</span>(<span class="st">&#39;Apple&#39;</span>, <span class="st">&#39;Orange&#39;</span>, <span class="st">&#39;Passion fruit&#39;</span>, <span class="st">&#39;Banana&#39;</span>), </a>
-<a class="sourceLine" id="cb6-3" data-line-number="3"><span class="dt">Money =</span> <span class="kw">c</span>(<span class="dv">10</span>, <span class="dv">12</span>, <span class="dv">15</span>), <span class="dt">purchase =</span> <span class="ot">FALSE</span>)</a>
-<a class="sourceLine" id="cb6-4" data-line-number="4"><span class="cf">for</span> (p  <span class="cf">in</span> fruit) </a>
-<a class="sourceLine" id="cb6-5" data-line-number="5">{ </a>
-<a class="sourceLine" id="cb6-6" data-line-number="6">    <span class="kw">print</span>(p)</a>
-<a class="sourceLine" id="cb6-7" data-line-number="7">}</a></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a><span class="co"># Create a list with three vectors</span></span>
+<span id="cb6-2"><a href="#cb6-2"></a>fruit &lt;-<span class="st"> </span><span class="kw">list</span>(<span class="dt">Basket =</span> <span class="kw">c</span>(<span class="st">&#39;Apple&#39;</span>, <span class="st">&#39;Orange&#39;</span>, <span class="st">&#39;Passion fruit&#39;</span>, <span class="st">&#39;Banana&#39;</span>), </span>
+<span id="cb6-3"><a href="#cb6-3"></a><span class="dt">Money =</span> <span class="kw">c</span>(<span class="dv">10</span>, <span class="dv">12</span>, <span class="dv">15</span>), <span class="dt">purchase =</span> <span class="ot">FALSE</span>)</span>
+<span id="cb6-4"><a href="#cb6-4"></a><span class="cf">for</span> (p  <span class="cf">in</span> fruit) </span>
+<span id="cb6-5"><a href="#cb6-5"></a>{ </span>
+<span id="cb6-6"><a href="#cb6-6"></a>    <span class="kw">print</span>(p)</span>
+<span id="cb6-7"><a href="#cb6-7"></a>}</span></code></pre></div>
 <pre><code>## [1] &quot;Apple&quot;         &quot;Orange&quot;        &quot;Passion fruit&quot; &quot;Banana&quot;       
 ## [1] 10 12 15
 ## [1] FALSE</code></pre>
@@ -698,14 +724,14 @@ div.tocify {
 <div id="for-loop-over-a-matrix" class="section level1">
 <h1>For Loop over a matrix</h1>
 <p>A matrix has 2-dimension, rows and columns. To iterate over a matrix, we have to define two for loop, namely one for the rows and another for the column.</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="co"># Create a matrix</span></a>
-<a class="sourceLine" id="cb8-2" data-line-number="2">mat &lt;-<span class="st"> </span><span class="kw">matrix</span>(<span class="dt">data =</span> <span class="kw">seq</span>(<span class="dv">10</span>, <span class="dv">20</span>, <span class="dt">by=</span><span class="dv">1</span>), <span class="dt">nrow =</span> <span class="dv">6</span>, <span class="dt">ncol =</span><span class="dv">2</span>)</a></code></pre></div>
-<pre><code>## Warning in matrix(data = seq(10, 20, by = 1), nrow = 6, ncol = 2): data length
-## [11] is not a sub-multiple or multiple of the number of rows [6]</code></pre>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb10-1" data-line-number="1"><span class="co"># Create the loop with r and c to iterate over the matrix</span></a>
-<a class="sourceLine" id="cb10-2" data-line-number="2"><span class="cf">for</span> (r <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="kw">nrow</span>(mat))   </a>
-<a class="sourceLine" id="cb10-3" data-line-number="3">    <span class="cf">for</span> (c <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="kw">ncol</span>(mat))  </a>
-<a class="sourceLine" id="cb10-4" data-line-number="4">         <span class="kw">print</span>(<span class="kw">paste</span>(<span class="st">&quot;Row&quot;</span>, r, <span class="st">&quot;and column&quot;</span>,c, <span class="st">&quot;have values of&quot;</span>, mat[r,c]))  </a></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a><span class="co"># Create a matrix</span></span>
+<span id="cb8-2"><a href="#cb8-2"></a>mat &lt;-<span class="st"> </span><span class="kw">matrix</span>(<span class="dt">data =</span> <span class="kw">seq</span>(<span class="dv">10</span>, <span class="dv">20</span>, <span class="dt">by=</span><span class="dv">1</span>), <span class="dt">nrow =</span> <span class="dv">6</span>, <span class="dt">ncol =</span><span class="dv">2</span>)</span></code></pre></div>
+<pre><code>## Warning in matrix(data = seq(10, 20, by = 1), nrow = 6, ncol = 2): data length [11] is not a sub-multiple or multiple of
+## the number of rows [6]</code></pre>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a><span class="co"># Create the loop with r and c to iterate over the matrix</span></span>
+<span id="cb10-2"><a href="#cb10-2"></a><span class="cf">for</span> (r <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="kw">nrow</span>(mat))   </span>
+<span id="cb10-3"><a href="#cb10-3"></a>    <span class="cf">for</span> (c <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="kw">ncol</span>(mat))  </span>
+<span id="cb10-4"><a href="#cb10-4"></a>         <span class="kw">print</span>(<span class="kw">paste</span>(<span class="st">&quot;Row&quot;</span>, r, <span class="st">&quot;and column&quot;</span>,c, <span class="st">&quot;have values of&quot;</span>, mat[r,c]))  </span></code></pre></div>
 <pre><code>## [1] &quot;Row 1 and column 1 have values of 10&quot;
 ## [1] &quot;Row 1 and column 2 have values of 16&quot;
 ## [1] &quot;Row 2 and column 1 have values of 11&quot;
@@ -740,7 +766,7 @@ div.tocify {
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();
@@ -779,7 +805,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0

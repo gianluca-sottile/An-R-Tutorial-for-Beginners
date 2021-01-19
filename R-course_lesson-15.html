@@ -23,7 +23,9 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="site_libs/lightable-0.0.1/lightable.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -119,12 +121,21 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -134,14 +145,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -150,9 +163,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -239,6 +252,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -519,21 +533,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -621,6 +635,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -656,7 +673,7 @@ div.tocify {
 <li>impute missing values with the mean and median</li>
 </ul>
 <p>The verb mutate() is very easy to use. We can create a new variable following this syntax:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="kw">mutate</span>(df, <span class="dt">name_variable_1 =</span> condition, ...)</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">mutate</span>(df, <span class="dt">name_variable_1 =</span> condition, ...)</span></code></pre></div>
 <p><strong>Arguments:</strong></p>
 <ul>
 <li>df: Data frame used to create a new variable</li>
@@ -670,16 +687,16 @@ div.tocify {
 <p>To tackle the problem of missing observations, we will use the titanic dataset. In this dataset, we have access to the information of the passengers on board during the tragedy. This dataset has many NA that need to be taken care of.</p>
 <p>We will upload the csv file from the internet and then check which columns have NA. To return the columns with missing data, we can use the following code:</p>
 <p>Let’s upload the data and verify the missing data.</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" data-line-number="1">PATH &lt;-<span class="st"> &quot;https://raw.githubusercontent.com/guru99-edu/R-Programming/master/test.csv&quot;</span></a>
-<a class="sourceLine" id="cb2-2" data-line-number="2">df_titanic &lt;-<span class="st"> </span><span class="kw">read.csv</span>(PATH, <span class="dt">sep =</span> <span class="st">&quot;,&quot;</span>)</a>
-<a class="sourceLine" id="cb2-3" data-line-number="3"><span class="co"># Return the column names containing missing observations</span></a>
-<a class="sourceLine" id="cb2-4" data-line-number="4">list_na &lt;-<span class="st"> </span><span class="kw">colnames</span>(df_titanic)[<span class="kw">apply</span>(df_titanic, <span class="dv">2</span>, anyNA)]</a>
-<a class="sourceLine" id="cb2-5" data-line-number="5">list_na</a></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a>PATH &lt;-<span class="st"> &quot;https://raw.githubusercontent.com/guru99-edu/R-Programming/master/test.csv&quot;</span></span>
+<span id="cb2-2"><a href="#cb2-2"></a>df_titanic &lt;-<span class="st"> </span><span class="kw">read.csv</span>(PATH, <span class="dt">sep =</span> <span class="st">&quot;,&quot;</span>)</span>
+<span id="cb2-3"><a href="#cb2-3"></a><span class="co"># Return the column names containing missing observations</span></span>
+<span id="cb2-4"><a href="#cb2-4"></a>list_na &lt;-<span class="st"> </span><span class="kw">colnames</span>(df_titanic)[<span class="kw">apply</span>(df_titanic, <span class="dv">2</span>, anyNA)]</span>
+<span id="cb2-5"><a href="#cb2-5"></a>list_na</span></code></pre></div>
 <pre><code>## [1] &quot;Age&quot;  &quot;Fare&quot;</code></pre>
 <p>Here,</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb4-1" data-line-number="1"><span class="kw">colnames</span>(df_titanic)[<span class="kw">apply</span>(df_titanic, <span class="dv">2</span>, anyNA)]</a></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw">colnames</span>(df_titanic)[<span class="kw">apply</span>(df_titanic, <span class="dv">2</span>, anyNA)]</span></code></pre></div>
 <p>Gives the name of columns that do not have data. The columns age and fare have missing values. We can drop them with the na.omit().</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1"><span class="kw">library</span>(dplyr)</a></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a><span class="kw">library</span>(dplyr)</span></code></pre></div>
 <pre><code>## 
 ## Attaching package: &#39;dplyr&#39;</code></pre>
 <pre><code>## The following object is masked from &#39;package:kableExtra&#39;:
@@ -691,9 +708,9 @@ div.tocify {
 <pre><code>## The following objects are masked from &#39;package:base&#39;:
 ## 
 ##     intersect, setdiff, setequal, union</code></pre>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb10-1" data-line-number="1"><span class="co"># Exclude the missing observations</span></a>
-<a class="sourceLine" id="cb10-2" data-line-number="2">df_titanic_drop &lt;-<span class="st"> </span>df_titanic <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">na.omit</span>()     </a>
-<a class="sourceLine" id="cb10-3" data-line-number="3"><span class="kw">dim</span>(df_titanic_drop)</a></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a><span class="co"># Exclude the missing observations</span></span>
+<span id="cb10-2"><a href="#cb10-2"></a>df_titanic_drop &lt;-<span class="st"> </span>df_titanic <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">na.omit</span>()     </span>
+<span id="cb10-3"><a href="#cb10-3"></a><span class="kw">dim</span>(df_titanic_drop)</span></code></pre></div>
 <pre><code>## [1] 331  11</code></pre>
 <p align="center">
 <img src="imgblock15/img2.png" />
@@ -705,18 +722,18 @@ div.tocify {
 <p>We will use the apply method to compute the mean of the column with NA. Let’s see an example</p>
 <p><strong>Step 1)</strong> Earlier in the tutorial, we stored the columns name with the missing values in the list called list_na. We will use this list</p>
 <p><strong>Step 2)</strong> Now we need to compute of the mean with the argument na.rm = TRUE. This argument is compulsory because the columns have missing data, and this tells R to ignore them.</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb12-1" data-line-number="1"><span class="co"># Create mean</span></a>
-<a class="sourceLine" id="cb12-2" data-line-number="2">average_missing &lt;-<span class="st"> </span><span class="kw">apply</span>(df_titanic[, <span class="kw">colnames</span>(df_titanic) <span class="op">%in%</span><span class="st"> </span>list_na],</a>
-<a class="sourceLine" id="cb12-3" data-line-number="3">      <span class="dv">2</span>,</a>
-<a class="sourceLine" id="cb12-4" data-line-number="4">      mean,</a>
-<a class="sourceLine" id="cb12-5" data-line-number="5">      <span class="dt">na.rm =</span>  <span class="ot">TRUE</span>)</a>
-<a class="sourceLine" id="cb12-6" data-line-number="6">average_missing</a></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1"></a><span class="co"># Create mean</span></span>
+<span id="cb12-2"><a href="#cb12-2"></a>average_missing &lt;-<span class="st"> </span><span class="kw">apply</span>(df_titanic[, <span class="kw">colnames</span>(df_titanic) <span class="op">%in%</span><span class="st"> </span>list_na],</span>
+<span id="cb12-3"><a href="#cb12-3"></a>      <span class="dv">2</span>,</span>
+<span id="cb12-4"><a href="#cb12-4"></a>      mean,</span>
+<span id="cb12-5"><a href="#cb12-5"></a>      <span class="dt">na.rm =</span>  <span class="ot">TRUE</span>)</span>
+<span id="cb12-6"><a href="#cb12-6"></a>average_missing</span></code></pre></div>
 <pre><code>##      Age     Fare 
 ## 30.27259 35.62719</code></pre>
 <p><strong>Code Explanation:</strong></p>
 <p>We pass 4 arguments in the apply method.</p>
 <ul>
-<li>df: df_titanic[, colnames(df_titanic) %in% list_na]. This code will return the columns name from the list_na object (i.e. “age” and “fare”)</li>
+<li>df: df_titanic[, colnames(df_titanic) %in% list_na]. This code will return the columns name from the list_na object (i.e. “age” and “fare”)</li>
 <li>2: Compute the function on the columns</li>
 <li>mean: Compute the mean</li>
 <li>na.rm = TRUE: Ignore the missing values</li>
@@ -724,10 +741,10 @@ div.tocify {
 <p>We successfully created the mean of the columns containing missing observations. These two values will be used to replace the missing observations.</p>
 <p><strong>Step 3)</strong> Replace the NA Values</p>
 <p>The verb mutate from the dplyr library is useful in creating a new variable. We don’t necessarily want to change the original column so we can create a new variable without the NA. mutate is easy to use, we just choose a variable name and define how to create this variable. Here is the complete code</p>
-<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb14-1" data-line-number="1"><span class="co"># Create a new variable with the mean and median</span></a>
-<a class="sourceLine" id="cb14-2" data-line-number="2">df_titanic_replace &lt;-<span class="st"> </span>df_titanic <span class="op">%&gt;%</span></a>
-<a class="sourceLine" id="cb14-3" data-line-number="3"><span class="st">   </span><span class="kw">mutate</span>(<span class="dt">replace_mean_age  =</span> <span class="kw">ifelse</span>(<span class="kw">is.na</span>(Age), average_missing[<span class="dv">1</span>], Age),</a>
-<a class="sourceLine" id="cb14-4" data-line-number="4">   <span class="dt">replace_mean_fare =</span> <span class="kw">ifelse</span>(<span class="kw">is.na</span>(Fare), average_missing[<span class="dv">2</span>], Fare))</a></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1"></a><span class="co"># Create a new variable with the mean and median</span></span>
+<span id="cb14-2"><a href="#cb14-2"></a>df_titanic_replace &lt;-<span class="st"> </span>df_titanic <span class="op">%&gt;%</span></span>
+<span id="cb14-3"><a href="#cb14-3"></a><span class="st">   </span><span class="kw">mutate</span>(<span class="dt">replace_mean_age  =</span> <span class="kw">ifelse</span>(<span class="kw">is.na</span>(Age), average_missing[<span class="dv">1</span>], Age),</span>
+<span id="cb14-4"><a href="#cb14-4"></a>   <span class="dt">replace_mean_fare =</span> <span class="kw">ifelse</span>(<span class="kw">is.na</span>(Fare), average_missing[<span class="dv">2</span>], Fare))</span></code></pre></div>
 <p><strong>Code Explanation:</strong></p>
 <p>We create two variables, replace_mean_age and replace_mean_fare as follow:</p>
 <ul>
@@ -735,21 +752,21 @@ div.tocify {
 <li>replace_mean_fare = ifelse(is.na(Fare), average_missing[2], Fare)</li>
 </ul>
 <p>If the column age has missing values, then replace with the first element of average_missing (mean of age), else keep the original values. Same logic for fare</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb15-1" data-line-number="1"><span class="kw">sum</span>(<span class="kw">is.na</span>(df_titanic_replace<span class="op">$</span>Age))</a></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1"></a><span class="kw">sum</span>(<span class="kw">is.na</span>(df_titanic_replace<span class="op">$</span>Age))</span></code></pre></div>
 <pre><code>## [1] 86</code></pre>
 <p>Perform the replacement</p>
-<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb17-1" data-line-number="1"><span class="kw">sum</span>(<span class="kw">is.na</span>(df_titanic_replace<span class="op">$</span>replace_mean_age))</a></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1"></a><span class="kw">sum</span>(<span class="kw">is.na</span>(df_titanic_replace<span class="op">$</span>replace_mean_age))</span></code></pre></div>
 <pre><code>## [1] 0</code></pre>
 <p>The original column age has 263 missing values while the newly created variable have replaced them with the mean of the variable age.</p>
 <p><strong>Step 4)</strong> We can replace the missing observations with the median as well.</p>
-<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb19-1" data-line-number="1">median_missing &lt;-<span class="st"> </span><span class="kw">apply</span>(df_titanic[, <span class="kw">colnames</span>(df_titanic) <span class="op">%in%</span><span class="st"> </span>list_na],</a>
-<a class="sourceLine" id="cb19-2" data-line-number="2">      <span class="dv">2</span>,</a>
-<a class="sourceLine" id="cb19-3" data-line-number="3">      median,</a>
-<a class="sourceLine" id="cb19-4" data-line-number="4">      <span class="dt">na.rm =</span>  <span class="ot">TRUE</span>)</a>
-<a class="sourceLine" id="cb19-5" data-line-number="5">df_titanic_replace &lt;-<span class="st"> </span>df_titanic <span class="op">%&gt;%</span></a>
-<a class="sourceLine" id="cb19-6" data-line-number="6"><span class="st">            </span><span class="kw">mutate</span>(<span class="dt">replace_median_age  =</span> <span class="kw">ifelse</span>(<span class="kw">is.na</span>(Age), median_missing[<span class="dv">1</span>], Age), </a>
-<a class="sourceLine" id="cb19-7" data-line-number="7">            <span class="dt">replace_median_fare =</span> <span class="kw">ifelse</span>(<span class="kw">is.na</span>(Fare), median_missing[<span class="dv">2</span>], Fare))</a>
-<a class="sourceLine" id="cb19-8" data-line-number="8"><span class="kw">head</span>(df_titanic_replace)</a></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1"></a>median_missing &lt;-<span class="st"> </span><span class="kw">apply</span>(df_titanic[, <span class="kw">colnames</span>(df_titanic) <span class="op">%in%</span><span class="st"> </span>list_na],</span>
+<span id="cb19-2"><a href="#cb19-2"></a>      <span class="dv">2</span>,</span>
+<span id="cb19-3"><a href="#cb19-3"></a>      median,</span>
+<span id="cb19-4"><a href="#cb19-4"></a>      <span class="dt">na.rm =</span>  <span class="ot">TRUE</span>)</span>
+<span id="cb19-5"><a href="#cb19-5"></a>df_titanic_replace &lt;-<span class="st"> </span>df_titanic <span class="op">%&gt;%</span></span>
+<span id="cb19-6"><a href="#cb19-6"></a><span class="st">            </span><span class="kw">mutate</span>(<span class="dt">replace_median_age  =</span> <span class="kw">ifelse</span>(<span class="kw">is.na</span>(Age), median_missing[<span class="dv">1</span>], Age), </span>
+<span id="cb19-7"><a href="#cb19-7"></a>            <span class="dt">replace_median_fare =</span> <span class="kw">ifelse</span>(<span class="kw">is.na</span>(Fare), median_missing[<span class="dv">2</span>], Fare))</span>
+<span id="cb19-8"><a href="#cb19-8"></a><span class="kw">head</span>(df_titanic_replace)</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -1042,9 +1059,9 @@ S
 </div>
 <p><strong>Step 5)</strong> A big data set could have lots of missing values and the above method could be cumbersome. We can execute all the above steps above in one line of code using sapply() method. Though we would not know the vales of mean and median.</p>
 <p>sapply does not create a data frame, so we can wrap the sapply() function within data.frame() to create a data frame object.</p>
-<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb20-1" data-line-number="1"><span class="co"># Quick code to replace missing values with the mean</span></a>
-<a class="sourceLine" id="cb20-2" data-line-number="2">df_titanic_impute_mean &lt;-<span class="st"> </span><span class="kw">data.frame</span>(</a>
-<a class="sourceLine" id="cb20-3" data-line-number="3">    <span class="kw">sapply</span>(df_titanic, <span class="cf">function</span>(x) <span class="kw">ifelse</span>(<span class="kw">is.na</span>(x), <span class="kw">mean</span>(x, <span class="dt">na.rm =</span> <span class="ot">TRUE</span>), x)))</a></code></pre></div>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1"></a><span class="co"># Quick code to replace missing values with the mean</span></span>
+<span id="cb20-2"><a href="#cb20-2"></a>df_titanic_impute_mean &lt;-<span class="st"> </span><span class="kw">data.frame</span>(</span>
+<span id="cb20-3"><a href="#cb20-3"></a>    <span class="kw">sapply</span>(df_titanic, <span class="cf">function</span>(x) <span class="kw">ifelse</span>(<span class="kw">is.na</span>(x), <span class="kw">mean</span>(x, <span class="dt">na.rm =</span> <span class="ot">TRUE</span>), x)))</span></code></pre></div>
 </div>
 <div id="summary" class="section level1">
 <h1>Summary</h1>
@@ -1177,7 +1194,7 @@ Don’t know the imputation values
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();
@@ -1216,7 +1233,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0

@@ -23,6 +23,7 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -118,12 +119,21 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -133,14 +143,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -149,9 +161,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -238,6 +250,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -518,21 +531,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -620,6 +633,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -654,8 +670,8 @@ div.tocify {
 <div id="export-to-hard-drive" class="section level1">
 <h1>Export to Hard drive</h1>
 <p>To begin with, you can save the data directly into the working directory. The following code prints the path of your working directory:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1">directory &lt;-<span class="st"> </span><span class="kw">getwd</span>()</a>
-<a class="sourceLine" id="cb1-2" data-line-number="2">directory</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a>directory &lt;-<span class="st"> </span><span class="kw">getwd</span>()</span>
+<span id="cb1-2"><a href="#cb1-2"></a>directory</span></code></pre></div>
 <pre><code>## [1] &quot;/Volumes/GoogleDrive/Il mio Drive/An-R-Tutorial-for-Beginners&quot;</code></pre>
 <p>By default, the file will be saved in the below path.</p>
 <p>For Mac OS:</p>
@@ -667,12 +683,12 @@ div.tocify {
 <div id="create-data-frame" class="section level1">
 <h1>Create data frame</h1>
 <p>First of all, let’s import the mtcars dataset and get the mean of mpg and disp grouped by gear.</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" data-line-number="1"><span class="kw">library</span>(dplyr)</a>
-<a class="sourceLine" id="cb3-2" data-line-number="2">df &lt;-<span class="st"> </span>mtcars <span class="op">%&gt;%</span></a>
-<a class="sourceLine" id="cb3-3" data-line-number="3"><span class="st">    </span><span class="kw">select</span>(mpg, disp, gear) <span class="op">%&gt;%</span></a>
-<a class="sourceLine" id="cb3-4" data-line-number="4"><span class="st">    </span><span class="kw">group_by</span>(gear) <span class="op">%&gt;%</span></a>
-<a class="sourceLine" id="cb3-5" data-line-number="5"><span class="st">    </span><span class="kw">summarise</span>(<span class="dt">mean_mpg =</span> <span class="kw">mean</span>(mpg), <span class="dt">mean_disp =</span> <span class="kw">mean</span>(disp))</a>
-<a class="sourceLine" id="cb3-6" data-line-number="6">df</a></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a><span class="kw">library</span>(dplyr)</span>
+<span id="cb3-2"><a href="#cb3-2"></a>df &lt;-<span class="st"> </span>mtcars <span class="op">%&gt;%</span></span>
+<span id="cb3-3"><a href="#cb3-3"></a><span class="st">    </span><span class="kw">select</span>(mpg, disp, gear) <span class="op">%&gt;%</span></span>
+<span id="cb3-4"><a href="#cb3-4"></a><span class="st">    </span><span class="kw">group_by</span>(gear) <span class="op">%&gt;%</span></span>
+<span id="cb3-5"><a href="#cb3-5"></a><span class="st">    </span><span class="kw">summarise</span>(<span class="dt">mean_mpg =</span> <span class="kw">mean</span>(mpg), <span class="dt">mean_disp =</span> <span class="kw">mean</span>(disp))</span>
+<span id="cb3-6"><a href="#cb3-6"></a>df</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -731,44 +747,44 @@ mean_disp
 <div id="export-csv" class="section level1">
 <h1>Export CSV</h1>
 <p>The basic syntax is:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb4-1" data-line-number="1"><span class="kw">write.csv</span>(df, path)</a></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw">write.csv</span>(df, path)</span></code></pre></div>
 <p><strong>Arguments</strong></p>
 <ul>
 <li>df: Dataset to save. Need to be the same name of the data frame in the environment.</li>
-<li>path: A string. Set the destination path. Path + filename + extension i.e. “/Users/USERNAME/Downloads/mydata.csv” or the filename + extension if the folder is the same as the working directory</li>
+<li>path: A string. Set the destination path. Path + filename + extension i.e. “/Users/USERNAME/Downloads/mydata.csv” or the filename + extension if the folder is the same as the working directory</li>
 </ul>
 <p><strong>Example:</strong></p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1"><span class="kw">write.csv</span>(df, <span class="st">&quot;table_car.csv&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a><span class="kw">write.csv</span>(df, <span class="st">&quot;table_car.csv&quot;</span>)</span></code></pre></div>
 <p><strong>Code Explanation</strong></p>
 <ul>
-<li><code>write.csv(df, &quot;table_car.csv&quot;)</code>: Create a CSV file in the hard drive:
+<li><code>write.csv(df, "table_car.csv")</code>: Create a CSV file in the hard drive:
 <ul>
 <li>df: name of the data frame in the environment</li>
 <li>“table_car.csv”: Name the file table_car and store it as csv</li>
 </ul></li>
 </ul>
 <p><strong>Note:</strong> You can use the function write.csv2() to separate the rows with a semicolon.</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="kw">write.csv2</span>(df, <span class="st">&quot;table_car.csv&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a><span class="kw">write.csv2</span>(df, <span class="st">&quot;table_car.csv&quot;</span>)</span></code></pre></div>
 <p><strong>Note:</strong> For pedagogical purpose only, we created a function called open_folder() to open the directory folder for you. You just need to run the code below and see where the csv file is stored. You should see a file names table_car.csv.</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb7-1" data-line-number="1"><span class="co"># Run this code to create the function</span></a>
-<a class="sourceLine" id="cb7-2" data-line-number="2">open_folder &lt;-<span class="cf">function</span>(dir){</a>
-<a class="sourceLine" id="cb7-3" data-line-number="3">    <span class="cf">if</span> (.Platform[<span class="st">&#39;OS.type&#39;</span>] <span class="op">==</span><span class="st"> &quot;windows&quot;</span>){</a>
-<a class="sourceLine" id="cb7-4" data-line-number="4">      <span class="kw">shell.exec</span>(dir)  </a>
-<a class="sourceLine" id="cb7-5" data-line-number="5">    } <span class="cf">else</span> {</a>
-<a class="sourceLine" id="cb7-6" data-line-number="6">      <span class="kw">system</span>(<span class="kw">paste</span>(<span class="kw">Sys.getenv</span>(<span class="st">&quot;R_BROWSER&quot;</span>), dir))</a>
-<a class="sourceLine" id="cb7-7" data-line-number="7">  }</a>
-<a class="sourceLine" id="cb7-8" data-line-number="8">}</a>
-<a class="sourceLine" id="cb7-9" data-line-number="9"><span class="co"># Call the function to open the folder</span></a>
-<a class="sourceLine" id="cb7-10" data-line-number="10"><span class="kw">open_folder</span>(directory)</a></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1"></a><span class="co"># Run this code to create the function</span></span>
+<span id="cb7-2"><a href="#cb7-2"></a>open_folder &lt;-<span class="cf">function</span>(dir){</span>
+<span id="cb7-3"><a href="#cb7-3"></a>    <span class="cf">if</span> (.Platform[<span class="st">&#39;OS.type&#39;</span>] <span class="op">==</span><span class="st"> &quot;windows&quot;</span>){</span>
+<span id="cb7-4"><a href="#cb7-4"></a>      <span class="kw">shell.exec</span>(dir)  </span>
+<span id="cb7-5"><a href="#cb7-5"></a>    } <span class="cf">else</span> {</span>
+<span id="cb7-6"><a href="#cb7-6"></a>      <span class="kw">system</span>(<span class="kw">paste</span>(<span class="kw">Sys.getenv</span>(<span class="st">&quot;R_BROWSER&quot;</span>), dir))</span>
+<span id="cb7-7"><a href="#cb7-7"></a>  }</span>
+<span id="cb7-8"><a href="#cb7-8"></a>}</span>
+<span id="cb7-9"><a href="#cb7-9"></a><span class="co"># Call the function to open the folder</span></span>
+<span id="cb7-10"><a href="#cb7-10"></a><span class="kw">open_folder</span>(directory)</span></code></pre></div>
 </div>
 <div id="export-to-excel-file" class="section level1">
 <h1>Export to Excel file</h1>
 <p>Export data to Excel is trivial for Windows users and trickier for Mac OS user. Both users will use the library xlsx to create an Excel file. The slight difference comes from the installation of the library. Indeed, the library xlsx uses Java to create the file. Java needs to be installed if not present in your machine.</p>
 <p>You can install the library directly with</p>
-<p><code>install.packages(&quot;xlsx&quot;)</code></p>
+<p><code>install.packages("xlsx")</code></p>
 <p>Once the library installed, you can use the function write.xlsx(). A new Excel workbook is created in the working directory</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="kw">library</span>(xlsx)</a>
-<a class="sourceLine" id="cb8-2" data-line-number="2"><span class="kw">write.xlsx</span>(df, <span class="st">&quot;table_car.xlsx&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a><span class="kw">library</span>(xlsx)</span>
+<span id="cb8-2"><a href="#cb8-2"></a><span class="kw">write.xlsx</span>(df, <span class="st">&quot;table_car.xlsx&quot;</span>)</span></code></pre></div>
 </div>
 <div id="export-to-different-software" class="section level1">
 <h1>Export to different software</h1>
@@ -779,26 +795,26 @@ mean_disp
 <li>stata</li>
 </ul>
 <p>First of all, import the library. If you don’t have “haven”, you can install it <code>install.packages(haven)</code>.</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" data-line-number="1"><span class="kw">library</span>(haven)  </a></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a><span class="kw">library</span>(haven)  </span></code></pre></div>
 <div id="spss-file" class="section level2">
 <h2>SPSS file</h2>
 <p>Below is the code to export the data to SPSS software:</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb10-1" data-line-number="1"><span class="kw">write_sav</span>(df, <span class="st">&quot;table_car.sav&quot;</span>)  </a></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a><span class="kw">write_sav</span>(df, <span class="st">&quot;table_car.sav&quot;</span>)  </span></code></pre></div>
 </div>
 <div id="export-sas-file" class="section level2">
 <h2>Export SAS file</h2>
 <p>Just as simple as spss, you can export to sas</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb11-1" data-line-number="1"><span class="kw">write_sas</span>(df, <span class="st">&quot;table_car.sas7bdat&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a><span class="kw">write_sas</span>(df, <span class="st">&quot;table_car.sas7bdat&quot;</span>)</span></code></pre></div>
 </div>
 <div id="export-stata-file" class="section level2">
 <h2>Export STATA file</h2>
 <p>Finally, haven library allows writing .dta file.</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb12-1" data-line-number="1"><span class="kw">write_dta</span>(df, <span class="st">&quot;table_car.dta&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1"></a><span class="kw">write_dta</span>(df, <span class="st">&quot;table_car.dta&quot;</span>)</span></code></pre></div>
 </div>
 <div id="r" class="section level2">
 <h2>R</h2>
 <p>If you want to save a data frame or any other R object, you can use the save() function.</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb13-1" data-line-number="1"><span class="kw">save</span>(df, <span class="dt">file =</span><span class="st">&#39;table_car.RData&#39;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1"></a><span class="kw">save</span>(df, <span class="dt">file =</span><span class="st">&#39;table_car.RData&#39;</span>)</span></code></pre></div>
 <p>You can check the files created above in the present working directory.</p>
 </div>
 </div>
@@ -823,7 +839,7 @@ mean_disp
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();
@@ -862,7 +878,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0

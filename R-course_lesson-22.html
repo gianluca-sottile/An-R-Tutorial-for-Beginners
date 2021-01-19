@@ -121,6 +121,15 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
@@ -243,6 +252,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -523,21 +533,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -625,6 +635,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -711,9 +724,9 @@ div.tocify {
 <span id="cb1-4"><a href="#cb1-4"></a><span class="kw">glimpse</span>(df)</span></code></pre></div>
 <pre><code>## Rows: 48
 ## Columns: 3
-## $ time   &lt;dbl&gt; 0.31, 0.45, 0.46, 0.43, 0.36, 0.29, 0.40, 0.23, 0.22, 0.21, 0.…
-## $ poison &lt;ord&gt; 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 1, 1, 1, 1, 2, 2, 2, 2, 3,…
-## $ treat  &lt;chr&gt; &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;B…</code></pre>
+## $ time   &lt;dbl&gt; 0.31, 0.45, 0.46, 0.43, 0.36, 0.29, 0.40, 0.23, 0.22, 0.21, 0.18, 0.23, 0.82, 1.10, 0.88, 0.72, 0.92, 0…
+## $ poison &lt;ord&gt; 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3…
+## $ treat  &lt;chr&gt; &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;A&quot;, &quot;B&quot;, &quot;B&quot;, &quot;B&quot;, &quot;B&quot;, &quot;B&quot;, &quot;B&quot;, &quot;B&quot;, &quot;B&quot;, &quot;B&quot;…</code></pre>
 <p>Our objective is to test the following assumption:</p>
 <ul>
 <li>H0: There is no difference in survival time average between group</li>
@@ -740,33 +753,66 @@ div.tocify {
 <span id="cb5-6"><a href="#cb5-6"></a>        <span class="dt">sd_time =</span> <span class="kw">sd</span>(time, <span class="dt">na.rm =</span> <span class="ot">TRUE</span>)</span>
 <span id="cb5-7"><a href="#cb5-7"></a>    )</span></code></pre></div>
 <div class="kable-table">
+
 <table>
 <thead>
-<tr class="header">
-<th align="left">poison</th>
-<th align="right">count_poison</th>
-<th align="right">mean_time</th>
-<th align="right">sd_time</th>
+<tr>
+<th style="text-align:left;">
+poison
+</th>
+<th style="text-align:right;">
+count_poison
+</th>
+<th style="text-align:right;">
+mean_time
+</th>
+<th style="text-align:right;">
+sd_time
+</th>
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td align="left">1</td>
-<td align="right">16</td>
-<td align="right">0.617500</td>
-<td align="right">0.2094278</td>
+<tr>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+16
+</td>
+<td style="text-align:right;">
+0.617500
+</td>
+<td style="text-align:right;">
+0.2094278
+</td>
 </tr>
-<tr class="even">
-<td align="left">2</td>
-<td align="right">16</td>
-<td align="right">0.544375</td>
-<td align="right">0.2893664</td>
+<tr>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:right;">
+16
+</td>
+<td style="text-align:right;">
+0.544375
+</td>
+<td style="text-align:right;">
+0.2893664
+</td>
 </tr>
-<tr class="odd">
-<td align="left">3</td>
-<td align="right">16</td>
-<td align="right">0.276250</td>
-<td align="right">0.0622763</td>
+<tr>
+<td style="text-align:left;">
+3
+</td>
+<td style="text-align:right;">
+16
+</td>
+<td style="text-align:right;">
+0.276250
+</td>
+<td style="text-align:right;">
+0.0622763
+</td>
 </tr>
 </tbody>
 </table>
@@ -916,7 +962,7 @@ aov(y ~ X1 + X2, data = df)
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();

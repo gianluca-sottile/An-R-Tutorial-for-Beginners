@@ -23,7 +23,9 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="site_libs/lightable-0.0.1/lightable.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -119,12 +121,21 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -134,14 +145,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -150,9 +163,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -239,6 +252,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -519,21 +533,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -621,6 +635,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -660,39 +677,39 @@ div.tocify {
 <li>Step 5: Remove missing observations</li>
 </ul>
 <p>All these steps are done with dplyr and the pipeline operator <code>%&gt;%</code>.</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="kw">library</span>(dplyr)</a>
-<a class="sourceLine" id="cb1-2" data-line-number="2"><span class="kw">library</span>(ggplot2)</a>
-<a class="sourceLine" id="cb1-3" data-line-number="3"><span class="co"># Step 1</span></a>
-<a class="sourceLine" id="cb1-4" data-line-number="4">data_air &lt;-<span class="st"> </span>airquality <span class="op">%&gt;%</span></a>
-<a class="sourceLine" id="cb1-5" data-line-number="5"></a>
-<a class="sourceLine" id="cb1-6" data-line-number="6"><span class="co">#Step 2</span></a>
-<a class="sourceLine" id="cb1-7" data-line-number="7"><span class="kw">select</span>(<span class="op">-</span><span class="kw">c</span>(Solar.R, Temp)) <span class="op">%&gt;%</span></a>
-<a class="sourceLine" id="cb1-8" data-line-number="8"></a>
-<a class="sourceLine" id="cb1-9" data-line-number="9"><span class="co">#Step 3</span></a>
-<a class="sourceLine" id="cb1-10" data-line-number="10"><span class="kw">mutate</span>(<span class="dt">Month =</span> <span class="kw">factor</span>(Month, <span class="dt">order =</span> <span class="ot">TRUE</span>, <span class="dt">labels =</span> <span class="kw">c</span>(<span class="st">&quot;May&quot;</span>, <span class="st">&quot;June&quot;</span>, <span class="st">&quot;July&quot;</span>, <span class="st">&quot;August&quot;</span>, <span class="st">&quot;September&quot;</span>)), </a>
-<a class="sourceLine" id="cb1-11" data-line-number="11">       </a>
-<a class="sourceLine" id="cb1-12" data-line-number="12"><span class="co">#Step 4 </span></a>
-<a class="sourceLine" id="cb1-13" data-line-number="13"><span class="dt">day_cat =</span> <span class="kw">factor</span>(<span class="kw">ifelse</span>(Day <span class="op">&lt;</span><span class="st"> </span><span class="dv">10</span>, <span class="st">&quot;Begin&quot;</span>, <span class="kw">ifelse</span>(Day <span class="op">&lt;</span><span class="st"> </span><span class="dv">20</span>, <span class="st">&quot;Middle&quot;</span>, <span class="st">&quot;End&quot;</span>))))</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">library</span>(dplyr)</span>
+<span id="cb1-2"><a href="#cb1-2"></a><span class="kw">library</span>(ggplot2)</span>
+<span id="cb1-3"><a href="#cb1-3"></a><span class="co"># Step 1</span></span>
+<span id="cb1-4"><a href="#cb1-4"></a>data_air &lt;-<span class="st"> </span>airquality <span class="op">%&gt;%</span></span>
+<span id="cb1-5"><a href="#cb1-5"></a></span>
+<span id="cb1-6"><a href="#cb1-6"></a><span class="co">#Step 2</span></span>
+<span id="cb1-7"><a href="#cb1-7"></a><span class="kw">select</span>(<span class="op">-</span><span class="kw">c</span>(Solar.R, Temp)) <span class="op">%&gt;%</span></span>
+<span id="cb1-8"><a href="#cb1-8"></a></span>
+<span id="cb1-9"><a href="#cb1-9"></a><span class="co">#Step 3</span></span>
+<span id="cb1-10"><a href="#cb1-10"></a><span class="kw">mutate</span>(<span class="dt">Month =</span> <span class="kw">factor</span>(Month, <span class="dt">order =</span> <span class="ot">TRUE</span>, <span class="dt">labels =</span> <span class="kw">c</span>(<span class="st">&quot;May&quot;</span>, <span class="st">&quot;June&quot;</span>, <span class="st">&quot;July&quot;</span>, <span class="st">&quot;August&quot;</span>, <span class="st">&quot;September&quot;</span>)), </span>
+<span id="cb1-11"><a href="#cb1-11"></a>       </span>
+<span id="cb1-12"><a href="#cb1-12"></a><span class="co">#Step 4 </span></span>
+<span id="cb1-13"><a href="#cb1-13"></a><span class="dt">day_cat =</span> <span class="kw">factor</span>(<span class="kw">ifelse</span>(Day <span class="op">&lt;</span><span class="st"> </span><span class="dv">10</span>, <span class="st">&quot;Begin&quot;</span>, <span class="kw">ifelse</span>(Day <span class="op">&lt;</span><span class="st"> </span><span class="dv">20</span>, <span class="st">&quot;Middle&quot;</span>, <span class="st">&quot;End&quot;</span>))))</span></code></pre></div>
 <p>A good practice is to check the structure of the data with the function glimpse().</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" data-line-number="1"><span class="kw">glimpse</span>(data_air)</a></code></pre></div>
-<pre><code>## Observations: 153
-## Variables: 5
-## $ Ozone   &lt;int&gt; 41, 36, 12, 18, NA, 28, 23, 19, 8, NA, 7, 16, 11, 14, 18, 14,…
-## $ Wind    &lt;dbl&gt; 7.4, 8.0, 12.6, 11.5, 14.3, 14.9, 8.6, 13.8, 20.1, 8.6, 6.9, …
-## $ Month   &lt;ord&gt; May, May, May, May, May, May, May, May, May, May, May, May, M…
-## $ Day     &lt;int&gt; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18…
-## $ day_cat &lt;fct&gt; Begin, Begin, Begin, Begin, Begin, Begin, Begin, Begin, Begin…</code></pre>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="kw">glimpse</span>(data_air)</span></code></pre></div>
+<pre><code>## Rows: 153
+## Columns: 5
+## $ Ozone   &lt;int&gt; 41, 36, 12, 18, NA, 28, 23, 19, 8, NA, 7, 16, 11, 14, 18, 14, 34, 6, 30, 11, 1, 11, 4, 32, NA, NA, NA,…
+## $ Wind    &lt;dbl&gt; 7.4, 8.0, 12.6, 11.5, 14.3, 14.9, 8.6, 13.8, 20.1, 8.6, 6.9, 9.7, 9.2, 10.9, 13.2, 11.5, 12.0, 18.4, 1…
+## $ Month   &lt;ord&gt; May, May, May, May, May, May, May, May, May, May, May, May, May, May, May, May, May, May, May, May, Ma…
+## $ Day     &lt;int&gt; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,…
+## $ day_cat &lt;fct&gt; Begin, Begin, Begin, Begin, Begin, Begin, Begin, Begin, Begin, Middle, Middle, Middle, Middle, Middle,…</code></pre>
 <p>There are NA’s in the dataset. Removing them is wise.</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb4-1" data-line-number="1"><span class="co"># Step 5</span></a>
-<a class="sourceLine" id="cb4-2" data-line-number="2">data_air_nona &lt;-<span class="st"> </span>data_air <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">na.omit</span>() </a></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="co"># Step 5</span></span>
+<span id="cb4-2"><a href="#cb4-2"></a>data_air_nona &lt;-<span class="st"> </span>data_air <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">na.omit</span>() </span></code></pre></div>
 </div>
 <div id="basic-box-plot" class="section level1">
 <h1>Basic box plot</h1>
 <p>Let’s plot the basic box plot with the distribution of ozone by month.</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1"><span class="co"># Store the graph</span></a>
-<a class="sourceLine" id="cb5-2" data-line-number="2">box_plot &lt;-<span class="st"> </span><span class="kw">ggplot</span>(data_air_nona, <span class="kw">aes</span>(<span class="dt">x =</span> Month, <span class="dt">y =</span> Ozone))</a>
-<a class="sourceLine" id="cb5-3" data-line-number="3"><span class="co"># Add the geometric object box plot</span></a>
-<a class="sourceLine" id="cb5-4" data-line-number="4">box_plot <span class="op">+</span><span class="st"> </span><span class="kw">geom_boxplot</span>()</a></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a><span class="co"># Store the graph</span></span>
+<span id="cb5-2"><a href="#cb5-2"></a>box_plot &lt;-<span class="st"> </span><span class="kw">ggplot</span>(data_air_nona, <span class="kw">aes</span>(<span class="dt">x =</span> Month, <span class="dt">y =</span> Ozone))</span>
+<span id="cb5-3"><a href="#cb5-3"></a><span class="co"># Add the geometric object box plot</span></span>
+<span id="cb5-4"><a href="#cb5-4"></a>box_plot <span class="op">+</span><span class="st"> </span><span class="kw">geom_boxplot</span>()</span></code></pre></div>
 <p><img src="R-course_lesson-19_files/figure-html/unnamed-chunk-4-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -712,7 +729,7 @@ div.tocify {
 <div id="change-side-of-the-graph" class="section level1">
 <h1>Change side of the graph</h1>
 <p>You can flip the side of the graph.</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1">box_plot <span class="op">+</span><span class="st"> </span><span class="kw">geom_boxplot</span>() <span class="op">+</span><span class="st"> </span><span class="kw">coord_flip</span>()</a></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a>box_plot <span class="op">+</span><span class="st"> </span><span class="kw">geom_boxplot</span>() <span class="op">+</span><span class="st"> </span><span class="kw">coord_flip</span>()</span></code></pre></div>
 <p><img src="R-course_lesson-19_files/figure-html/unnamed-chunk-5-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -724,11 +741,11 @@ div.tocify {
 <div id="change-color-of-outlier" class="section level1">
 <h1>Change color of outlier</h1>
 <p>You can change the color, shape and size of the outliers.</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb7-1" data-line-number="1">box_plot <span class="op">+</span></a>
-<a class="sourceLine" id="cb7-2" data-line-number="2"><span class="st">    </span><span class="kw">geom_boxplot</span>(<span class="dt">outlier.colour =</span> <span class="st">&quot;red&quot;</span>,</a>
-<a class="sourceLine" id="cb7-3" data-line-number="3">        <span class="dt">outlier.shape =</span> <span class="dv">2</span>,</a>
-<a class="sourceLine" id="cb7-4" data-line-number="4">        <span class="dt">outlier.size =</span> <span class="dv">3</span>) <span class="op">+</span></a>
-<a class="sourceLine" id="cb7-5" data-line-number="5"><span class="st">    </span><span class="kw">theme_classic</span>()</a></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1"></a>box_plot <span class="op">+</span></span>
+<span id="cb7-2"><a href="#cb7-2"></a><span class="st">    </span><span class="kw">geom_boxplot</span>(<span class="dt">outlier.colour =</span> <span class="st">&quot;red&quot;</span>,</span>
+<span id="cb7-3"><a href="#cb7-3"></a>        <span class="dt">outlier.shape =</span> <span class="dv">2</span>,</span>
+<span id="cb7-4"><a href="#cb7-4"></a>        <span class="dt">outlier.size =</span> <span class="dv">3</span>) <span class="op">+</span></span>
+<span id="cb7-5"><a href="#cb7-5"></a><span class="st">    </span><span class="kw">theme_classic</span>()</span></code></pre></div>
 <p><img src="R-course_lesson-19_files/figure-html/unnamed-chunk-6-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -740,13 +757,13 @@ div.tocify {
 <div id="add-a-summary-statistic" class="section level1">
 <h1>Add a summary statistic</h1>
 <p>You can add a summary statistic to the box plot.</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1">box_plot <span class="op">+</span></a>
-<a class="sourceLine" id="cb8-2" data-line-number="2"><span class="st">    </span><span class="kw">geom_boxplot</span>() <span class="op">+</span></a>
-<a class="sourceLine" id="cb8-3" data-line-number="3"><span class="st">    </span><span class="kw">stat_summary</span>(<span class="dt">fun.y =</span> mean,</a>
-<a class="sourceLine" id="cb8-4" data-line-number="4">        <span class="dt">geom =</span> <span class="st">&quot;point&quot;</span>,</a>
-<a class="sourceLine" id="cb8-5" data-line-number="5">        <span class="dt">size =</span> <span class="dv">3</span>,</a>
-<a class="sourceLine" id="cb8-6" data-line-number="6">        <span class="dt">color =</span> <span class="st">&quot;steelblue&quot;</span>) <span class="op">+</span></a>
-<a class="sourceLine" id="cb8-7" data-line-number="7"><span class="st">    </span><span class="kw">theme_classic</span>()</a></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a>box_plot <span class="op">+</span></span>
+<span id="cb8-2"><a href="#cb8-2"></a><span class="st">    </span><span class="kw">geom_boxplot</span>() <span class="op">+</span></span>
+<span id="cb8-3"><a href="#cb8-3"></a><span class="st">    </span><span class="kw">stat_summary</span>(<span class="dt">fun.y =</span> mean,</span>
+<span id="cb8-4"><a href="#cb8-4"></a>        <span class="dt">geom =</span> <span class="st">&quot;point&quot;</span>,</span>
+<span id="cb8-5"><a href="#cb8-5"></a>        <span class="dt">size =</span> <span class="dv">3</span>,</span>
+<span id="cb8-6"><a href="#cb8-6"></a>        <span class="dt">color =</span> <span class="st">&quot;steelblue&quot;</span>) <span class="op">+</span></span>
+<span id="cb8-7"><a href="#cb8-7"></a><span class="st">    </span><span class="kw">theme_classic</span>()</span></code></pre></div>
 <p><img src="R-course_lesson-19_files/figure-html/unnamed-chunk-7-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -761,12 +778,12 @@ div.tocify {
 <div id="box-plot-with-dots" class="section level1">
 <h1>Box Plot with Dots</h1>
 <p>In the next plot, you add the dot plot layers. Each dot represents an observation.</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" data-line-number="1">box_plot <span class="op">+</span></a>
-<a class="sourceLine" id="cb9-2" data-line-number="2"><span class="st">    </span><span class="kw">geom_boxplot</span>() <span class="op">+</span></a>
-<a class="sourceLine" id="cb9-3" data-line-number="3"><span class="st">    </span><span class="kw">geom_dotplot</span>(<span class="dt">binaxis =</span> <span class="st">&#39;y&#39;</span>,</a>
-<a class="sourceLine" id="cb9-4" data-line-number="4">        <span class="dt">dotsize =</span> <span class="dv">1</span>,</a>
-<a class="sourceLine" id="cb9-5" data-line-number="5">        <span class="dt">stackdir =</span> <span class="st">&#39;center&#39;</span>) <span class="op">+</span></a>
-<a class="sourceLine" id="cb9-6" data-line-number="6"><span class="st">    </span><span class="kw">theme_classic</span>()</a></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a>box_plot <span class="op">+</span></span>
+<span id="cb9-2"><a href="#cb9-2"></a><span class="st">    </span><span class="kw">geom_boxplot</span>() <span class="op">+</span></span>
+<span id="cb9-3"><a href="#cb9-3"></a><span class="st">    </span><span class="kw">geom_dotplot</span>(<span class="dt">binaxis =</span> <span class="st">&#39;y&#39;</span>,</span>
+<span id="cb9-4"><a href="#cb9-4"></a>        <span class="dt">dotsize =</span> <span class="dv">1</span>,</span>
+<span id="cb9-5"><a href="#cb9-5"></a>        <span class="dt">stackdir =</span> <span class="st">&#39;center&#39;</span>) <span class="op">+</span></span>
+<span id="cb9-6"><a href="#cb9-6"></a><span class="st">    </span><span class="kw">theme_classic</span>()</span></code></pre></div>
 <p><img src="R-course_lesson-19_files/figure-html/unnamed-chunk-8-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -787,9 +804,9 @@ div.tocify {
 <div id="change-the-color-of-the-box" class="section level2">
 <h2>Change the color of the box</h2>
 <p>You can change the colors of the group.</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb10-1" data-line-number="1"><span class="kw">ggplot</span>(data_air_nona, <span class="kw">aes</span>(<span class="dt">x =</span> Month, <span class="dt">y =</span> Ozone, <span class="dt">color =</span> Month)) <span class="op">+</span></a>
-<a class="sourceLine" id="cb10-2" data-line-number="2"><span class="st">    </span><span class="kw">geom_boxplot</span>() <span class="op">+</span></a>
-<a class="sourceLine" id="cb10-3" data-line-number="3"><span class="st">    </span><span class="kw">theme_classic</span>()</a></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a><span class="kw">ggplot</span>(data_air_nona, <span class="kw">aes</span>(<span class="dt">x =</span> Month, <span class="dt">y =</span> Ozone, <span class="dt">color =</span> Month)) <span class="op">+</span></span>
+<span id="cb10-2"><a href="#cb10-2"></a><span class="st">    </span><span class="kw">geom_boxplot</span>() <span class="op">+</span></span>
+<span id="cb10-3"><a href="#cb10-3"></a><span class="st">    </span><span class="kw">theme_classic</span>()</span></code></pre></div>
 <p><img src="R-course_lesson-19_files/figure-html/unnamed-chunk-9-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -800,9 +817,9 @@ div.tocify {
 <div id="box-plot-with-multiple-groups" class="section level1">
 <h1>Box plot with multiple groups</h1>
 <p>It is also possible to add multiple groups. You can visualize the difference in the air quality according to the day of the measure.</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb11-1" data-line-number="1"><span class="kw">ggplot</span>(data_air_nona, <span class="kw">aes</span>(Month, Ozone)) <span class="op">+</span></a>
-<a class="sourceLine" id="cb11-2" data-line-number="2"><span class="st">    </span><span class="kw">geom_boxplot</span>(<span class="kw">aes</span>(<span class="dt">fill =</span> day_cat)) <span class="op">+</span></a>
-<a class="sourceLine" id="cb11-3" data-line-number="3"><span class="st">    </span><span class="kw">theme_classic</span>()</a></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a><span class="kw">ggplot</span>(data_air_nona, <span class="kw">aes</span>(Month, Ozone)) <span class="op">+</span></span>
+<span id="cb11-2"><a href="#cb11-2"></a><span class="st">    </span><span class="kw">geom_boxplot</span>(<span class="kw">aes</span>(<span class="dt">fill =</span> day_cat)) <span class="op">+</span></span>
+<span id="cb11-3"><a href="#cb11-3"></a><span class="st">    </span><span class="kw">theme_classic</span>()</span></code></pre></div>
 <p><img src="R-course_lesson-19_files/figure-html/unnamed-chunk-10-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -813,12 +830,12 @@ div.tocify {
 <div id="box-plot-with-jittered-dots" class="section level1">
 <h1>Box Plot with Jittered Dots</h1>
 <p>Another way to show the dot is with jittered points. It is a convenient way to visualize points with a categorical variable. This method avoids the overlapping of the discrete data.</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb12-1" data-line-number="1">box_plot <span class="op">+</span></a>
-<a class="sourceLine" id="cb12-2" data-line-number="2"><span class="st">    </span><span class="kw">geom_boxplot</span>() <span class="op">+</span></a>
-<a class="sourceLine" id="cb12-3" data-line-number="3"><span class="st">    </span><span class="kw">geom_jitter</span>(<span class="dt">shape =</span> <span class="dv">15</span>,</a>
-<a class="sourceLine" id="cb12-4" data-line-number="4">        <span class="dt">color =</span> <span class="st">&quot;steelblue&quot;</span>,</a>
-<a class="sourceLine" id="cb12-5" data-line-number="5">        <span class="dt">position =</span> <span class="kw">position_jitter</span>(<span class="dt">width =</span> <span class="fl">0.21</span>)) <span class="op">+</span></a>
-<a class="sourceLine" id="cb12-6" data-line-number="6"><span class="st">    </span><span class="kw">theme_classic</span>()</a></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1"></a>box_plot <span class="op">+</span></span>
+<span id="cb12-2"><a href="#cb12-2"></a><span class="st">    </span><span class="kw">geom_boxplot</span>() <span class="op">+</span></span>
+<span id="cb12-3"><a href="#cb12-3"></a><span class="st">    </span><span class="kw">geom_jitter</span>(<span class="dt">shape =</span> <span class="dv">15</span>,</span>
+<span id="cb12-4"><a href="#cb12-4"></a>        <span class="dt">color =</span> <span class="st">&quot;steelblue&quot;</span>,</span>
+<span id="cb12-5"><a href="#cb12-5"></a>        <span class="dt">position =</span> <span class="kw">position_jitter</span>(<span class="dt">width =</span> <span class="fl">0.21</span>)) <span class="op">+</span></span>
+<span id="cb12-6"><a href="#cb12-6"></a><span class="st">    </span><span class="kw">theme_classic</span>()</span></code></pre></div>
 <p><img src="R-course_lesson-19_files/figure-html/unnamed-chunk-11-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -828,11 +845,11 @@ div.tocify {
 <li>position=position_jitter(width = 0.21): Way to place the overlapping points. position_jitter(width = 0.21) means you move the points by 20 percent from the x-axis. By default, 40 percent.</li>
 </ul>
 <p>You can see the difference between the first graph with the jitter method and the second with the point method.</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb13-1" data-line-number="1">box_plot <span class="op">+</span></a>
-<a class="sourceLine" id="cb13-2" data-line-number="2"><span class="st">    </span><span class="kw">geom_boxplot</span>() <span class="op">+</span></a>
-<a class="sourceLine" id="cb13-3" data-line-number="3"><span class="st">    </span><span class="kw">geom_point</span>(<span class="dt">shape =</span> <span class="dv">5</span>,</a>
-<a class="sourceLine" id="cb13-4" data-line-number="4">        <span class="dt">color =</span> <span class="st">&quot;steelblue&quot;</span>) <span class="op">+</span></a>
-<a class="sourceLine" id="cb13-5" data-line-number="5"><span class="st">    </span><span class="kw">theme_classic</span>()</a></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1"></a>box_plot <span class="op">+</span></span>
+<span id="cb13-2"><a href="#cb13-2"></a><span class="st">    </span><span class="kw">geom_boxplot</span>() <span class="op">+</span></span>
+<span id="cb13-3"><a href="#cb13-3"></a><span class="st">    </span><span class="kw">geom_point</span>(<span class="dt">shape =</span> <span class="dv">5</span>,</span>
+<span id="cb13-4"><a href="#cb13-4"></a>        <span class="dt">color =</span> <span class="st">&quot;steelblue&quot;</span>) <span class="op">+</span></span>
+<span id="cb13-5"><a href="#cb13-5"></a><span class="st">    </span><span class="kw">theme_classic</span>()</span></code></pre></div>
 <p><img src="R-course_lesson-19_files/figure-html/unnamed-chunk-12-1.png" width="672" style="display: block; margin: auto;" /></p>
 </div>
 <div id="notched-box-plot" class="section level1">
@@ -840,9 +857,9 @@ div.tocify {
 <p>An interesting feature of geom_boxplot(), is a notched box plot. The notch plot narrows the box around the median. The main purpose of a notched box plot is to compare the significance of the median between groups. There is strong evidence two groups have different medians when the notches do not overlap. A notch is computed as follow:</p>
 <p><span class="math display">\[\text{median}\pm 1.57\times\frac{\text{IQR}}{\sqrt{n}}\]</span></p>
 <p>with is the interquartile and number of observations.</p>
-<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb14-1" data-line-number="1">box_plot <span class="op">+</span></a>
-<a class="sourceLine" id="cb14-2" data-line-number="2"><span class="st">    </span><span class="kw">geom_boxplot</span>(<span class="dt">notch =</span> <span class="ot">TRUE</span>) <span class="op">+</span></a>
-<a class="sourceLine" id="cb14-3" data-line-number="3"><span class="st">    </span><span class="kw">theme_classic</span>()</a></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1"></a>box_plot <span class="op">+</span></span>
+<span id="cb14-2"><a href="#cb14-2"></a><span class="st">    </span><span class="kw">geom_boxplot</span>(<span class="dt">notch =</span> <span class="ot">TRUE</span>) <span class="op">+</span></span>
+<span id="cb14-3"><a href="#cb14-3"></a><span class="st">    </span><span class="kw">theme_classic</span>()</span></code></pre></div>
 <p><img src="R-course_lesson-19_files/figure-html/unnamed-chunk-13-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -926,7 +943,7 @@ ggplot(df, aes(x = x1, y = y)) + geom_boxplot() + geom_jitter(position = positio
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();
@@ -965,7 +982,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0

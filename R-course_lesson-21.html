@@ -23,7 +23,9 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="site_libs/lightable-0.0.1/lightable.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -119,12 +121,21 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -134,14 +145,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -150,9 +163,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -239,6 +252,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -519,21 +533,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -621,6 +635,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -660,7 +677,7 @@ div.tocify {
 <li>H1: True hypothesis: The average is different from the sample used</li>
 </ul>
 <p>The t-test is commonly used with small sample sizes. To perform a t-test, you need to assume normality of the data. The basic syntax for <code>t.test()</code> is:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="kw">t.test</span>(x, <span class="dt">y =</span> <span class="ot">NULL</span>, <span class="dt">mu =</span> <span class="dv">0</span>, <span class="dt">var.equal =</span> <span class="ot">FALSE</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">t.test</span>(x, <span class="dt">y =</span> <span class="ot">NULL</span>, <span class="dt">mu =</span> <span class="dv">0</span>, <span class="dt">var.equal =</span> <span class="ot">FALSE</span>)</span></code></pre></div>
 <p><strong>arguments:</strong></p>
 <ul>
 <li>x : A vector to compute the one-sample t-test</li>
@@ -693,16 +710,16 @@ div.tocify {
 <p><strong>Example:</strong></p>
 <p>Suppose you are a company producing cookies. Each cookie is supposed to contain 10 grams of sugar. The cookies are produced by a machine that adds the sugar in a bowl before mixing everything. You believe the machine does not add 10 grams of sugar for each cookie. If your assumption is true, the machine needs to be fixed. You stored the level of sugar of thirty cookies.</p>
 <p>Note: You can create a randomized vector with the function rnorm(). This function generates normally distributed values. The basic syntax is:</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" data-line-number="1"><span class="kw">rnorm</span>(n, mean, sd)</a></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="kw">rnorm</span>(n, mean, sd)</span></code></pre></div>
 <p><strong>arguments</strong></p>
 <ul>
 <li>n: Number of observations to generate</li>
 <li>mean: The mean of the distribution. Optional</li>
 <li>sd: The standard deviation of the distribution. Optional You can create a distribution with 30 observations with a mean of 9.99 and a standard deviation of 0.04.</li>
 </ul>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" data-line-number="1"><span class="kw">set.seed</span>(<span class="dv">123</span>) </a>
-<a class="sourceLine" id="cb3-2" data-line-number="2">sugar_cookie &lt;-<span class="st"> </span><span class="kw">rnorm</span>(<span class="dv">30</span>, <span class="dt">mean =</span> <span class="fl">9.99</span>, <span class="dt">sd =</span> <span class="fl">0.04</span>)</a>
-<a class="sourceLine" id="cb3-3" data-line-number="3"><span class="kw">head</span>(sugar_cookie)</a></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a><span class="kw">set.seed</span>(<span class="dv">123</span>) </span>
+<span id="cb3-2"><a href="#cb3-2"></a>sugar_cookie &lt;-<span class="st"> </span><span class="kw">rnorm</span>(<span class="dv">30</span>, <span class="dt">mean =</span> <span class="fl">9.99</span>, <span class="dt">sd =</span> <span class="fl">0.04</span>)</span>
+<span id="cb3-3"><a href="#cb3-3"></a><span class="kw">head</span>(sugar_cookie)</span></code></pre></div>
 <pre><code>## [1]  9.967581  9.980793 10.052348  9.992820  9.995172 10.058603</code></pre>
 <p>You can use a one-sample t-test to check whether the level of sugar is different than the recipe. You can draw a hypothesis test:</p>
 <ul>
@@ -710,8 +727,8 @@ div.tocify {
 <li>H1: The average level of sugar is different than 10</li>
 </ul>
 <p>You use a significance level of 0.05.</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1"><span class="co"># H0 : mu = 10</span></a>
-<a class="sourceLine" id="cb5-2" data-line-number="2"><span class="kw">t.test</span>(sugar_cookie, <span class="dt">mu =</span> <span class="dv">10</span>)   </a></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a><span class="co"># H0 : mu = 10</span></span>
+<span id="cb5-2"><a href="#cb5-2"></a><span class="kw">t.test</span>(sugar_cookie, <span class="dt">mu =</span> <span class="dv">10</span>)   </span></code></pre></div>
 <p align="center">
 <img src="imgblock21/img2.png" />
 </p>
@@ -734,13 +751,13 @@ div.tocify {
 <p>Remember, one assumption in the t-test is an unknown but equal variance. In reality, the data barely have equal mean, and it leads to incorrect results for the t-test.</p>
 <p>One solution to relax the equal variance assumption is to use the Welch’s test. R assumes the two variances are not equal by default. In your dataset, both vectors have the same variance, you can set var.equal= TRUE.</p>
 <p>You create two random vectors from a Gaussian distribution with a higher mean for the sales after the program.</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="kw">set.seed</span>(<span class="dv">123</span>)</a>
-<a class="sourceLine" id="cb6-2" data-line-number="2"><span class="co"># sales before the program</span></a>
-<a class="sourceLine" id="cb6-3" data-line-number="3">sales_before &lt;-<span class="st"> </span><span class="kw">rnorm</span>(<span class="dv">7</span>, <span class="dt">mean =</span> <span class="dv">50000</span>, <span class="dt">sd =</span> <span class="dv">50</span>)</a>
-<a class="sourceLine" id="cb6-4" data-line-number="4"><span class="co"># sales after the program.This has higher mean</span></a>
-<a class="sourceLine" id="cb6-5" data-line-number="5">sales_after &lt;-<span class="st"> </span><span class="kw">rnorm</span>(<span class="dv">7</span>, <span class="dt">mean =</span> <span class="dv">50075</span>, <span class="dt">sd =</span> <span class="dv">50</span>)</a>
-<a class="sourceLine" id="cb6-6" data-line-number="6"><span class="co"># draw the distribution</span></a>
-<a class="sourceLine" id="cb6-7" data-line-number="7"><span class="kw">t.test</span>(sales_before, sales_after,<span class="dt">var.equal =</span> <span class="ot">TRUE</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a><span class="kw">set.seed</span>(<span class="dv">123</span>)</span>
+<span id="cb6-2"><a href="#cb6-2"></a><span class="co"># sales before the program</span></span>
+<span id="cb6-3"><a href="#cb6-3"></a>sales_before &lt;-<span class="st"> </span><span class="kw">rnorm</span>(<span class="dv">7</span>, <span class="dt">mean =</span> <span class="dv">50000</span>, <span class="dt">sd =</span> <span class="dv">50</span>)</span>
+<span id="cb6-4"><a href="#cb6-4"></a><span class="co"># sales after the program.This has higher mean</span></span>
+<span id="cb6-5"><a href="#cb6-5"></a>sales_after &lt;-<span class="st"> </span><span class="kw">rnorm</span>(<span class="dv">7</span>, <span class="dt">mean =</span> <span class="dv">50075</span>, <span class="dt">sd =</span> <span class="dv">50</span>)</span>
+<span id="cb6-6"><a href="#cb6-6"></a><span class="co"># draw the distribution</span></span>
+<span id="cb6-7"><a href="#cb6-7"></a><span class="kw">t.test</span>(sales_before, sales_after,<span class="dt">var.equal =</span> <span class="ot">TRUE</span>)</span></code></pre></div>
 <p align="center">
 <img src="imgblock21/img3.png" />
 </p>
@@ -824,7 +841,7 @@ var.equal = TRUE
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();
@@ -863,7 +880,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0

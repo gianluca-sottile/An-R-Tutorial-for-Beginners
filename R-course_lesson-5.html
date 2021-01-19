@@ -23,6 +23,7 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -118,12 +119,21 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -133,14 +143,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -149,9 +161,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -238,6 +250,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -518,21 +531,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -620,6 +633,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -647,21 +663,21 @@ div.tocify {
 <hr />
 <p>A <strong>data frame</strong> is a list of vectors which are of equal length. A matrix contains only one type of data, while a data frame accepts different data types (numeric, character, factor, etc.).</p>
 <p>How to Create a Data Frame We can create a data frame by passing the variable a,b,c,d into the data.frame() function. We can name the columns with name() and simply specify the name of the variables.</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="kw">data.frame</span>(df, <span class="dt">stringsAsFactors =</span> <span class="ot">TRUE</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">data.frame</span>(df, <span class="dt">stringsAsFactors =</span> <span class="ot">TRUE</span>)</span></code></pre></div>
 <p><strong>Arguments:</strong></p>
 <ul>
 <li>df: It can be a matrix to convert as a data frame or a collection of variables to join</li>
 <li>stringsAsFactors: Convert string to factor by default</li>
 </ul>
 <p>We can create our first data set by combining four variables of same length.</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" data-line-number="1"><span class="co"># Create a, b, c, d variables</span></a>
-<a class="sourceLine" id="cb2-2" data-line-number="2">a &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">10</span>, <span class="dv">20</span>, <span class="dv">30</span>, <span class="dv">40</span>)</a>
-<a class="sourceLine" id="cb2-3" data-line-number="3">b &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&#39;book&#39;</span>, <span class="st">&#39;pen&#39;</span>, <span class="st">&#39;textbook&#39;</span>, <span class="st">&#39;pencil_case&#39;</span>)</a>
-<a class="sourceLine" id="cb2-4" data-line-number="4">c &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="ot">TRUE</span>, <span class="ot">FALSE</span>, <span class="ot">TRUE</span>, <span class="ot">FALSE</span>)</a>
-<a class="sourceLine" id="cb2-5" data-line-number="5">d &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="fl">2.5</span>, <span class="dv">8</span>, <span class="dv">10</span>, <span class="dv">7</span>)</a>
-<a class="sourceLine" id="cb2-6" data-line-number="6"><span class="co"># Join the variables to create a data frame</span></a>
-<a class="sourceLine" id="cb2-7" data-line-number="7">df &lt;-<span class="st"> </span><span class="kw">data.frame</span>(a,b,c,d)</a>
-<a class="sourceLine" id="cb2-8" data-line-number="8">df</a></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="co"># Create a, b, c, d variables</span></span>
+<span id="cb2-2"><a href="#cb2-2"></a>a &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">10</span>, <span class="dv">20</span>, <span class="dv">30</span>, <span class="dv">40</span>)</span>
+<span id="cb2-3"><a href="#cb2-3"></a>b &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&#39;book&#39;</span>, <span class="st">&#39;pen&#39;</span>, <span class="st">&#39;textbook&#39;</span>, <span class="st">&#39;pencil_case&#39;</span>)</span>
+<span id="cb2-4"><a href="#cb2-4"></a>c &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="ot">TRUE</span>, <span class="ot">FALSE</span>, <span class="ot">TRUE</span>, <span class="ot">FALSE</span>)</span>
+<span id="cb2-5"><a href="#cb2-5"></a>d &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="fl">2.5</span>, <span class="dv">8</span>, <span class="dv">10</span>, <span class="dv">7</span>)</span>
+<span id="cb2-6"><a href="#cb2-6"></a><span class="co"># Join the variables to create a data frame</span></span>
+<span id="cb2-7"><a href="#cb2-7"></a>df &lt;-<span class="st"> </span><span class="kw">data.frame</span>(a,b,c,d)</span>
+<span id="cb2-8"><a href="#cb2-8"></a>df</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -742,9 +758,9 @@ FALSE
 </table>
 </div>
 <p>We can see the column headers have the same name as the variables. We can change the column name with the function names(). Check the example below:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" data-line-number="1"><span class="co"># Name the data frame</span></a>
-<a class="sourceLine" id="cb3-2" data-line-number="2"><span class="kw">names</span>(df) &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&#39;ID&#39;</span>, <span class="st">&#39;items&#39;</span>, <span class="st">&#39;store&#39;</span>, <span class="st">&#39;price&#39;</span>)</a>
-<a class="sourceLine" id="cb3-3" data-line-number="3">df</a></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a><span class="co"># Name the data frame</span></span>
+<span id="cb3-2"><a href="#cb3-2"></a><span class="kw">names</span>(df) &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&#39;ID&#39;</span>, <span class="st">&#39;items&#39;</span>, <span class="st">&#39;store&#39;</span>, <span class="st">&#39;price&#39;</span>)</span>
+<span id="cb3-3"><a href="#cb3-3"></a>df</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -824,11 +840,11 @@ FALSE
 </tbody>
 </table>
 </div>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb4-1" data-line-number="1"><span class="co"># Print the structure</span></a>
-<a class="sourceLine" id="cb4-2" data-line-number="2"><span class="kw">str</span>(df)</a></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="co"># Print the structure</span></span>
+<span id="cb4-2"><a href="#cb4-2"></a><span class="kw">str</span>(df)</span></code></pre></div>
 <pre><code>## &#39;data.frame&#39;:    4 obs. of  4 variables:
 ##  $ ID   : num  10 20 30 40
-##  $ items: Factor w/ 4 levels &quot;book&quot;,&quot;pen&quot;,&quot;pencil_case&quot;,..: 1 2 4 3
+##  $ items: chr  &quot;book&quot; &quot;pen&quot; &quot;textbook&quot; &quot;pencil_case&quot;
 ##  $ store: logi  TRUE FALSE TRUE FALSE
 ##  $ price: num  2.5 8 10 7</code></pre>
 <p><strong>By default, data frame returns string variables as a factor.</strong></p>
@@ -848,12 +864,11 @@ FALSE
 <p align="center">
 <img src="imgblock5/img2.png" />
 </p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="co">## Select row 1 in column 2</span></a>
-<a class="sourceLine" id="cb6-2" data-line-number="2">df[<span class="dv">1</span>, <span class="dv">2</span>]</a></code></pre></div>
-<pre><code>## [1] book
-## Levels: book pen pencil_case textbook</code></pre>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="co">## Select Rows 1 to 2</span></a>
-<a class="sourceLine" id="cb8-2" data-line-number="2">df[<span class="dv">1</span><span class="op">:</span><span class="dv">2</span>, ]</a></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a><span class="co">## Select row 1 in column 2</span></span>
+<span id="cb6-2"><a href="#cb6-2"></a>df[<span class="dv">1</span>, <span class="dv">2</span>]</span></code></pre></div>
+<pre><code>## [1] &quot;book&quot;</code></pre>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a><span class="co">## Select Rows 1 to 2</span></span>
+<span id="cb8-2"><a href="#cb8-2"></a>df[<span class="dv">1</span><span class="op">:</span><span class="dv">2</span>, ]</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -905,12 +920,12 @@ FALSE
 </tbody>
 </table>
 </div>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" data-line-number="1"><span class="co">## Select Columns 1</span></a>
-<a class="sourceLine" id="cb9-2" data-line-number="2">df[, <span class="dv">1</span>]</a></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a><span class="co">## Select Columns 1</span></span>
+<span id="cb9-2"><a href="#cb9-2"></a>df[, <span class="dv">1</span>]</span></code></pre></div>
 <pre><code>## [1] 10 20 30 40</code></pre>
 <p>It is also possible to select the columns with their names. For instance, the code below extracts two columns: ID and store.</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb11-1" data-line-number="1"><span class="co"># Slice with columns name</span></a>
-<a class="sourceLine" id="cb11-2" data-line-number="2">df[, <span class="kw">c</span>(<span class="st">&#39;ID&#39;</span>, <span class="st">&#39;store&#39;</span>)]</a></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a><span class="co"># Slice with columns name</span></span>
+<span id="cb11-2"><a href="#cb11-2"></a>df[, <span class="kw">c</span>(<span class="st">&#39;ID&#39;</span>, <span class="st">&#39;store&#39;</span>)]</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -965,12 +980,12 @@ FALSE
 <h1>Append a Column to Data Frame</h1>
 <hr />
 <p>You can also append a column to a Data Frame. You need to use the symbol $ to append a new variable.</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb12-1" data-line-number="1"><span class="co"># Create a new vector</span></a>
-<a class="sourceLine" id="cb12-2" data-line-number="2">quantity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">10</span>, <span class="dv">35</span>, <span class="dv">40</span>, <span class="dv">5</span>)</a>
-<a class="sourceLine" id="cb12-3" data-line-number="3"></a>
-<a class="sourceLine" id="cb12-4" data-line-number="4"><span class="co"># Add `quantity` to the `df` data frame</span></a>
-<a class="sourceLine" id="cb12-5" data-line-number="5">df<span class="op">$</span>quantity &lt;-<span class="st"> </span>quantity</a>
-<a class="sourceLine" id="cb12-6" data-line-number="6">df</a></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1"></a><span class="co"># Create a new vector</span></span>
+<span id="cb12-2"><a href="#cb12-2"></a>quantity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">10</span>, <span class="dv">35</span>, <span class="dv">40</span>, <span class="dv">5</span>)</span>
+<span id="cb12-3"><a href="#cb12-3"></a></span>
+<span id="cb12-4"><a href="#cb12-4"></a><span class="co"># Add `quantity` to the `df` data frame</span></span>
+<span id="cb12-5"><a href="#cb12-5"></a>df<span class="op">$</span>quantity &lt;-<span class="st"> </span>quantity</span>
+<span id="cb12-6"><a href="#cb12-6"></a>df</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -1066,18 +1081,18 @@ FALSE
 </table>
 </div>
 <p><strong>Note:</strong> The number of elements in the vector has to be equal to the no of elements in data frame. Executing the following statement</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb13-1" data-line-number="1">quantity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">10</span>, <span class="dv">35</span>, <span class="dv">40</span>)</a>
-<a class="sourceLine" id="cb13-2" data-line-number="2"></a>
-<a class="sourceLine" id="cb13-3" data-line-number="3"><span class="co"># Add `quantity` to the `df` data frame</span></a>
-<a class="sourceLine" id="cb13-4" data-line-number="4">df<span class="op">$</span>quantity &lt;-<span class="st"> </span>quantity</a></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1"></a>quantity &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">10</span>, <span class="dv">35</span>, <span class="dv">40</span>)</span>
+<span id="cb13-2"><a href="#cb13-2"></a></span>
+<span id="cb13-3"><a href="#cb13-3"></a><span class="co"># Add `quantity` to the `df` data frame</span></span>
+<span id="cb13-4"><a href="#cb13-4"></a>df<span class="op">$</span>quantity &lt;-<span class="st"> </span>quantity</span></code></pre></div>
 <pre><code>## Error in `$&lt;-.data.frame`(`*tmp*`, quantity, value = c(10, 35, 40)): replacement has 3 rows, data has 4</code></pre>
 </div>
 <div id="select-a-column-of-a-data-frame" class="section level1">
 <h1>Select a Column of a Data Frame</h1>
 <hr />
 <p>Sometimes, we need to store a column of a data frame for future use or perform operation on a column. We can use the $ sign to select the column from a data frame.</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb15-1" data-line-number="1"><span class="co"># Select the column ID</span></a>
-<a class="sourceLine" id="cb15-2" data-line-number="2">df<span class="op">$</span>ID</a></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1"></a><span class="co"># Select the column ID</span></span>
+<span id="cb15-2"><a href="#cb15-2"></a>df<span class="op">$</span>ID</span></code></pre></div>
 <pre><code>## [1] 10 20 30 40</code></pre>
 </div>
 <div id="subset-a-data-frame" class="section level1">
@@ -1085,15 +1100,15 @@ FALSE
 <hr />
 <p>In the previous section, we selected an entire column without condition. It is possible to subset based on whether or not a certain condition was true.</p>
 <p>We use the <code>subset()</code> function.</p>
-<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb17-1" data-line-number="1"><span class="kw">subset</span>(x, condition)</a></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1"></a><span class="kw">subset</span>(x, condition)</span></code></pre></div>
 <p><strong>Arguments:</strong></p>
 <ul>
 <li>x: data frame used to perform the subset</li>
 <li>condition: define the conditional statement</li>
 </ul>
 <p>We want to return only the items with price above 10, we can do:</p>
-<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb18-1" data-line-number="1"><span class="co"># Select price above 5</span></a>
-<a class="sourceLine" id="cb18-2" data-line-number="2"><span class="kw">subset</span>(df, <span class="dt">subset =</span> price <span class="op">&gt;</span><span class="st"> </span><span class="dv">5</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1"></a><span class="co"># Select price above 5</span></span>
+<span id="cb18-2"><a href="#cb18-2"></a><span class="kw">subset</span>(df, <span class="dt">subset =</span> price <span class="op">&gt;</span><span class="st"> </span><span class="dv">5</span>)</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -1204,7 +1219,7 @@ FALSE
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();
@@ -1243,7 +1258,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0

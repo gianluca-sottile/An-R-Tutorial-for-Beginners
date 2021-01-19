@@ -23,7 +23,9 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="site_libs/lightable-0.0.1/lightable.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -119,12 +121,21 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -134,14 +145,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -150,9 +163,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -239,6 +252,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -519,21 +533,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -621,6 +635,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -670,7 +687,7 @@ div.tocify {
 <p><span class="math display">\[\rho = \frac{cov(rg_x,rg_y)}{\sigma_{rg_x}\sigma_{rg_y}}\]</span></p>
 <p>with stated the covariances between ranks. The denominator calculates the standard deviations.</p>
 <p>In R, we can use the cor() function. It takes three arguments, , and the method.</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="kw">cor</span>(x, y, method)</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">cor</span>(x, y, method)</span></code></pre></div>
 <p><strong>Arguments:</strong></p>
 <ul>
 <li>x: First vector</li>
@@ -696,27 +713,27 @@ div.tocify {
 <li>age: age of household</li>
 <li>children: number of children</li>
 </ul>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" data-line-number="1"><span class="kw">library</span>(dplyr)</a>
-<a class="sourceLine" id="cb2-2" data-line-number="2">PATH &lt;-<span class="st">&quot;https://raw.githubusercontent.com/guru99-edu/R-Programming/master/british_household.csv&quot;</span></a>
-<a class="sourceLine" id="cb2-3" data-line-number="3">data &lt;-<span class="st"> </span><span class="kw">read.csv</span>(PATH) <span class="op">%&gt;%</span></a>
-<a class="sourceLine" id="cb2-4" data-line-number="4"><span class="st">  </span><span class="kw">filter</span>(income <span class="op">&lt;</span><span class="st"> </span><span class="dv">500</span>) <span class="op">%&gt;%</span></a>
-<a class="sourceLine" id="cb2-5" data-line-number="5"><span class="st">  </span><span class="kw">mutate</span>(<span class="dt">log_income =</span> <span class="kw">log</span>(income),</a>
-<a class="sourceLine" id="cb2-6" data-line-number="6">         <span class="dt">log_totexp =</span> <span class="kw">log</span>(totexp),</a>
-<a class="sourceLine" id="cb2-7" data-line-number="7">         <span class="dt">children_fac =</span> <span class="kw">factor</span>(children, <span class="dt">order =</span> <span class="ot">TRUE</span>, <span class="dt">labels =</span> <span class="kw">c</span>(<span class="st">&quot;No&quot;</span>, <span class="st">&quot;Yes&quot;</span>))) <span class="op">%&gt;%</span></a>
-<a class="sourceLine" id="cb2-8" data-line-number="8"><span class="st">  </span><span class="kw">select</span>(<span class="op">-</span><span class="kw">c</span>(X, children, totexp, income))</a>
-<a class="sourceLine" id="cb2-9" data-line-number="9"><span class="kw">glimpse</span>(data)</a></code></pre></div>
-<pre><code>## Observations: 1,516
-## Variables: 10
-## $ wfood        &lt;dbl&gt; 0.4272, 0.3739, 0.1941, 0.4438, 0.3331, 0.3752, 0.2568, …
-## $ wfuel        &lt;dbl&gt; 0.1342, 0.1686, 0.4056, 0.1258, 0.0824, 0.0481, 0.0909, …
-## $ wcloth       &lt;dbl&gt; 0.0000, 0.0091, 0.0012, 0.0539, 0.0399, 0.1170, 0.0453, …
-## $ walc         &lt;dbl&gt; 0.0106, 0.0825, 0.0513, 0.0397, 0.1571, 0.0210, 0.0153, …
-## $ wtrans       &lt;dbl&gt; 0.1458, 0.1215, 0.2063, 0.0652, 0.2403, 0.0955, 0.0227, …
-## $ wother       &lt;dbl&gt; 0.2822, 0.2444, 0.1415, 0.2716, 0.1473, 0.3431, 0.5689, …
-## $ age          &lt;int&gt; 25, 39, 47, 33, 31, 24, 46, 25, 30, 41, 48, 24, 28, 31, …
-## $ log_income   &lt;dbl&gt; 4.867534, 5.010635, 5.438079, 4.605170, 4.605170, 4.2484…
-## $ log_totexp   &lt;dbl&gt; 3.912023, 4.499810, 5.192957, 4.382027, 4.499810, 4.2484…
-## $ children_fac &lt;ord&gt; Yes, Yes, Yes, Yes, No, No, No, No, No, No, Yes, No, Yes…</code></pre>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="kw">library</span>(dplyr)</span>
+<span id="cb2-2"><a href="#cb2-2"></a>PATH &lt;-<span class="st">&quot;https://raw.githubusercontent.com/guru99-edu/R-Programming/master/british_household.csv&quot;</span></span>
+<span id="cb2-3"><a href="#cb2-3"></a>data &lt;-<span class="st"> </span><span class="kw">read.csv</span>(PATH) <span class="op">%&gt;%</span></span>
+<span id="cb2-4"><a href="#cb2-4"></a><span class="st">  </span><span class="kw">filter</span>(income <span class="op">&lt;</span><span class="st"> </span><span class="dv">500</span>) <span class="op">%&gt;%</span></span>
+<span id="cb2-5"><a href="#cb2-5"></a><span class="st">  </span><span class="kw">mutate</span>(<span class="dt">log_income =</span> <span class="kw">log</span>(income),</span>
+<span id="cb2-6"><a href="#cb2-6"></a>         <span class="dt">log_totexp =</span> <span class="kw">log</span>(totexp),</span>
+<span id="cb2-7"><a href="#cb2-7"></a>         <span class="dt">children_fac =</span> <span class="kw">factor</span>(children, <span class="dt">order =</span> <span class="ot">TRUE</span>, <span class="dt">labels =</span> <span class="kw">c</span>(<span class="st">&quot;No&quot;</span>, <span class="st">&quot;Yes&quot;</span>))) <span class="op">%&gt;%</span></span>
+<span id="cb2-8"><a href="#cb2-8"></a><span class="st">  </span><span class="kw">select</span>(<span class="op">-</span><span class="kw">c</span>(X, children, totexp, income))</span>
+<span id="cb2-9"><a href="#cb2-9"></a><span class="kw">glimpse</span>(data)</span></code></pre></div>
+<pre><code>## Rows: 1,516
+## Columns: 10
+## $ wfood        &lt;dbl&gt; 0.4272, 0.3739, 0.1941, 0.4438, 0.3331, 0.3752, 0.2568, 0.4533, 0.3279, 0.4608, 0.3447, 0.4491, 0…
+## $ wfuel        &lt;dbl&gt; 0.1342, 0.1686, 0.4056, 0.1258, 0.0824, 0.0481, 0.0909, 0.2105, 0.1053, 0.0612, 0.0392, 0.0541, 0…
+## $ wcloth       &lt;dbl&gt; 0.0000, 0.0091, 0.0012, 0.0539, 0.0399, 0.1170, 0.0453, 0.1131, 0.1671, 0.0230, 0.2547, 0.1617, 0…
+## $ walc         &lt;dbl&gt; 0.0106, 0.0825, 0.0513, 0.0397, 0.1571, 0.0210, 0.0153, 0.0161, 0.0293, 0.0338, 0.0000, 0.1133, 0…
+## $ wtrans       &lt;dbl&gt; 0.1458, 0.1215, 0.2063, 0.0652, 0.2403, 0.0955, 0.0227, 0.0000, 0.0433, 0.1901, 0.0672, 0.0397, 0…
+## $ wother       &lt;dbl&gt; 0.2822, 0.2444, 0.1415, 0.2716, 0.1473, 0.3431, 0.5689, 0.2070, 0.3272, 0.2310, 0.2942, 0.1821, 0…
+## $ age          &lt;int&gt; 25, 39, 47, 33, 31, 24, 46, 25, 30, 41, 48, 24, 28, 31, 32, 47, 32, 38, 45, 28, 29, 34, 43, 33, 4…
+## $ log_income   &lt;dbl&gt; 4.867534, 5.010635, 5.438079, 4.605170, 4.605170, 4.248495, 5.247024, 4.605170, 5.560682, 4.70048…
+## $ log_totexp   &lt;dbl&gt; 3.912023, 4.499810, 5.192957, 4.382027, 4.499810, 4.248495, 4.941642, 3.912023, 4.605170, 4.49981…
+## $ children_fac &lt;ord&gt; Yes, Yes, Yes, Yes, No, No, No, No, No, No, Yes, No, Yes, Yes, No, Yes, Yes, Yes, No, No, No, No,…</code></pre>
 <p><strong>Code Explanation</strong></p>
 <ul>
 <li>We first import the data and have a look with the glimpse() function from the dplyr library.</li>
@@ -724,9 +741,9 @@ div.tocify {
 <li>It is a common practice to convert a monetary variable in log. It helps to reduce the impact of outliers and decreases the skewness in the dataset.</li>
 </ul>
 <p>We can compute the correlation coefficient between income and wfood variables with the “pearson” and “spearman” methods.</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb4-1" data-line-number="1"><span class="kw">cor</span>(data<span class="op">$</span>log_income, data<span class="op">$</span>wfood, <span class="dt">method =</span> <span class="st">&quot;pearson&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw">cor</span>(data<span class="op">$</span>log_income, data<span class="op">$</span>wfood, <span class="dt">method =</span> <span class="st">&quot;pearson&quot;</span>)</span></code></pre></div>
 <pre><code>## [1] -0.2466986</code></pre>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="kw">cor</span>(data<span class="op">$</span>log_income, data<span class="op">$</span>wfood, <span class="dt">method =</span> <span class="st">&quot;spearman&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a><span class="kw">cor</span>(data<span class="op">$</span>log_income, data<span class="op">$</span>wfood, <span class="dt">method =</span> <span class="st">&quot;spearman&quot;</span>)</span></code></pre></div>
 <pre><code>## [1] -0.2501252</code></pre>
 </div>
 <div id="correlation-matrix" class="section level1">
@@ -736,9 +753,9 @@ div.tocify {
 <p>Note that, a correlation cannot be computed for factor variable. We need to make sure we drop categorical feature before we pass the data frame inside cor().</p>
 <p>A correlation matrix is symmetrical which means the values above the diagonal have the same values as the one below. It is more visual to show half of the matrix.</p>
 <p>We exclude children_fac because it is a factor level variable. cor does not perform correlation on a categorical variable.</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="co"># the last column of data is a factor level. We don&#39;t include it in the code</span></a>
-<a class="sourceLine" id="cb8-2" data-line-number="2">mat_<span class="dv">1</span> &lt;-<span class="st"> </span><span class="kw">as.dist</span>(<span class="kw">round</span>(<span class="kw">cor</span>(data[,<span class="dv">1</span><span class="op">:</span><span class="dv">9</span>]), <span class="dv">2</span>))</a>
-<a class="sourceLine" id="cb8-3" data-line-number="3">mat_<span class="dv">1</span></a></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a><span class="co"># the last column of data is a factor level. We don&#39;t include it in the code</span></span>
+<span id="cb8-2"><a href="#cb8-2"></a>mat_<span class="dv">1</span> &lt;-<span class="st"> </span><span class="kw">as.dist</span>(<span class="kw">round</span>(<span class="kw">cor</span>(data[,<span class="dv">1</span><span class="op">:</span><span class="dv">9</span>]), <span class="dv">2</span>))</span>
+<span id="cb8-3"><a href="#cb8-3"></a>mat_<span class="dv">1</span></span></code></pre></div>
 <pre><code>##            wfood wfuel wcloth  walc wtrans wother   age log_income
 ## wfuel       0.11                                                  
 ## wcloth     -0.33 -0.25                                            
@@ -757,13 +774,13 @@ div.tocify {
 </div>
 <div id="significance-level" class="section level1">
 <h1>Significance level</h1>
-<p>The significance level is useful in some situations when we use the pearson or spearman method. The function rcorr() from the library Hmisc computes for us the p-value. We can download the library with <code>install.packages(&quot;Hmisc&quot;)</code>.</p>
+<p>The significance level is useful in some situations when we use the pearson or spearman method. The function rcorr() from the library Hmisc computes for us the p-value. We can download the library with <code>install.packages("Hmisc")</code>.</p>
 <p>The rcorr() requires a data frame to be stored as a matrix. We can convert our data into a matrix before to compute the correlation matrix with the p-value.</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb10-1" data-line-number="1"><span class="kw">library</span>(<span class="st">&quot;Hmisc&quot;</span>)</a>
-<a class="sourceLine" id="cb10-2" data-line-number="2">data_rcorr &lt;-<span class="st"> </span><span class="kw">as.matrix</span>(data[, <span class="dv">1</span><span class="op">:</span><span class="dv">9</span>])</a>
-<a class="sourceLine" id="cb10-3" data-line-number="3"></a>
-<a class="sourceLine" id="cb10-4" data-line-number="4">mat_<span class="dv">2</span> &lt;-<span class="st"> </span><span class="kw">rcorr</span>(data_rcorr)</a>
-<a class="sourceLine" id="cb10-5" data-line-number="5"><span class="co"># mat_2 &lt;- rcorr(as.matrix(data)) returns the same output</span></a></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a><span class="kw">library</span>(<span class="st">&quot;Hmisc&quot;</span>)</span>
+<span id="cb10-2"><a href="#cb10-2"></a>data_rcorr &lt;-<span class="st"> </span><span class="kw">as.matrix</span>(data[, <span class="dv">1</span><span class="op">:</span><span class="dv">9</span>])</span>
+<span id="cb10-3"><a href="#cb10-3"></a></span>
+<span id="cb10-4"><a href="#cb10-4"></a>mat_<span class="dv">2</span> &lt;-<span class="st"> </span><span class="kw">rcorr</span>(data_rcorr)</span>
+<span id="cb10-5"><a href="#cb10-5"></a><span class="co"># mat_2 &lt;- rcorr(as.matrix(data)) returns the same output</span></span></code></pre></div>
 <p>The list object mat_2 contains three elements:</p>
 <ul>
 <li>r: Output of the correlation matrix</li>
@@ -771,8 +788,8 @@ div.tocify {
 <li>P: p-value</li>
 </ul>
 <p>We are interested in the third element, the p-value. It is common to show the correlation matrix with the p-value instead of the coefficient of correlation.</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb11-1" data-line-number="1">p_value &lt;-<span class="st"> </span><span class="kw">round</span>(mat_<span class="dv">2</span>[[<span class="st">&quot;P&quot;</span>]], <span class="dv">3</span>)</a>
-<a class="sourceLine" id="cb11-2" data-line-number="2">p_value</a></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a>p_value &lt;-<span class="st"> </span><span class="kw">round</span>(mat_<span class="dv">2</span>[[<span class="st">&quot;P&quot;</span>]], <span class="dv">3</span>)</span>
+<span id="cb11-2"><a href="#cb11-2"></a>p_value</span></code></pre></div>
 <pre><code>##            wfood wfuel wcloth  walc wtrans wother   age log_income log_totexp
 ## wfood         NA 0.000  0.000 0.000  0.000  0.000 0.365      0.000          0
 ## wfuel      0.000    NA  0.000 0.000  0.000  0.000 0.076      0.000          0
@@ -791,16 +808,16 @@ div.tocify {
 </div>
 <div id="visualize-correlation-matrix" class="section level1">
 <h1>Visualize Correlation Matrix</h1>
-<p>A heat map is another way to show a correlation matrix. The GGally library is an extension of ggplot2. Currently, it is not available in the conda library. We can install directly in the console. <code>install.packages(&quot;GGally&quot;)</code>.</p>
+<p>A heat map is another way to show a correlation matrix. The GGally library is an extension of ggplot2. Currently, it is not available in the conda library. We can install directly in the console. <code>install.packages("GGally")</code>.</p>
 <p>The library includes different functions to show the summary statistics such as the correlation and distribution of all the variables in a matrix.</p>
 <p>The ggcorr() function has lots of arguments. We will introduce only the arguments we will use in the tutorial:</p>
 <div id="the-function-ggcorr" class="section level2">
 <h2>The function ggcorr</h2>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb13-1" data-line-number="1"><span class="kw">ggcorr</span>(df, <span class="dt">method =</span> <span class="kw">c</span>(<span class="st">&quot;pairwise&quot;</span>, <span class="st">&quot;pearson&quot;</span>),</a>
-<a class="sourceLine" id="cb13-2" data-line-number="2">  <span class="dt">nbreaks =</span> <span class="ot">NULL</span>, <span class="dt">digits =</span> <span class="dv">2</span>, <span class="dt">low =</span> <span class="st">&quot;#3B9AB2&quot;</span>,</a>
-<a class="sourceLine" id="cb13-3" data-line-number="3">  <span class="dt">mid =</span> <span class="st">&quot;#EEEEEE&quot;</span>, <span class="dt">high =</span> <span class="st">&quot;#F21A00&quot;</span>,</a>
-<a class="sourceLine" id="cb13-4" data-line-number="4">  <span class="dt">geom =</span> <span class="st">&quot;tile&quot;</span>, <span class="dt">label =</span> <span class="ot">FALSE</span>,</a>
-<a class="sourceLine" id="cb13-5" data-line-number="5">  <span class="dt">label_alpha =</span> <span class="ot">FALSE</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1"></a><span class="kw">ggcorr</span>(df, <span class="dt">method =</span> <span class="kw">c</span>(<span class="st">&quot;pairwise&quot;</span>, <span class="st">&quot;pearson&quot;</span>),</span>
+<span id="cb13-2"><a href="#cb13-2"></a>  <span class="dt">nbreaks =</span> <span class="ot">NULL</span>, <span class="dt">digits =</span> <span class="dv">2</span>, <span class="dt">low =</span> <span class="st">&quot;#3B9AB2&quot;</span>,</span>
+<span id="cb13-3"><a href="#cb13-3"></a>  <span class="dt">mid =</span> <span class="st">&quot;#EEEEEE&quot;</span>, <span class="dt">high =</span> <span class="st">&quot;#F21A00&quot;</span>,</span>
+<span id="cb13-4"><a href="#cb13-4"></a>  <span class="dt">geom =</span> <span class="st">&quot;tile&quot;</span>, <span class="dt">label =</span> <span class="ot">FALSE</span>,</span>
+<span id="cb13-5"><a href="#cb13-5"></a>  <span class="dt">label_alpha =</span> <span class="ot">FALSE</span>)</span></code></pre></div>
 <p><strong>Arguments:</strong></p>
 <ul>
 <li>df: Dataset used</li>
@@ -818,8 +835,8 @@ div.tocify {
 <div id="basic-heat-map" class="section level1">
 <h1>Basic heat map</h1>
 <p>The most basic plot of the package is a heat map. The legend of the graph shows a gradient color from - 1 to 1, with hot color indicating strong positive correlation and cold color, a negative correlation.</p>
-<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb14-1" data-line-number="1"><span class="kw">library</span>(GGally)</a>
-<a class="sourceLine" id="cb14-2" data-line-number="2"><span class="kw">ggcorr</span>(data)</a></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1"></a><span class="kw">library</span>(GGally)</span>
+<span id="cb14-2"><a href="#cb14-2"></a><span class="kw">ggcorr</span>(data)</span></code></pre></div>
 <p><img src="R-course_lesson-17_files/figure-html/unnamed-chunk-6-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -828,12 +845,12 @@ div.tocify {
 <div id="add-control-to-the-heat-map" class="section level3">
 <h3>Add control to the heat map</h3>
 <p>We can add more controls to the graph.</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb15-1" data-line-number="1"><span class="kw">ggcorr</span>(data,</a>
-<a class="sourceLine" id="cb15-2" data-line-number="2">    <span class="dt">nbreaks =</span> <span class="dv">6</span>,</a>
-<a class="sourceLine" id="cb15-3" data-line-number="3">    <span class="dt">low =</span> <span class="st">&quot;steelblue&quot;</span>,</a>
-<a class="sourceLine" id="cb15-4" data-line-number="4">    <span class="dt">mid =</span> <span class="st">&quot;white&quot;</span>,</a>
-<a class="sourceLine" id="cb15-5" data-line-number="5">    <span class="dt">high =</span> <span class="st">&quot;darkred&quot;</span>,</a>
-<a class="sourceLine" id="cb15-6" data-line-number="6">    <span class="dt">geom =</span> <span class="st">&quot;circle&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1"></a><span class="kw">ggcorr</span>(data,</span>
+<span id="cb15-2"><a href="#cb15-2"></a>    <span class="dt">nbreaks =</span> <span class="dv">6</span>,</span>
+<span id="cb15-3"><a href="#cb15-3"></a>    <span class="dt">low =</span> <span class="st">&quot;steelblue&quot;</span>,</span>
+<span id="cb15-4"><a href="#cb15-4"></a>    <span class="dt">mid =</span> <span class="st">&quot;white&quot;</span>,</span>
+<span id="cb15-5"><a href="#cb15-5"></a>    <span class="dt">high =</span> <span class="st">&quot;darkred&quot;</span>,</span>
+<span id="cb15-6"><a href="#cb15-6"></a>    <span class="dt">geom =</span> <span class="st">&quot;circle&quot;</span>)</span></code></pre></div>
 <p><img src="R-course_lesson-17_files/figure-html/unnamed-chunk-7-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -847,11 +864,11 @@ div.tocify {
 <div id="add-label-to-the-heat-map" class="section level3">
 <h3>Add label to the heat map</h3>
 <p>GGally allows us to add a label inside the windows.</p>
-<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb16-1" data-line-number="1"><span class="kw">ggcorr</span>(data,</a>
-<a class="sourceLine" id="cb16-2" data-line-number="2">    <span class="dt">nbreaks =</span> <span class="dv">6</span>,</a>
-<a class="sourceLine" id="cb16-3" data-line-number="3">    <span class="dt">label =</span> <span class="ot">TRUE</span>,</a>
-<a class="sourceLine" id="cb16-4" data-line-number="4">    <span class="dt">label_size =</span> <span class="dv">3</span>,</a>
-<a class="sourceLine" id="cb16-5" data-line-number="5">    <span class="dt">color =</span> <span class="st">&quot;grey50&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1"></a><span class="kw">ggcorr</span>(data,</span>
+<span id="cb16-2"><a href="#cb16-2"></a>    <span class="dt">nbreaks =</span> <span class="dv">6</span>,</span>
+<span id="cb16-3"><a href="#cb16-3"></a>    <span class="dt">label =</span> <span class="ot">TRUE</span>,</span>
+<span id="cb16-4"><a href="#cb16-4"></a>    <span class="dt">label_size =</span> <span class="dv">3</span>,</span>
+<span id="cb16-5"><a href="#cb16-5"></a>    <span class="dt">color =</span> <span class="st">&quot;grey50&quot;</span>)</span></code></pre></div>
 <p><img src="R-course_lesson-17_files/figure-html/unnamed-chunk-8-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -863,10 +880,10 @@ div.tocify {
 <div id="ggpairs" class="section level2">
 <h2>ggpairs</h2>
 <p>Finally, we introduce another function from the GGaly library. Ggpair. It produces a graph in a matrix format. We can display three kinds of computation within one graph. The matrix is a dimension, with equals the number of observations. The upper/lower part displays windows and in the diagonal. We can control what information we want to show in each part of the matrix. The formula for ggpair is:</p>
-<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb17-1" data-line-number="1"><span class="kw">ggpair</span>(df, <span class="dt">columns =</span> <span class="dv">1</span><span class="op">:</span><span class="st"> </span><span class="kw">ncol</span>(df), <span class="dt">title =</span> <span class="ot">NULL</span>,</a>
-<a class="sourceLine" id="cb17-2" data-line-number="2">    <span class="dt">upper =</span> <span class="kw">list</span>(<span class="dt">continuous =</span> <span class="st">&quot;cor&quot;</span>),</a>
-<a class="sourceLine" id="cb17-3" data-line-number="3">    <span class="dt">lower =</span> <span class="kw">list</span>(<span class="dt">continuous =</span> <span class="st">&quot;smooth&quot;</span>),</a>
-<a class="sourceLine" id="cb17-4" data-line-number="4">    <span class="dt">mapping =</span> <span class="ot">NULL</span>)     </a></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1"></a><span class="kw">ggpair</span>(df, <span class="dt">columns =</span> <span class="dv">1</span><span class="op">:</span><span class="st"> </span><span class="kw">ncol</span>(df), <span class="dt">title =</span> <span class="ot">NULL</span>,</span>
+<span id="cb17-2"><a href="#cb17-2"></a>    <span class="dt">upper =</span> <span class="kw">list</span>(<span class="dt">continuous =</span> <span class="st">&quot;cor&quot;</span>),</span>
+<span id="cb17-3"><a href="#cb17-3"></a>    <span class="dt">lower =</span> <span class="kw">list</span>(<span class="dt">continuous =</span> <span class="st">&quot;smooth&quot;</span>),</span>
+<span id="cb17-4"><a href="#cb17-4"></a>    <span class="dt">mapping =</span> <span class="ot">NULL</span>)     </span></code></pre></div>
 <p><strong>Arguments:</strong></p>
 <ul>
 <li>df: Dataset used</li>
@@ -885,13 +902,13 @@ div.tocify {
 <li>Plot the distribution of each variable by group</li>
 <li>Display the scatter plot with the trend by group</li>
 </ul>
-<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb18-1" data-line-number="1"><span class="kw">library</span>(ggplot2)</a>
-<a class="sourceLine" id="cb18-2" data-line-number="2"><span class="kw">ggpairs</span>(data, <span class="dt">columns =</span> <span class="kw">c</span>(<span class="st">&quot;log_totexp&quot;</span>, <span class="st">&quot;log_income&quot;</span>, <span class="st">&quot;age&quot;</span>, <span class="st">&quot;wtrans&quot;</span>), <span class="dt">title =</span> <span class="st">&quot;Bivariate analysis of revenue expenditure by the British household&quot;</span>, <span class="dt">upper =</span> <span class="kw">list</span>(<span class="dt">continuous =</span> <span class="kw">wrap</span>(<span class="st">&quot;cor&quot;</span>,</a>
-<a class="sourceLine" id="cb18-3" data-line-number="3">        <span class="dt">size =</span> <span class="dv">3</span>)),</a>
-<a class="sourceLine" id="cb18-4" data-line-number="4">    <span class="dt">lower =</span> <span class="kw">list</span>(<span class="dt">continuous =</span> <span class="kw">wrap</span>(<span class="st">&quot;smooth&quot;</span>,</a>
-<a class="sourceLine" id="cb18-5" data-line-number="5">        <span class="dt">alpha =</span> <span class="fl">0.3</span>,</a>
-<a class="sourceLine" id="cb18-6" data-line-number="6">        <span class="dt">size =</span> <span class="fl">0.1</span>)),</a>
-<a class="sourceLine" id="cb18-7" data-line-number="7">    <span class="dt">mapping =</span> <span class="kw">aes</span>(<span class="dt">color =</span> children_fac))</a></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1"></a><span class="kw">library</span>(ggplot2)</span>
+<span id="cb18-2"><a href="#cb18-2"></a><span class="kw">ggpairs</span>(data, <span class="dt">columns =</span> <span class="kw">c</span>(<span class="st">&quot;log_totexp&quot;</span>, <span class="st">&quot;log_income&quot;</span>, <span class="st">&quot;age&quot;</span>, <span class="st">&quot;wtrans&quot;</span>), <span class="dt">title =</span> <span class="st">&quot;Bivariate analysis of revenue expenditure by the British household&quot;</span>, <span class="dt">upper =</span> <span class="kw">list</span>(<span class="dt">continuous =</span> <span class="kw">wrap</span>(<span class="st">&quot;cor&quot;</span>,</span>
+<span id="cb18-3"><a href="#cb18-3"></a>        <span class="dt">size =</span> <span class="dv">3</span>)),</span>
+<span id="cb18-4"><a href="#cb18-4"></a>    <span class="dt">lower =</span> <span class="kw">list</span>(<span class="dt">continuous =</span> <span class="kw">wrap</span>(<span class="st">&quot;smooth&quot;</span>,</span>
+<span id="cb18-5"><a href="#cb18-5"></a>        <span class="dt">alpha =</span> <span class="fl">0.3</span>,</span>
+<span id="cb18-6"><a href="#cb18-6"></a>        <span class="dt">size =</span> <span class="fl">0.1</span>)),</span>
+<span id="cb18-7"><a href="#cb18-7"></a>    <span class="dt">mapping =</span> <span class="kw">aes</span>(<span class="dt">color =</span> children_fac))</span></code></pre></div>
 <p><img src="R-course_lesson-17_files/figure-html/unnamed-chunk-9-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -906,16 +923,16 @@ div.tocify {
 <div id="bivariate-analysis-with-ggpair-with-partial-grouping" class="section level2">
 <h2>Bivariate analysis with ggpair with partial grouping</h2>
 <p>The graph below is a little bit different. We change the position of the mapping inside the upper argument.</p>
-<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb19-1" data-line-number="1"><span class="kw">ggpairs</span>(data, <span class="dt">columns =</span> <span class="kw">c</span>(<span class="st">&quot;log_totexp&quot;</span>, <span class="st">&quot;log_income&quot;</span>, <span class="st">&quot;age&quot;</span>, <span class="st">&quot;wtrans&quot;</span>),</a>
-<a class="sourceLine" id="cb19-2" data-line-number="2">    <span class="dt">title =</span> <span class="st">&quot;Bivariate analysis of revenue expenditure by the British household&quot;</span>,</a>
-<a class="sourceLine" id="cb19-3" data-line-number="3">    <span class="dt">upper =</span> <span class="kw">list</span>(<span class="dt">continuous =</span> <span class="kw">wrap</span>(<span class="st">&quot;cor&quot;</span>,</a>
-<a class="sourceLine" id="cb19-4" data-line-number="4">            <span class="dt">size =</span> <span class="dv">3</span>),</a>
-<a class="sourceLine" id="cb19-5" data-line-number="5">        <span class="dt">mapping =</span> <span class="kw">aes</span>(<span class="dt">color =</span> children_fac)),</a>
-<a class="sourceLine" id="cb19-6" data-line-number="6">    <span class="dt">lower =</span> <span class="kw">list</span>(</a>
-<a class="sourceLine" id="cb19-7" data-line-number="7">        <span class="dt">continuous =</span> <span class="kw">wrap</span>(<span class="st">&quot;smooth&quot;</span>,</a>
-<a class="sourceLine" id="cb19-8" data-line-number="8">            <span class="dt">alpha =</span> <span class="fl">0.3</span>,</a>
-<a class="sourceLine" id="cb19-9" data-line-number="9">            <span class="dt">size =</span> <span class="fl">0.1</span>))</a>
-<a class="sourceLine" id="cb19-10" data-line-number="10">)</a></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1"></a><span class="kw">ggpairs</span>(data, <span class="dt">columns =</span> <span class="kw">c</span>(<span class="st">&quot;log_totexp&quot;</span>, <span class="st">&quot;log_income&quot;</span>, <span class="st">&quot;age&quot;</span>, <span class="st">&quot;wtrans&quot;</span>),</span>
+<span id="cb19-2"><a href="#cb19-2"></a>    <span class="dt">title =</span> <span class="st">&quot;Bivariate analysis of revenue expenditure by the British household&quot;</span>,</span>
+<span id="cb19-3"><a href="#cb19-3"></a>    <span class="dt">upper =</span> <span class="kw">list</span>(<span class="dt">continuous =</span> <span class="kw">wrap</span>(<span class="st">&quot;cor&quot;</span>,</span>
+<span id="cb19-4"><a href="#cb19-4"></a>            <span class="dt">size =</span> <span class="dv">3</span>),</span>
+<span id="cb19-5"><a href="#cb19-5"></a>        <span class="dt">mapping =</span> <span class="kw">aes</span>(<span class="dt">color =</span> children_fac)),</span>
+<span id="cb19-6"><a href="#cb19-6"></a>    <span class="dt">lower =</span> <span class="kw">list</span>(</span>
+<span id="cb19-7"><a href="#cb19-7"></a>        <span class="dt">continuous =</span> <span class="kw">wrap</span>(<span class="st">&quot;smooth&quot;</span>,</span>
+<span id="cb19-8"><a href="#cb19-8"></a>            <span class="dt">alpha =</span> <span class="fl">0.3</span>,</span>
+<span id="cb19-9"><a href="#cb19-9"></a>            <span class="dt">size =</span> <span class="fl">0.1</span>))</span>
+<span id="cb19-10"><a href="#cb19-10"></a>)</span></code></pre></div>
 <p><img src="R-course_lesson-17_files/figure-html/unnamed-chunk-10-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <p>Exact same code as previous example except for: mapping = aes(color = children_fac): Move the list in upper = list(). We only want the computation stacked by group in the upper part of the graph.</p>
@@ -1066,7 +1083,7 @@ ggpairs(df)
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();
@@ -1105,7 +1122,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0

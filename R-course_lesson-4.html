@@ -23,6 +23,7 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -118,12 +119,21 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -133,14 +143,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -149,9 +161,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -238,6 +250,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -518,21 +531,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -620,6 +633,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -654,16 +670,16 @@ div.tocify {
 <hr />
 <p>R stores categorical variables into a factor. Let’s check the code below to convert a character variable into a factor variable. Characters are not supported in machine learning algorithm, and the only way is to convert a string to an integer.</p>
 <p><strong>Syntax</strong></p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="kw">factor</span>(<span class="dt">x =</span> <span class="kw">character</span>(), levels, <span class="dt">labels =</span> levels, <span class="dt">ordered =</span> <span class="kw">is.ordered</span>(x))</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">factor</span>(<span class="dt">x =</span> <span class="kw">character</span>(), levels, <span class="dt">labels =</span> levels, <span class="dt">ordered =</span> <span class="kw">is.ordered</span>(x))</span></code></pre></div>
 <p><strong>Arguments:</strong> + x: A vector of data. Need to be a string or integer, not decimal. + Levels: A vector of possible values taken by x. This argument is optional. The default value is the unique list of items of the vector x. + Labels: Add a label to the x data. For example, 1 can take the label <code>male</code> while 0, the label <code>female</code>. + ordered: Determine if the levels should be ordered.</p>
 <p><strong>Example:</strong> Let’s create a factor data frame.</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" data-line-number="1"><span class="co"># Create gender vector</span></a>
-<a class="sourceLine" id="cb2-2" data-line-number="2">gender_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;Male&quot;</span>, <span class="st">&quot;Female&quot;</span>, <span class="st">&quot;Female&quot;</span>, <span class="st">&quot;Male&quot;</span>, <span class="st">&quot;Male&quot;</span>)</a>
-<a class="sourceLine" id="cb2-3" data-line-number="3"><span class="kw">class</span>(gender_vector)</a></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="co"># Create gender vector</span></span>
+<span id="cb2-2"><a href="#cb2-2"></a>gender_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;Male&quot;</span>, <span class="st">&quot;Female&quot;</span>, <span class="st">&quot;Female&quot;</span>, <span class="st">&quot;Male&quot;</span>, <span class="st">&quot;Male&quot;</span>)</span>
+<span id="cb2-3"><a href="#cb2-3"></a><span class="kw">class</span>(gender_vector)</span></code></pre></div>
 <pre><code>## [1] &quot;character&quot;</code></pre>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb4-1" data-line-number="1"><span class="co"># Convert gender_vector to a factor</span></a>
-<a class="sourceLine" id="cb4-2" data-line-number="2">factor_gender_vector &lt;-<span class="st"> </span><span class="kw">factor</span>(gender_vector)</a>
-<a class="sourceLine" id="cb4-3" data-line-number="3"><span class="kw">class</span>(factor_gender_vector)</a></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="co"># Convert gender_vector to a factor</span></span>
+<span id="cb4-2"><a href="#cb4-2"></a>factor_gender_vector &lt;-<span class="st"> </span><span class="kw">factor</span>(gender_vector)</span>
+<span id="cb4-3"><a href="#cb4-3"></a><span class="kw">class</span>(factor_gender_vector)</span></code></pre></div>
 <pre><code>## [1] &quot;factor&quot;</code></pre>
 <p>It is important to transform a string into factor when we perform Machine Learning task.</p>
 <p>A categorical variable can be divided into nominal categorical variable and ordinal categorical variable.</p>
@@ -672,11 +688,11 @@ div.tocify {
 <h1>Nominal Categorical Variable</h1>
 <hr />
 <p>A categorical variable has several values but the order does not matter. For instance, male or female categorical variable do not have ordering.</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="co"># Create a color vector</span></a>
-<a class="sourceLine" id="cb6-2" data-line-number="2">color_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&#39;blue&#39;</span>, <span class="st">&#39;red&#39;</span>, <span class="st">&#39;green&#39;</span>, <span class="st">&#39;white&#39;</span>, <span class="st">&#39;black&#39;</span>, <span class="st">&#39;yellow&#39;</span>)</a>
-<a class="sourceLine" id="cb6-3" data-line-number="3"><span class="co"># Convert the vector to factor</span></a>
-<a class="sourceLine" id="cb6-4" data-line-number="4">factor_color &lt;-<span class="st"> </span><span class="kw">factor</span>(color_vector)</a>
-<a class="sourceLine" id="cb6-5" data-line-number="5">factor_color</a></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a><span class="co"># Create a color vector</span></span>
+<span id="cb6-2"><a href="#cb6-2"></a>color_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&#39;blue&#39;</span>, <span class="st">&#39;red&#39;</span>, <span class="st">&#39;green&#39;</span>, <span class="st">&#39;white&#39;</span>, <span class="st">&#39;black&#39;</span>, <span class="st">&#39;yellow&#39;</span>)</span>
+<span id="cb6-3"><a href="#cb6-3"></a><span class="co"># Convert the vector to factor</span></span>
+<span id="cb6-4"><a href="#cb6-4"></a>factor_color &lt;-<span class="st"> </span><span class="kw">factor</span>(color_vector)</span>
+<span id="cb6-5"><a href="#cb6-5"></a>factor_color</span></code></pre></div>
 <pre><code>## [1] blue   red    green  white  black  yellow
 ## Levels: black blue green red white yellow</code></pre>
 <p>From the factor_color, we can’t tell any order.</p>
@@ -688,21 +704,21 @@ div.tocify {
 <div id="example-1" class="section level2">
 <h2>Example 1:</h2>
 <p>We can use summary to count the values for each factor.</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="co"># Create Ordinal categorical vector </span></a>
-<a class="sourceLine" id="cb8-2" data-line-number="2">day_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&#39;evening&#39;</span>, <span class="st">&#39;morning&#39;</span>, <span class="st">&#39;afternoon&#39;</span>, <span class="st">&#39;midday&#39;</span>, <span class="st">&#39;midnight&#39;</span>, <span class="st">&#39;evening&#39;</span>)</a>
-<a class="sourceLine" id="cb8-3" data-line-number="3"><span class="co"># Convert `day_vector` to a factor with ordered level</span></a>
-<a class="sourceLine" id="cb8-4" data-line-number="4">factor_day &lt;-<span class="st"> </span><span class="kw">factor</span>(day_vector, <span class="dt">order =</span> <span class="ot">TRUE</span>, <span class="dt">levels =</span> <span class="kw">c</span>(<span class="st">&#39;morning&#39;</span>, <span class="st">&#39;midday&#39;</span>, <span class="st">&#39;afternoon&#39;</span>, <span class="st">&#39;evening&#39;</span>, <span class="st">&#39;midnight&#39;</span>))</a>
-<a class="sourceLine" id="cb8-5" data-line-number="5"><span class="co"># Print the new variable</span></a>
-<a class="sourceLine" id="cb8-6" data-line-number="6">factor_day</a></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a><span class="co"># Create Ordinal categorical vector </span></span>
+<span id="cb8-2"><a href="#cb8-2"></a>day_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&#39;evening&#39;</span>, <span class="st">&#39;morning&#39;</span>, <span class="st">&#39;afternoon&#39;</span>, <span class="st">&#39;midday&#39;</span>, <span class="st">&#39;midnight&#39;</span>, <span class="st">&#39;evening&#39;</span>)</span>
+<span id="cb8-3"><a href="#cb8-3"></a><span class="co"># Convert `day_vector` to a factor with ordered level</span></span>
+<span id="cb8-4"><a href="#cb8-4"></a>factor_day &lt;-<span class="st"> </span><span class="kw">factor</span>(day_vector, <span class="dt">order =</span> <span class="ot">TRUE</span>, <span class="dt">levels =</span> <span class="kw">c</span>(<span class="st">&#39;morning&#39;</span>, <span class="st">&#39;midday&#39;</span>, <span class="st">&#39;afternoon&#39;</span>, <span class="st">&#39;evening&#39;</span>, <span class="st">&#39;midnight&#39;</span>))</span>
+<span id="cb8-5"><a href="#cb8-5"></a><span class="co"># Print the new variable</span></span>
+<span id="cb8-6"><a href="#cb8-6"></a>factor_day</span></code></pre></div>
 <pre><code>## [1] evening   morning   afternoon midday    midnight  evening  
 ## Levels: morning &lt; midday &lt; afternoon &lt; evening &lt; midnight</code></pre>
 </div>
 <div id="example-2" class="section level2">
 <h2>Example 2:</h2>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb10-1" data-line-number="1"><span class="co">## Levels: morning &lt; midday &lt; afternoon &lt; evening &lt; midnight</span></a>
-<a class="sourceLine" id="cb10-2" data-line-number="2"><span class="co"># Append the line to above code</span></a>
-<a class="sourceLine" id="cb10-3" data-line-number="3"><span class="co"># Count the number of occurence of each level</span></a>
-<a class="sourceLine" id="cb10-4" data-line-number="4"><span class="kw">summary</span>(factor_day)</a></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a><span class="co">## Levels: morning &lt; midday &lt; afternoon &lt; evening &lt; midnight</span></span>
+<span id="cb10-2"><a href="#cb10-2"></a><span class="co"># Append the line to above code</span></span>
+<span id="cb10-3"><a href="#cb10-3"></a><span class="co"># Count the number of occurence of each level</span></span>
+<span id="cb10-4"><a href="#cb10-4"></a><span class="kw">summary</span>(factor_day)</span></code></pre></div>
 <pre><code>##   morning    midday afternoon   evening  midnight 
 ##         1         1         1         2         1</code></pre>
 <p>R ordered the level from ‘morning’ to ‘midnight’ as specified in the levels parenthesis.</p>
@@ -712,8 +728,8 @@ div.tocify {
 <h1>Continuous Variables</h1>
 <hr />
 <p>Continuous class variables are the default value in R. They are stored as numeric or integer. We can see it from the dataset below. mtcars is a built-in dataset. It gathers information on different types of car. We can import it by using mtcars and check the class of the variable mpg, mile per gallon. It returns a numeric value, indicating a continuous variable.</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb12-1" data-line-number="1">dataset &lt;-<span class="st"> </span>mtcars</a>
-<a class="sourceLine" id="cb12-2" data-line-number="2"><span class="kw">class</span>(dataset<span class="op">$</span>mpg)</a></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1"></a>dataset &lt;-<span class="st"> </span>mtcars</span>
+<span id="cb12-2"><a href="#cb12-2"></a><span class="kw">class</span>(dataset<span class="op">$</span>mpg)</span></code></pre></div>
 <pre><code>## [1] &quot;numeric&quot;</code></pre>
 </div>
 
@@ -737,7 +753,7 @@ div.tocify {
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();
@@ -776,7 +792,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0

@@ -23,7 +23,9 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="site_libs/lightable-0.0.1/lightable.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -119,12 +121,21 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -134,14 +145,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -150,9 +163,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -239,6 +252,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -519,21 +533,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -621,6 +635,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -659,29 +676,29 @@ div.tocify {
 <li>4.5 is a decimal value called numerics.</li>
 <li>4 is a natural value called integers. Integers are also numerics.</li>
 <li>TRUE or FALSE is a Boolean value called logical.</li>
-<li>The value inside &quot; &quot; or ’ ’ are text (string). They are called characters.</li>
+<li>The value inside " " or ’ ’ are text (string). They are called characters.</li>
 </ul>
 <p>We can check the type of a variable with the class function</p>
 <div id="example-1" class="section level2">
 <h2>Example 1:</h2>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="co"># Declare variables of different types</span></a>
-<a class="sourceLine" id="cb1-2" data-line-number="2"><span class="co"># Numeric</span></a>
-<a class="sourceLine" id="cb1-3" data-line-number="3">x &lt;-<span class="st"> </span><span class="dv">28</span></a>
-<a class="sourceLine" id="cb1-4" data-line-number="4"><span class="kw">class</span>(x)</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="co"># Declare variables of different types</span></span>
+<span id="cb1-2"><a href="#cb1-2"></a><span class="co"># Numeric</span></span>
+<span id="cb1-3"><a href="#cb1-3"></a>x &lt;-<span class="st"> </span><span class="dv">28</span></span>
+<span id="cb1-4"><a href="#cb1-4"></a><span class="kw">class</span>(x)</span></code></pre></div>
 <pre><code>## [1] &quot;numeric&quot;</code></pre>
 </div>
 <div id="example-2" class="section level2">
 <h2>Example 2:</h2>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" data-line-number="1"><span class="co"># String</span></a>
-<a class="sourceLine" id="cb3-2" data-line-number="2">y &lt;-<span class="st"> &quot;R is Fantastic&quot;</span></a>
-<a class="sourceLine" id="cb3-3" data-line-number="3"><span class="kw">class</span>(y)</a></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a><span class="co"># String</span></span>
+<span id="cb3-2"><a href="#cb3-2"></a>y &lt;-<span class="st"> &quot;R is Fantastic&quot;</span></span>
+<span id="cb3-3"><a href="#cb3-3"></a><span class="kw">class</span>(y)</span></code></pre></div>
 <pre><code>## [1] &quot;character&quot;</code></pre>
 </div>
 <div id="example-3" class="section level2">
 <h2>Example 3:</h2>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1"><span class="co"># Boolean</span></a>
-<a class="sourceLine" id="cb5-2" data-line-number="2">z &lt;-<span class="st"> </span><span class="ot">TRUE</span></a>
-<a class="sourceLine" id="cb5-3" data-line-number="3"><span class="kw">class</span>(z)</a></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a><span class="co"># Boolean</span></span>
+<span id="cb5-2"><a href="#cb5-2"></a>z &lt;-<span class="st"> </span><span class="ot">TRUE</span></span>
+<span id="cb5-3"><a href="#cb5-3"></a><span class="kw">class</span>(z)</span></code></pre></div>
 <pre><code>## [1] &quot;logical&quot;</code></pre>
 </div>
 </div>
@@ -692,26 +709,26 @@ div.tocify {
 <p>To declare a variable, we need to assign a variable name. The name should not have space. We can use _ to connect to words.</p>
 <p>To add a value to the variable, use &lt;- or =.</p>
 <p>Here is the syntax:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb7-1" data-line-number="1"><span class="co"># First way to declare a variable:  use the `&lt;-`</span></a>
-<a class="sourceLine" id="cb7-2" data-line-number="2">name_of_variable &lt;-<span class="st"> </span>value</a>
-<a class="sourceLine" id="cb7-3" data-line-number="3"><span class="co"># Second way to declare a variable:  use the `=`</span></a>
-<a class="sourceLine" id="cb7-4" data-line-number="4">name_of_variable =<span class="st"> </span>value</a></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1"></a><span class="co"># First way to declare a variable:  use the `&lt;-`</span></span>
+<span id="cb7-2"><a href="#cb7-2"></a>name_of_variable &lt;-<span class="st"> </span>value</span>
+<span id="cb7-3"><a href="#cb7-3"></a><span class="co"># Second way to declare a variable:  use the `=`</span></span>
+<span id="cb7-4"><a href="#cb7-4"></a>name_of_variable =<span class="st"> </span>value</span></code></pre></div>
 <p>In the command line, we can write the following codes to see what happens:</p>
 <div id="example-1-1" class="section level2">
 <h2>Example 1:</h2>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="co"># Print variable x</span></a>
-<a class="sourceLine" id="cb8-2" data-line-number="2">x &lt;-<span class="st"> </span><span class="dv">42</span></a></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a><span class="co"># Print variable x</span></span>
+<span id="cb8-2"><a href="#cb8-2"></a>x &lt;-<span class="st"> </span><span class="dv">42</span></span></code></pre></div>
 </div>
 <div id="example-2-1" class="section level2">
 <h2>Example 2:</h2>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" data-line-number="1">y  &lt;-<span class="st"> </span><span class="dv">10</span></a>
-<a class="sourceLine" id="cb9-2" data-line-number="2">y</a></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a>y  &lt;-<span class="st"> </span><span class="dv">10</span></span>
+<span id="cb9-2"><a href="#cb9-2"></a>y</span></code></pre></div>
 <pre><code>## [1] 10</code></pre>
 </div>
 <div id="example-3-1" class="section level2">
 <h2>Example 3:</h2>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb11-1" data-line-number="1"><span class="co"># We call x and y and apply a subtraction</span></a>
-<a class="sourceLine" id="cb11-2" data-line-number="2">x <span class="op">-</span><span class="st"> </span>y</a></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a><span class="co"># We call x and y and apply a subtraction</span></span>
+<span id="cb11-2"><a href="#cb11-2"></a>x <span class="op">-</span><span class="st"> </span>y</span></code></pre></div>
 <pre><code>## [1] 32</code></pre>
 </div>
 </div>
@@ -721,50 +738,50 @@ div.tocify {
 <p>A vector is a one-dimensional array. We can create a vector with all the basic data type we learnt before. The simplest way to build a vector in R, is to use the c command.</p>
 <div id="example-1-2" class="section level2">
 <h2>Example 1:</h2>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb13-1" data-line-number="1"><span class="co"># Numerical</span></a>
-<a class="sourceLine" id="cb13-2" data-line-number="2">vec_num &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span>, <span class="dv">10</span>, <span class="dv">49</span>)</a>
-<a class="sourceLine" id="cb13-3" data-line-number="3">vec_num</a></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1"></a><span class="co"># Numerical</span></span>
+<span id="cb13-2"><a href="#cb13-2"></a>vec_num &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span>, <span class="dv">10</span>, <span class="dv">49</span>)</span>
+<span id="cb13-3"><a href="#cb13-3"></a>vec_num</span></code></pre></div>
 <pre><code>## [1]  1 10 49</code></pre>
 </div>
 <div id="example-2-2" class="section level2">
 <h2>Example 2:</h2>
-<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb15-1" data-line-number="1"><span class="co"># Character </span></a>
-<a class="sourceLine" id="cb15-2" data-line-number="2">vec_chr &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>, <span class="st">&quot;c&quot;</span>)</a>
-<a class="sourceLine" id="cb15-3" data-line-number="3">vec_chr</a></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1"></a><span class="co"># Character </span></span>
+<span id="cb15-2"><a href="#cb15-2"></a>vec_chr &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>, <span class="st">&quot;c&quot;</span>)</span>
+<span id="cb15-3"><a href="#cb15-3"></a>vec_chr</span></code></pre></div>
 <pre><code>## [1] &quot;a&quot; &quot;b&quot; &quot;c&quot;</code></pre>
 </div>
 <div id="example-3-2" class="section level2">
 <h2>Example 3:</h2>
-<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb17-1" data-line-number="1"><span class="co"># Boolean </span></a>
-<a class="sourceLine" id="cb17-2" data-line-number="2">vec_bool &lt;-<span class="st">  </span><span class="kw">c</span>(<span class="ot">TRUE</span>, <span class="ot">FALSE</span>, <span class="ot">TRUE</span>)</a>
-<a class="sourceLine" id="cb17-3" data-line-number="3">vec_bool</a></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1"></a><span class="co"># Boolean </span></span>
+<span id="cb17-2"><a href="#cb17-2"></a>vec_bool &lt;-<span class="st">  </span><span class="kw">c</span>(<span class="ot">TRUE</span>, <span class="ot">FALSE</span>, <span class="ot">TRUE</span>)</span>
+<span id="cb17-3"><a href="#cb17-3"></a>vec_bool</span></code></pre></div>
 <pre><code>## [1]  TRUE FALSE  TRUE</code></pre>
 </div>
 <div id="example-4" class="section level2">
 <h2>Example 4:</h2>
 <p>We can do arithmetic calculations on vectors.</p>
-<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb19-1" data-line-number="1"><span class="co"># Create the vectors</span></a>
-<a class="sourceLine" id="cb19-2" data-line-number="2">vect_<span class="dv">1</span> &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span>, <span class="dv">3</span>, <span class="dv">5</span>)</a>
-<a class="sourceLine" id="cb19-3" data-line-number="3">vect_<span class="dv">2</span> &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">6</span>)</a>
-<a class="sourceLine" id="cb19-4" data-line-number="4"><span class="co"># Take the sum of A_vector and B_vector</span></a>
-<a class="sourceLine" id="cb19-5" data-line-number="5">sum_vect &lt;-<span class="st"> </span>vect_<span class="dv">1</span> <span class="op">+</span><span class="st"> </span>vect_<span class="dv">2</span></a>
-<a class="sourceLine" id="cb19-6" data-line-number="6"><span class="co"># Print out total_vector</span></a>
-<a class="sourceLine" id="cb19-7" data-line-number="7">sum_vect</a></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1"></a><span class="co"># Create the vectors</span></span>
+<span id="cb19-2"><a href="#cb19-2"></a>vect_<span class="dv">1</span> &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span>, <span class="dv">3</span>, <span class="dv">5</span>)</span>
+<span id="cb19-3"><a href="#cb19-3"></a>vect_<span class="dv">2</span> &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">6</span>)</span>
+<span id="cb19-4"><a href="#cb19-4"></a><span class="co"># Take the sum of A_vector and B_vector</span></span>
+<span id="cb19-5"><a href="#cb19-5"></a>sum_vect &lt;-<span class="st"> </span>vect_<span class="dv">1</span> <span class="op">+</span><span class="st"> </span>vect_<span class="dv">2</span></span>
+<span id="cb19-6"><a href="#cb19-6"></a><span class="co"># Print out total_vector</span></span>
+<span id="cb19-7"><a href="#cb19-7"></a>sum_vect</span></code></pre></div>
 <pre><code>## [1]  3  7 11</code></pre>
 </div>
 <div id="example-5" class="section level2">
 <h2>Example 5:</h2>
 <p>In R, it is possible to slice a vector. In some occasion, we are interested in only the first five rows of a vector. We can use the <code>[1:5]</code> command to extract the value 1 to 5.</p>
-<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb21-1" data-line-number="1"><span class="co"># Slice the first five rows of the vector</span></a>
-<a class="sourceLine" id="cb21-2" data-line-number="2">slice_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">5</span>, <span class="dv">6</span>, <span class="dv">7</span>, <span class="dv">8</span>, <span class="dv">9</span>, <span class="dv">10</span>)</a>
-<a class="sourceLine" id="cb21-3" data-line-number="3">slice_vector[<span class="dv">1</span><span class="op">:</span><span class="dv">5</span>]</a></code></pre></div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1"></a><span class="co"># Slice the first five rows of the vector</span></span>
+<span id="cb21-2"><a href="#cb21-2"></a>slice_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>, <span class="dv">5</span>, <span class="dv">6</span>, <span class="dv">7</span>, <span class="dv">8</span>, <span class="dv">9</span>, <span class="dv">10</span>)</span>
+<span id="cb21-3"><a href="#cb21-3"></a>slice_vector[<span class="dv">1</span><span class="op">:</span><span class="dv">5</span>]</span></code></pre></div>
 <pre><code>## [1] 1 2 3 4 5</code></pre>
 </div>
 <div id="example-6" class="section level2">
 <h2>Example 6:</h2>
 <p>The shortest way to create a range of value is to use the: between two numbers. For instance, from the above example, we can write <code>c(1:10)</code> to create a vector of value from one to ten.</p>
-<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb23-1" data-line-number="1"><span class="co"># Faster way to create adjacent values</span></a>
-<a class="sourceLine" id="cb23-2" data-line-number="2"><span class="kw">c</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1"></a><span class="co"># Faster way to create adjacent values</span></span>
+<span id="cb23-2"><a href="#cb23-2"></a><span class="kw">c</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</span></code></pre></div>
 <pre><code>##  [1]  1  2  3  4  5  6  7  8  9 10</code></pre>
 </div>
 </div>
@@ -841,32 +858,32 @@ Exponentiation
 <p>The sentences starting with # <strong>annotation</strong>. We can use # inside an R script to add any comment we want. R won’t read it during the running time.</p>
 <div id="example-1-3" class="section level2">
 <h2>Example 1:</h2>
-<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb25-1" data-line-number="1"><span class="co"># An addition</span></a>
-<a class="sourceLine" id="cb25-2" data-line-number="2"><span class="dv">3</span> <span class="op">+</span><span class="st"> </span><span class="dv">4</span></a></code></pre></div>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1"></a><span class="co"># An addition</span></span>
+<span id="cb25-2"><a href="#cb25-2"></a><span class="dv">3</span> <span class="op">+</span><span class="st"> </span><span class="dv">4</span></span></code></pre></div>
 <pre><code>## [1] 7</code></pre>
 </div>
 <div id="example-2-3" class="section level2">
 <h2>Example 2:</h2>
-<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb27-1" data-line-number="1"><span class="co"># A multiplication</span></a>
-<a class="sourceLine" id="cb27-2" data-line-number="2"><span class="dv">3</span> <span class="op">*</span><span class="st"> </span><span class="dv">5</span></a></code></pre></div>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1"></a><span class="co"># A multiplication</span></span>
+<span id="cb27-2"><a href="#cb27-2"></a><span class="dv">3</span> <span class="op">*</span><span class="st"> </span><span class="dv">5</span></span></code></pre></div>
 <pre><code>## [1] 15</code></pre>
 </div>
 <div id="example-3-3" class="section level2">
 <h2>Example 3:</h2>
-<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb29-1" data-line-number="1"><span class="co"># A division</span></a>
-<a class="sourceLine" id="cb29-2" data-line-number="2">(<span class="dv">5</span> <span class="op">+</span><span class="st"> </span><span class="dv">5</span>) <span class="op">/</span><span class="st"> </span><span class="dv">2</span></a></code></pre></div>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1"></a><span class="co"># A division</span></span>
+<span id="cb29-2"><a href="#cb29-2"></a>(<span class="dv">5</span> <span class="op">+</span><span class="st"> </span><span class="dv">5</span>) <span class="op">/</span><span class="st"> </span><span class="dv">2</span></span></code></pre></div>
 <pre><code>## [1] 5</code></pre>
 </div>
 <div id="example-4-1" class="section level2">
 <h2>Example 4:</h2>
-<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb31-1" data-line-number="1"><span class="co"># Exponentiation</span></a>
-<a class="sourceLine" id="cb31-2" data-line-number="2"><span class="dv">2</span><span class="op">^</span><span class="dv">5</span></a></code></pre></div>
+<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1"></a><span class="co"># Exponentiation</span></span>
+<span id="cb31-2"><a href="#cb31-2"></a><span class="dv">2</span><span class="op">^</span><span class="dv">5</span></span></code></pre></div>
 <pre><code>## [1] 32</code></pre>
 </div>
 <div id="example-5-1" class="section level2">
 <h2>Example 5:</h2>
-<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb33-1" data-line-number="1"><span class="co"># Modulo</span></a>
-<a class="sourceLine" id="cb33-2" data-line-number="2"><span class="dv">28</span> <span class="op">%%</span><span class="st"> </span><span class="dv">6</span></a></code></pre></div>
+<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1"></a><span class="co"># Modulo</span></span>
+<span id="cb33-2"><a href="#cb33-2"></a><span class="dv">28</span> <span class="op">%%</span><span class="st"> </span><span class="dv">6</span></span></code></pre></div>
 <pre><code>## [1] 4</code></pre>
 </div>
 </div>
@@ -972,28 +989,28 @@ Test if x is TRUE
 <!-- | x & y |  x AND y | -->
 <!-- | isTRUE(x) |  Test if x is TRUE | -->
 <p>The logical statements in R are wrapped inside the <code>[ ]</code>. We can add many conditional statements as we like but we need to include them in a parenthesis. We can follow this structure to create a conditional statement:</p>
-<div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb35-1" data-line-number="1">variable_name[(conditional_statement)]</a></code></pre></div>
-<p>With variable_name referring to the variable, we want to use for the statement. We create the logical statement i.e. <code>variable_name &gt; 0</code>. Finally, we use the square bracket to finalize the logical statement. Below, an example of a logical statement.</p>
+<div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1"></a>variable_name[(conditional_statement)]</span></code></pre></div>
+<p>With variable_name referring to the variable, we want to use for the statement. We create the logical statement i.e. <code>variable_name &gt; 0</code>. Finally, we use the square bracket to finalize the logical statement. Below, an example of a logical statement.</p>
 <div id="example-1-4" class="section level2">
 <h2>Example 1:</h2>
-<div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb36-1" data-line-number="1"><span class="co"># Create a vector from 1 to 10</span></a>
-<a class="sourceLine" id="cb36-2" data-line-number="2">logical_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</a>
-<a class="sourceLine" id="cb36-3" data-line-number="3">logical_vector <span class="op">&gt;</span><span class="st"> </span><span class="dv">5</span></a></code></pre></div>
+<div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb36-1"><a href="#cb36-1"></a><span class="co"># Create a vector from 1 to 10</span></span>
+<span id="cb36-2"><a href="#cb36-2"></a>logical_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</span>
+<span id="cb36-3"><a href="#cb36-3"></a>logical_vector <span class="op">&gt;</span><span class="st"> </span><span class="dv">5</span></span></code></pre></div>
 <pre><code>##  [1] FALSE FALSE FALSE FALSE FALSE  TRUE  TRUE  TRUE  TRUE  TRUE</code></pre>
 <p>In the output above, R reads each value and compares it to the statement <code>logical_vector &gt; 5</code>. If the value is strictly superior to five, then the condition is TRUE, otherwise FALSE. R returns a vector of TRUE and FALSE.</p>
 </div>
 <div id="example-2-4" class="section level2">
 <h2>Example 2:</h2>
 <p>In the example below, we want to extract the values that only meet the condition ‘is strictly superior to five’. For that, we can wrap the condition inside a square bracket precede by the vector containing the values.</p>
-<div class="sourceCode" id="cb38"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb38-1" data-line-number="1"><span class="co"># Print value strictly above 5</span></a>
-<a class="sourceLine" id="cb38-2" data-line-number="2">logical_vector[(logical_vector <span class="op">&gt;</span><span class="st"> </span><span class="dv">5</span>)]</a></code></pre></div>
+<div class="sourceCode" id="cb38"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb38-1"><a href="#cb38-1"></a><span class="co"># Print value strictly above 5</span></span>
+<span id="cb38-2"><a href="#cb38-2"></a>logical_vector[(logical_vector <span class="op">&gt;</span><span class="st"> </span><span class="dv">5</span>)]</span></code></pre></div>
 <pre><code>## [1]  6  7  8  9 10</code></pre>
 </div>
 <div id="example-3-4" class="section level2">
 <h2>Example 3:</h2>
-<div class="sourceCode" id="cb40"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb40-1" data-line-number="1"><span class="co"># Print 5 and 6</span></a>
-<a class="sourceLine" id="cb40-2" data-line-number="2">logical_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</a>
-<a class="sourceLine" id="cb40-3" data-line-number="3">logical_vector[(logical_vector <span class="op">&gt;</span><span class="st"> </span><span class="dv">4</span>) <span class="op">&amp;</span><span class="st"> </span>(logical_vector <span class="op">&lt;</span><span class="st"> </span><span class="dv">7</span>)]</a></code></pre></div>
+<div class="sourceCode" id="cb40"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb40-1"><a href="#cb40-1"></a><span class="co"># Print 5 and 6</span></span>
+<span id="cb40-2"><a href="#cb40-2"></a>logical_vector &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</span>
+<span id="cb40-3"><a href="#cb40-3"></a>logical_vector[(logical_vector <span class="op">&gt;</span><span class="st"> </span><span class="dv">4</span>) <span class="op">&amp;</span><span class="st"> </span>(logical_vector <span class="op">&lt;</span><span class="st"> </span><span class="dv">7</span>)]</span></code></pre></div>
 <pre><code>## [1] 5 6</code></pre>
 </div>
 </div>
@@ -1018,7 +1035,7 @@ Test if x is TRUE
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();
@@ -1057,7 +1074,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0

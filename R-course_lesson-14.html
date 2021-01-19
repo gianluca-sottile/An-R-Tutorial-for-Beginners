@@ -23,7 +23,9 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="site_libs/lightable-0.0.1/lightable.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -119,12 +121,21 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -134,14 +145,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -150,9 +163,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -239,6 +252,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -519,21 +533,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -621,6 +635,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -645,7 +662,7 @@ div.tocify {
 <div id="read-csv" class="section level1">
 <h1>Read CSV</h1>
 <p>One of the most widely data store is the .csv (comma-separated values) file formats. R loads an array of libraries during the start-up, including the utils package. This package is convenient to open csv files combined with the reading.csv() function. Here is the syntax for read.csv</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="kw">read.csv</span>(file, <span class="dt">header =</span> <span class="ot">TRUE</span>, <span class="dt">sep =</span> <span class="st">&quot;,&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">read.csv</span>(file, <span class="dt">header =</span> <span class="ot">TRUE</span>, <span class="dt">sep =</span> <span class="st">&quot;,&quot;</span>)</span></code></pre></div>
 <p>Argument:</p>
 <ul>
 <li>file: PATH where the file is stored</li>
@@ -654,9 +671,9 @@ div.tocify {
 </ul>
 <p>We will read the data file name mtcats. The csv file is stored online. If your .csv file is stored locally, you can replace the PATH inside the code snippet. Don’t forget to wrap it inside ’ ’. The PATH needs to be a string value.</p>
 <p>For mac user, the path for the download folder is:</p>
-<p><code>&quot;/Users/USERNAME/Downloads/FILENAME.csv&quot;</code></p>
+<p><code>"/Users/USERNAME/Downloads/FILENAME.csv"</code></p>
 <p>For windows user:</p>
-<p><code>&quot;C:\Users\USERNAME\Downloads\FILENAME.csv&quot;</code></p>
+<p><code>"C:\Users\USERNAME\Downloads\FILENAME.csv"</code></p>
 <p>Note that, we should always specify the extension of the file name.</p>
 <ul>
 <li>.csv</li>
@@ -664,16 +681,16 @@ div.tocify {
 <li>.txt</li>
 <li>…</li>
 </ul>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" data-line-number="1">PATH &lt;-<span class="st"> &#39;https://raw.githubusercontent.com/guru99-edu/R-Programming/master/mtcars.csv&#39;</span>                </a>
-<a class="sourceLine" id="cb2-2" data-line-number="2">df &lt;-<span class="st"> </span><span class="kw">read.csv</span>(PATH, <span class="dt">header =</span>  <span class="ot">TRUE</span>, <span class="dt">sep =</span> <span class="st">&#39;,&#39;</span>)</a>
-<a class="sourceLine" id="cb2-3" data-line-number="3"><span class="kw">length</span>(df)</a></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a>PATH &lt;-<span class="st"> &#39;https://raw.githubusercontent.com/guru99-edu/R-Programming/master/mtcars.csv&#39;</span>                </span>
+<span id="cb2-2"><a href="#cb2-2"></a>df &lt;-<span class="st"> </span><span class="kw">read.csv</span>(PATH, <span class="dt">header =</span>  <span class="ot">TRUE</span>, <span class="dt">sep =</span> <span class="st">&#39;,&#39;</span>)</span>
+<span id="cb2-3"><a href="#cb2-3"></a><span class="kw">length</span>(df)</span></code></pre></div>
 <pre><code>## [1] 12</code></pre>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb4-1" data-line-number="1"><span class="kw">class</span>(df<span class="op">$</span>X)</a></code></pre></div>
-<pre><code>## [1] &quot;factor&quot;</code></pre>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw">class</span>(df<span class="op">$</span>X)</span></code></pre></div>
+<pre><code>## [1] &quot;character&quot;</code></pre>
 <p>R, by default, returns character values as Factor. We can turn off this setting by adding stringsAsFactors = FALSE.</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1">PATH &lt;-<span class="st"> &#39;https://raw.githubusercontent.com/guru99-edu/R-Programming/master/mtcars.csv&#39;</span></a>
-<a class="sourceLine" id="cb6-2" data-line-number="2">df &lt;-<span class="kw">read.csv</span>(PATH, <span class="dt">header =</span><span class="ot">TRUE</span>, <span class="dt">sep =</span> <span class="st">&#39;,&#39;</span>, <span class="dt">stringsAsFactors =</span><span class="ot">FALSE</span>)</a>
-<a class="sourceLine" id="cb6-3" data-line-number="3"><span class="kw">class</span>(df<span class="op">$</span>X)</a></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a>PATH &lt;-<span class="st"> &#39;https://raw.githubusercontent.com/guru99-edu/R-Programming/master/mtcars.csv&#39;</span></span>
+<span id="cb6-2"><a href="#cb6-2"></a>df &lt;-<span class="kw">read.csv</span>(PATH, <span class="dt">header =</span><span class="ot">TRUE</span>, <span class="dt">sep =</span> <span class="st">&#39;,&#39;</span>, <span class="dt">stringsAsFactors =</span><span class="ot">FALSE</span>)</span>
+<span id="cb6-3"><a href="#cb6-3"></a><span class="kw">class</span>(df<span class="op">$</span>X)</span></code></pre></div>
 <pre><code>## [1] &quot;character&quot;</code></pre>
 <p>The class for the variable X is now a character.</p>
 </div>
@@ -681,53 +698,52 @@ div.tocify {
 <h1>Read Excel files</h1>
 <p>Excel files are very popular among data analysts. Spreadsheets are easy to work with and flexible. R is equipped with a library readxl to import Excel spreadsheet.</p>
 <p>Use this code</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="kw">require</span>(readxl)</a></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a><span class="kw">require</span>(readxl)</span></code></pre></div>
 <pre><code>## Loading required package: readxl</code></pre>
 <p>to check if readxl is installed in your machine. If you install r with r-conda-essential, the library is already installed. You should see in the command window:</p>
 <p>If the package does not exit, you can install it with the conda library or in the terminal, use conda install -c mittner r-readxl.</p>
 <p>Use the following command to load the library to import excel files.</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb10-1" data-line-number="1"><span class="kw">library</span>(readxl)</a></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a><span class="kw">library</span>(readxl)</span></code></pre></div>
 </div>
 <div id="readxl_example" class="section level1">
 <h1>readxl_example()</h1>
 <p>We use the examples included in the package readxl during this tutorial.</p>
 <p>Use code</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb11-1" data-line-number="1"><span class="kw">readxl_example</span>()</a></code></pre></div>
-<pre><code>##  [1] &quot;clippy.xls&quot;    &quot;clippy.xlsx&quot;   &quot;datasets.xls&quot;  &quot;datasets.xlsx&quot;
-##  [5] &quot;deaths.xls&quot;    &quot;deaths.xlsx&quot;   &quot;geometry.xls&quot;  &quot;geometry.xlsx&quot;
-##  [9] &quot;type-me.xls&quot;   &quot;type-me.xlsx&quot;</code></pre>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a><span class="kw">readxl_example</span>()</span></code></pre></div>
+<pre><code>##  [1] &quot;clippy.xls&quot;    &quot;clippy.xlsx&quot;   &quot;datasets.xls&quot;  &quot;datasets.xlsx&quot; &quot;deaths.xls&quot;    &quot;deaths.xlsx&quot;   &quot;geometry.xls&quot; 
+##  [8] &quot;geometry.xlsx&quot; &quot;type-me.xls&quot;   &quot;type-me.xlsx&quot;</code></pre>
 <p>to see all the available spreadsheets in the library.</p>
 <p>To check the location of the spreadsheet named clippy.xls, simple use</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb13-1" data-line-number="1"><span class="kw">readxl_example</span>(<span class="st">&quot;geometry.xls&quot;</span>)</a></code></pre></div>
-<pre><code>## [1] &quot;/Library/Frameworks/R.framework/Versions/3.6/Resources/library/readxl/extdata/geometry.xls&quot;</code></pre>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1"></a><span class="kw">readxl_example</span>(<span class="st">&quot;geometry.xls&quot;</span>)</span></code></pre></div>
+<pre><code>## [1] &quot;/Library/Frameworks/R.framework/Versions/4.0/Resources/library/readxl/extdata/geometry.xls&quot;</code></pre>
 </div>
 <div id="read_excel" class="section level1">
 <h1>read_excel()</h1>
 <p>The function read_excel() is of great use when it comes to opening xls and xlsx extention.</p>
 <p>The syntax is:</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb15-1" data-line-number="1"><span class="kw">read_excel</span>(PATH, <span class="dt">sheet =</span> <span class="ot">NULL</span>, <span class="dt">range =</span> <span class="ot">NULL</span>, <span class="dt">col_names =</span> <span class="ot">TRUE</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1"></a><span class="kw">read_excel</span>(PATH, <span class="dt">sheet =</span> <span class="ot">NULL</span>, <span class="dt">range =</span> <span class="ot">NULL</span>, <span class="dt">col_names =</span> <span class="ot">TRUE</span>)</span></code></pre></div>
 <p>Arguments:</p>
 <p>-PATH: Path where the excel is located -sheet: Select the sheet to import. By default, all -range: Select the range to import. By default, all non-null cells -col_names: Select the columns to import. By default, all non-null columns</p>
 <p>We can import the spreadsheets from the readxl library and count the number of columns in the first sheet.</p>
-<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb16-1" data-line-number="1"><span class="co"># Store the path of `datasets.xlsx`</span></a>
-<a class="sourceLine" id="cb16-2" data-line-number="2">example &lt;-<span class="st"> </span><span class="kw">readxl_example</span>(<span class="st">&quot;datasets.xlsx&quot;</span>)</a>
-<a class="sourceLine" id="cb16-3" data-line-number="3"><span class="co"># Import the spreadsheet</span></a>
-<a class="sourceLine" id="cb16-4" data-line-number="4">df &lt;-<span class="st"> </span><span class="kw">read_excel</span>(example)</a>
-<a class="sourceLine" id="cb16-5" data-line-number="5"><span class="co"># Count the number of columns</span></a>
-<a class="sourceLine" id="cb16-6" data-line-number="6"><span class="kw">length</span>(df)</a></code></pre></div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1"></a><span class="co"># Store the path of `datasets.xlsx`</span></span>
+<span id="cb16-2"><a href="#cb16-2"></a>example &lt;-<span class="st"> </span><span class="kw">readxl_example</span>(<span class="st">&quot;datasets.xlsx&quot;</span>)</span>
+<span id="cb16-3"><a href="#cb16-3"></a><span class="co"># Import the spreadsheet</span></span>
+<span id="cb16-4"><a href="#cb16-4"></a>df &lt;-<span class="st"> </span><span class="kw">read_excel</span>(example)</span>
+<span id="cb16-5"><a href="#cb16-5"></a><span class="co"># Count the number of columns</span></span>
+<span id="cb16-6"><a href="#cb16-6"></a><span class="kw">length</span>(df)</span></code></pre></div>
 <pre><code>## [1] 5</code></pre>
 </div>
 <div id="excel_sheets" class="section level1">
 <h1>excel_sheets()</h1>
 <p>The file datasets.xlsx is composed of 4 sheets. We can find out which sheets are available in the workbook by using excel_sheets() function</p>
-<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb18-1" data-line-number="1">example &lt;-<span class="st"> </span><span class="kw">readxl_example</span>(<span class="st">&quot;datasets.xlsx&quot;</span>)</a>
-<a class="sourceLine" id="cb18-2" data-line-number="2"><span class="kw">excel_sheets</span>(example)</a></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1"></a>example &lt;-<span class="st"> </span><span class="kw">readxl_example</span>(<span class="st">&quot;datasets.xlsx&quot;</span>)</span>
+<span id="cb18-2"><a href="#cb18-2"></a><span class="kw">excel_sheets</span>(example)</span></code></pre></div>
 <pre><code>## [1] &quot;iris&quot;     &quot;mtcars&quot;   &quot;chickwts&quot; &quot;quakes&quot;</code></pre>
 <p>If a worksheet includes many sheets, it is easy to select a particular sheet by using the sheet arguments. We can specify the name of the sheet or the sheet index. We can verify if both function returns the same output with identical().</p>
-<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb20-1" data-line-number="1">example &lt;-<span class="st"> </span><span class="kw">readxl_example</span>(<span class="st">&quot;datasets.xlsx&quot;</span>)</a>
-<a class="sourceLine" id="cb20-2" data-line-number="2">quake &lt;-<span class="st"> </span><span class="kw">read_excel</span>(example, <span class="dt">sheet =</span> <span class="st">&quot;quakes&quot;</span>)</a>
-<a class="sourceLine" id="cb20-3" data-line-number="3">quake_<span class="dv">1</span> &lt;-<span class="kw">read_excel</span>(example, <span class="dt">sheet =</span> <span class="dv">4</span>)</a>
-<a class="sourceLine" id="cb20-4" data-line-number="4"><span class="kw">identical</span>(quake, quake_<span class="dv">1</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1"></a>example &lt;-<span class="st"> </span><span class="kw">readxl_example</span>(<span class="st">&quot;datasets.xlsx&quot;</span>)</span>
+<span id="cb20-2"><a href="#cb20-2"></a>quake &lt;-<span class="st"> </span><span class="kw">read_excel</span>(example, <span class="dt">sheet =</span> <span class="st">&quot;quakes&quot;</span>)</span>
+<span id="cb20-3"><a href="#cb20-3"></a>quake_<span class="dv">1</span> &lt;-<span class="kw">read_excel</span>(example, <span class="dt">sheet =</span> <span class="dv">4</span>)</span>
+<span id="cb20-4"><a href="#cb20-4"></a><span class="kw">identical</span>(quake, quake_<span class="dv">1</span>)</span></code></pre></div>
 <pre><code>## [1] TRUE</code></pre>
 <p>We can control what cells to read in 2 ways</p>
 <ol style="list-style-type: decimal">
@@ -735,9 +751,9 @@ div.tocify {
 <li>Use range argument combined with cell_rows or cell_cols</li>
 </ol>
 <p>For example, we set n_max equals to 5 to import the first five rows.</p>
-<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb22-1" data-line-number="1"><span class="co"># Read the first five row: with header</span></a>
-<a class="sourceLine" id="cb22-2" data-line-number="2">iris &lt;-<span class="st"> </span><span class="kw">read_excel</span>(example, <span class="dt">n_max =</span> <span class="dv">5</span>, <span class="dt">col_names =</span> <span class="ot">TRUE</span>)</a>
-<a class="sourceLine" id="cb22-3" data-line-number="3">iris</a></code></pre></div>
+<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1"></a><span class="co"># Read the first five row: with header</span></span>
+<span id="cb22-2"><a href="#cb22-2"></a>iris &lt;-<span class="st"> </span><span class="kw">read_excel</span>(example, <span class="dt">n_max =</span> <span class="dv">5</span>, <span class="dt">col_names =</span> <span class="ot">TRUE</span>)</span>
+<span id="cb22-3"><a href="#cb22-3"></a>iris</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -860,26 +876,26 @@ setosa
 <img src="imgblock14/img1.png" />
 </p>
 <p>We can also use the argument range to select rows and columns in the spreadsheet. In the code below, we use the excel style to select the range A1 to B5.</p>
-<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb24-1" data-line-number="1"><span class="co"># Read rows A1 to B5</span></a>
-<a class="sourceLine" id="cb24-2" data-line-number="2">example_<span class="dv">1</span> &lt;-<span class="kw">read_excel</span>(example, <span class="dt">range =</span> <span class="st">&quot;A1:B5&quot;</span>, <span class="dt">col_names =</span><span class="ot">TRUE</span>)</a>
-<a class="sourceLine" id="cb24-3" data-line-number="3"><span class="kw">dim</span>(example_<span class="dv">1</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1"></a><span class="co"># Read rows A1 to B5</span></span>
+<span id="cb24-2"><a href="#cb24-2"></a>example_<span class="dv">1</span> &lt;-<span class="kw">read_excel</span>(example, <span class="dt">range =</span> <span class="st">&quot;A1:B5&quot;</span>, <span class="dt">col_names =</span><span class="ot">TRUE</span>)</span>
+<span id="cb24-3"><a href="#cb24-3"></a><span class="kw">dim</span>(example_<span class="dv">1</span>)</span></code></pre></div>
 <pre><code>## [1] 4 2</code></pre>
 <p>We can see that the example_1 returns 4 rows with 2 columns. The dataset has header, that the reason the dimension is 4x2.</p>
 <p align="center">
 <img src="imgblock14/img2.png" />
 </p>
 <p>In the second example, we use the function cell_rows() which controls the range of rows to return. If we want to import the rows 1 to 5, we can set cell_rows(1:5). Note that, cell_rows(1:5) returns the same output as cell_rows(5:1).</p>
-<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb26-1" data-line-number="1"><span class="co"># Read rows 1 to 5</span></a>
-<a class="sourceLine" id="cb26-2" data-line-number="2">example_<span class="dv">2</span> &lt;-<span class="kw">read_excel</span>(example, <span class="dt">range =</span><span class="kw">cell_rows</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">5</span>),<span class="dt">col_names =</span><span class="ot">TRUE</span>)          </a>
-<a class="sourceLine" id="cb26-3" data-line-number="3"><span class="kw">dim</span>(example_<span class="dv">2</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1"></a><span class="co"># Read rows 1 to 5</span></span>
+<span id="cb26-2"><a href="#cb26-2"></a>example_<span class="dv">2</span> &lt;-<span class="kw">read_excel</span>(example, <span class="dt">range =</span><span class="kw">cell_rows</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">5</span>),<span class="dt">col_names =</span><span class="ot">TRUE</span>)          </span>
+<span id="cb26-3"><a href="#cb26-3"></a><span class="kw">dim</span>(example_<span class="dv">2</span>)</span></code></pre></div>
 <pre><code>## [1] 4 5</code></pre>
 <p>The example_2 however is a 4x5 matrix. The iris dataset has 5 columns with header. We return the first four rows with header of all columns</p>
 <p align="center">
 <img src="imgblock14/img3.png" />
 </p>
 <p>In case we want to import rows which do not begin at the first row, we have to include col_names = FALSE. If we use range = cell_rows(2:5), it becomes obvious our data frame does not have header anymore.</p>
-<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb28-1" data-line-number="1">iris_row_with_header &lt;-<span class="st"> </span><span class="kw">read_excel</span>(example, <span class="dt">range =</span> <span class="kw">cell_rows</span>(<span class="dv">2</span><span class="op">:</span><span class="dv">3</span>), <span class="dt">col_names =</span> <span class="ot">TRUE</span>)</a>
-<a class="sourceLine" id="cb28-2" data-line-number="2">iris_row_no_header &lt;-<span class="st"> </span><span class="kw">read_excel</span>(example, <span class="dt">range =</span> <span class="kw">cell_rows</span>(<span class="dv">2</span><span class="op">:</span><span class="dv">3</span>), <span class="dt">col_names =</span> <span class="ot">FALSE</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1"></a>iris_row_with_header &lt;-<span class="st"> </span><span class="kw">read_excel</span>(example, <span class="dt">range =</span> <span class="kw">cell_rows</span>(<span class="dv">2</span><span class="op">:</span><span class="dv">3</span>), <span class="dt">col_names =</span> <span class="ot">TRUE</span>)</span>
+<span id="cb28-2"><a href="#cb28-2"></a>iris_row_no_header &lt;-<span class="st"> </span><span class="kw">read_excel</span>(example, <span class="dt">range =</span> <span class="kw">cell_rows</span>(<span class="dv">2</span><span class="op">:</span><span class="dv">3</span>), <span class="dt">col_names =</span> <span class="ot">FALSE</span>)</span></code></pre></div>
 <pre><code>## New names:
 ## * `` -&gt; ...1
 ## * `` -&gt; ...2
@@ -890,19 +906,19 @@ setosa
 <img src="imgblock14/img4.png" />
 </p>
 <p>We can select the columns with the letter, like in Excel.</p>
-<div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb30-1" data-line-number="1"><span class="co"># Select columns A and B</span></a>
-<a class="sourceLine" id="cb30-2" data-line-number="2">col &lt;-<span class="kw">read_excel</span>(example, <span class="dt">range =</span><span class="kw">cell_cols</span>(<span class="st">&quot;A:B&quot;</span>))</a>
-<a class="sourceLine" id="cb30-3" data-line-number="3"><span class="kw">dim</span>(col)</a></code></pre></div>
+<div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1"></a><span class="co"># Select columns A and B</span></span>
+<span id="cb30-2"><a href="#cb30-2"></a>col &lt;-<span class="kw">read_excel</span>(example, <span class="dt">range =</span><span class="kw">cell_cols</span>(<span class="st">&quot;A:B&quot;</span>))</span>
+<span id="cb30-3"><a href="#cb30-3"></a><span class="kw">dim</span>(col)</span></code></pre></div>
 <pre><code>## [1] 150   2</code></pre>
-<p><strong>Note:</strong> <code>range = cell_cols(&quot;A:B&quot;)</code>, returns output all cells with non-null value. The dataset contains 150 rows, therefore, read_excel() returns rows up to 150. This is verified with the dim() function.</p>
+<p><strong>Note:</strong> <code>range = cell_cols("A:B")</code>, returns output all cells with non-null value. The dataset contains 150 rows, therefore, read_excel() returns rows up to 150. This is verified with the dim() function.</p>
 <p>read_excel() returns NA when a symbol without numerical value appears in the cell. We can count the number of missing values with the combination of two functions</p>
 <ul>
 <li>sum</li>
 <li>is.na</li>
 </ul>
 <p>Here is the code</p>
-<div class="sourceCode" id="cb32"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb32-1" data-line-number="1">iris_na &lt;-<span class="st"> </span><span class="kw">read_excel</span>(example, <span class="dt">na =</span> <span class="st">&quot;setosa&quot;</span>)</a>
-<a class="sourceLine" id="cb32-2" data-line-number="2"><span class="kw">sum</span>(<span class="kw">is.na</span>(iris_na))</a></code></pre></div>
+<div class="sourceCode" id="cb32"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1"></a>iris_na &lt;-<span class="st"> </span><span class="kw">read_excel</span>(example, <span class="dt">na =</span> <span class="st">&quot;setosa&quot;</span>)</span>
+<span id="cb32-2"><a href="#cb32-2"></a><span class="kw">sum</span>(<span class="kw">is.na</span>(iris_na))</span></code></pre></div>
 <pre><code>## [1] 50</code></pre>
 <p>We have 50 values missing, which are the rows belonging to the setosa species.</p>
 </div>
@@ -919,9 +935,9 @@ setosa
 <div id="read-sas" class="section level1">
 <h1>Read sas</h1>
 <p>For our example, we are going to use the admission dataset from IDRE.</p>
-<div class="sourceCode" id="cb34"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb34-1" data-line-number="1">PATH_sas &lt;-<span class="st"> &#39;https://github.com/guru99-edu/R-Programming/blob/master/binary.sas7bdat?raw=true&#39;</span></a>
-<a class="sourceLine" id="cb34-2" data-line-number="2">df &lt;-<span class="st"> </span><span class="kw">read_sas</span>(PATH_sas)</a>
-<a class="sourceLine" id="cb34-3" data-line-number="3"><span class="kw">head</span>(df)</a></code></pre></div>
+<div class="sourceCode" id="cb34"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb34-1"><a href="#cb34-1"></a>PATH_sas &lt;-<span class="st"> &#39;https://github.com/guru99-edu/R-Programming/blob/master/binary.sas7bdat?raw=true&#39;</span></span>
+<span id="cb34-2"><a href="#cb34-2"></a>df &lt;-<span class="st"> </span><span class="kw">read_sas</span>(PATH_sas)</span>
+<span id="cb34-3"><a href="#cb34-3"></a><span class="kw">head</span>(df)</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -1033,9 +1049,9 @@ RANK
 <div id="read-stata" class="section level1">
 <h1>Read STATA</h1>
 <p>For STATA data files you can use read_dta(). We use exactly the same dataset but store in .dta file.</p>
-<div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb35-1" data-line-number="1">PATH_stata &lt;-<span class="st"> &#39;https://github.com/guru99-edu/R-Programming/blob/master/binary.dta?raw=true&#39;</span></a>
-<a class="sourceLine" id="cb35-2" data-line-number="2">df &lt;-<span class="st"> </span><span class="kw">read_dta</span>(PATH_stata)</a>
-<a class="sourceLine" id="cb35-3" data-line-number="3"><span class="kw">head</span>(df)</a></code></pre></div>
+<div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1"></a>PATH_stata &lt;-<span class="st"> &#39;https://github.com/guru99-edu/R-Programming/blob/master/binary.dta?raw=true&#39;</span></span>
+<span id="cb35-2"><a href="#cb35-2"></a>df &lt;-<span class="st"> </span><span class="kw">read_dta</span>(PATH_stata)</span>
+<span id="cb35-3"><a href="#cb35-3"></a><span class="kw">head</span>(df)</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -1147,9 +1163,9 @@ rank
 <div id="read-spss" class="section level1">
 <h1>Read SPSS</h1>
 <p>We use the read_sav()function to open a SPSS file. The file extension “.sav”</p>
-<div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb36-1" data-line-number="1">PATH_spss &lt;-<span class="st"> &#39;https://github.com/guru99-edu/R-Programming/blob/master/binary.sav?raw=true&#39;</span></a>
-<a class="sourceLine" id="cb36-2" data-line-number="2">df &lt;-<span class="st"> </span><span class="kw">read_sav</span>(PATH_spss)</a>
-<a class="sourceLine" id="cb36-3" data-line-number="3"><span class="kw">head</span>(df)</a></code></pre></div>
+<div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb36-1"><a href="#cb36-1"></a>PATH_spss &lt;-<span class="st"> &#39;https://github.com/guru99-edu/R-Programming/blob/master/binary.sav?raw=true&#39;</span></span>
+<span id="cb36-2"><a href="#cb36-2"></a>df &lt;-<span class="st"> </span><span class="kw">read_sav</span>(PATH_spss)</span>
+<span id="cb36-3"><a href="#cb36-3"></a><span class="kw">head</span>(df)</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -1455,7 +1471,7 @@ range = cell_cols(“A:C”)
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();
@@ -1494,7 +1510,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0

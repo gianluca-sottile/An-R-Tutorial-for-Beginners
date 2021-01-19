@@ -23,6 +23,7 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -118,12 +119,21 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -133,14 +143,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -149,9 +161,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -238,6 +250,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -518,21 +531,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -620,6 +633,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -648,7 +664,7 @@ div.tocify {
 <hr />
 <p>A full match returns values that have a counterpart in the destination table. The values that are not match won’t be return in the new data frame. The partial match, however, return the missing values as NA.</p>
 <p>We will see a simple <strong>inner join</strong>. The inner join keyword selects records that have matching values in both tables. To join two datasets, we can use <code>merge()</code> function. We will use three arguments :</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="kw">merge</span>(x, y, <span class="dt">by.x =</span> x, <span class="dt">by.y =</span> y)</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">merge</span>(x, y, <span class="dt">by.x =</span> x, <span class="dt">by.y =</span> y)</span></code></pre></div>
 <p><strong>Arguments:</strong></p>
 <ul>
 <li>x: The origin data frame</li>
@@ -661,33 +677,33 @@ div.tocify {
 <p>Create Second Dataset with variables + surname + movies</p>
 <p>The common key variable is surname. We can merge both data and check if the dimensionality is 7x3.</p>
 <p>We add <code>stringsAsFactors = FALSE</code> in the data frame because we don’t want R to convert string as factor, we want the variable to be treated as character.</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" data-line-number="1"><span class="co"># Create origin dataframe(</span></a>
-<a class="sourceLine" id="cb2-2" data-line-number="2"></a>
-<a class="sourceLine" id="cb2-3" data-line-number="3">producers &lt;-<span class="st"> </span><span class="kw">data.frame</span>(   </a>
-<a class="sourceLine" id="cb2-4" data-line-number="4">    <span class="dt">surname =</span>  <span class="kw">c</span>(<span class="st">&quot;Spielberg&quot;</span>,<span class="st">&quot;Scorsese&quot;</span>,<span class="st">&quot;Hitchcock&quot;</span>,<span class="st">&quot;Tarantino&quot;</span>,<span class="st">&quot;Polanski&quot;</span>),    </a>
-<a class="sourceLine" id="cb2-5" data-line-number="5">    <span class="dt">nationality =</span> <span class="kw">c</span>(<span class="st">&quot;US&quot;</span>,<span class="st">&quot;US&quot;</span>,<span class="st">&quot;UK&quot;</span>,<span class="st">&quot;US&quot;</span>,<span class="st">&quot;Poland&quot;</span>),    </a>
-<a class="sourceLine" id="cb2-6" data-line-number="6">    <span class="dt">stringsAsFactors=</span><span class="ot">FALSE</span>)</a>
-<a class="sourceLine" id="cb2-7" data-line-number="7"></a>
-<a class="sourceLine" id="cb2-8" data-line-number="8"><span class="co"># Create destination dataframe</span></a>
-<a class="sourceLine" id="cb2-9" data-line-number="9">movies &lt;-<span class="st"> </span><span class="kw">data.frame</span>(    </a>
-<a class="sourceLine" id="cb2-10" data-line-number="10">    <span class="dt">surname =</span> <span class="kw">c</span>(<span class="st">&quot;Spielberg&quot;</span>,</a>
-<a class="sourceLine" id="cb2-11" data-line-number="11">        <span class="st">&quot;Scorsese&quot;</span>,</a>
-<a class="sourceLine" id="cb2-12" data-line-number="12">                <span class="st">&quot;Hitchcock&quot;</span>,</a>
-<a class="sourceLine" id="cb2-13" data-line-number="13">                <span class="st">&quot;Hitchcock&quot;</span>,</a>
-<a class="sourceLine" id="cb2-14" data-line-number="14">                <span class="st">&quot;Spielberg&quot;</span>,</a>
-<a class="sourceLine" id="cb2-15" data-line-number="15">                <span class="st">&quot;Tarantino&quot;</span>,</a>
-<a class="sourceLine" id="cb2-16" data-line-number="16">                <span class="st">&quot;Polanski&quot;</span>),    </a>
-<a class="sourceLine" id="cb2-17" data-line-number="17">    <span class="dt">title =</span> <span class="kw">c</span>(<span class="st">&quot;Super 8&quot;</span>,</a>
-<a class="sourceLine" id="cb2-18" data-line-number="18">            <span class="st">&quot;Taxi Driver&quot;</span>,</a>
-<a class="sourceLine" id="cb2-19" data-line-number="19">            <span class="st">&quot;Psycho&quot;</span>,</a>
-<a class="sourceLine" id="cb2-20" data-line-number="20">            <span class="st">&quot;North by Northwest&quot;</span>,</a>
-<a class="sourceLine" id="cb2-21" data-line-number="21">            <span class="st">&quot;Catch Me If You Can&quot;</span>,</a>
-<a class="sourceLine" id="cb2-22" data-line-number="22">            <span class="st">&quot;Reservoir Dogs&quot;</span>,<span class="st">&quot;Chinatown&quot;</span>),                </a>
-<a class="sourceLine" id="cb2-23" data-line-number="23">            <span class="dt">stringsAsFactors=</span><span class="ot">FALSE</span>)</a>
-<a class="sourceLine" id="cb2-24" data-line-number="24"></a>
-<a class="sourceLine" id="cb2-25" data-line-number="25"><span class="co"># Merge two datasets</span></a>
-<a class="sourceLine" id="cb2-26" data-line-number="26">m1 &lt;-<span class="st"> </span><span class="kw">merge</span>(producers, movies, <span class="dt">by.x =</span> <span class="st">&quot;surname&quot;</span>)</a>
-<a class="sourceLine" id="cb2-27" data-line-number="27">m1</a></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="co"># Create origin dataframe(</span></span>
+<span id="cb2-2"><a href="#cb2-2"></a></span>
+<span id="cb2-3"><a href="#cb2-3"></a>producers &lt;-<span class="st"> </span><span class="kw">data.frame</span>(   </span>
+<span id="cb2-4"><a href="#cb2-4"></a>    <span class="dt">surname =</span>  <span class="kw">c</span>(<span class="st">&quot;Spielberg&quot;</span>,<span class="st">&quot;Scorsese&quot;</span>,<span class="st">&quot;Hitchcock&quot;</span>,<span class="st">&quot;Tarantino&quot;</span>,<span class="st">&quot;Polanski&quot;</span>),    </span>
+<span id="cb2-5"><a href="#cb2-5"></a>    <span class="dt">nationality =</span> <span class="kw">c</span>(<span class="st">&quot;US&quot;</span>,<span class="st">&quot;US&quot;</span>,<span class="st">&quot;UK&quot;</span>,<span class="st">&quot;US&quot;</span>,<span class="st">&quot;Poland&quot;</span>),    </span>
+<span id="cb2-6"><a href="#cb2-6"></a>    <span class="dt">stringsAsFactors=</span><span class="ot">FALSE</span>)</span>
+<span id="cb2-7"><a href="#cb2-7"></a></span>
+<span id="cb2-8"><a href="#cb2-8"></a><span class="co"># Create destination dataframe</span></span>
+<span id="cb2-9"><a href="#cb2-9"></a>movies &lt;-<span class="st"> </span><span class="kw">data.frame</span>(    </span>
+<span id="cb2-10"><a href="#cb2-10"></a>    <span class="dt">surname =</span> <span class="kw">c</span>(<span class="st">&quot;Spielberg&quot;</span>,</span>
+<span id="cb2-11"><a href="#cb2-11"></a>        <span class="st">&quot;Scorsese&quot;</span>,</span>
+<span id="cb2-12"><a href="#cb2-12"></a>                <span class="st">&quot;Hitchcock&quot;</span>,</span>
+<span id="cb2-13"><a href="#cb2-13"></a>                <span class="st">&quot;Hitchcock&quot;</span>,</span>
+<span id="cb2-14"><a href="#cb2-14"></a>                <span class="st">&quot;Spielberg&quot;</span>,</span>
+<span id="cb2-15"><a href="#cb2-15"></a>                <span class="st">&quot;Tarantino&quot;</span>,</span>
+<span id="cb2-16"><a href="#cb2-16"></a>                <span class="st">&quot;Polanski&quot;</span>),    </span>
+<span id="cb2-17"><a href="#cb2-17"></a>    <span class="dt">title =</span> <span class="kw">c</span>(<span class="st">&quot;Super 8&quot;</span>,</span>
+<span id="cb2-18"><a href="#cb2-18"></a>            <span class="st">&quot;Taxi Driver&quot;</span>,</span>
+<span id="cb2-19"><a href="#cb2-19"></a>            <span class="st">&quot;Psycho&quot;</span>,</span>
+<span id="cb2-20"><a href="#cb2-20"></a>            <span class="st">&quot;North by Northwest&quot;</span>,</span>
+<span id="cb2-21"><a href="#cb2-21"></a>            <span class="st">&quot;Catch Me If You Can&quot;</span>,</span>
+<span id="cb2-22"><a href="#cb2-22"></a>            <span class="st">&quot;Reservoir Dogs&quot;</span>,<span class="st">&quot;Chinatown&quot;</span>),                </span>
+<span id="cb2-23"><a href="#cb2-23"></a>            <span class="dt">stringsAsFactors=</span><span class="ot">FALSE</span>)</span>
+<span id="cb2-24"><a href="#cb2-24"></a></span>
+<span id="cb2-25"><a href="#cb2-25"></a><span class="co"># Merge two datasets</span></span>
+<span id="cb2-26"><a href="#cb2-26"></a>m1 &lt;-<span class="st"> </span><span class="kw">merge</span>(producers, movies, <span class="dt">by.x =</span> <span class="st">&quot;surname&quot;</span>)</span>
+<span id="cb2-27"><a href="#cb2-27"></a>m1</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -785,16 +801,16 @@ Reservoir Dogs
 </tbody>
 </table>
 </div>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" data-line-number="1"><span class="kw">dim</span>(m1)</a></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a><span class="kw">dim</span>(m1)</span></code></pre></div>
 <pre><code>## [1] 7 3</code></pre>
 <p>Let’s merge data frames when the common key variables have different names.</p>
 <p>We change surname to name in the movies data frame. We use the function <code>identical(x1, x2)</code> to check if both dataframes are identical.</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1"><span class="co"># Change name of ` movies ` dataframe</span></a>
-<a class="sourceLine" id="cb5-2" data-line-number="2"><span class="kw">colnames</span>(movies)[<span class="kw">colnames</span>(movies) <span class="op">==</span><span class="st"> &#39;surname&#39;</span>] &lt;-<span class="st"> &#39;name&#39;</span></a>
-<a class="sourceLine" id="cb5-3" data-line-number="3"><span class="co"># Merge with different key value</span></a>
-<a class="sourceLine" id="cb5-4" data-line-number="4">m2 &lt;-<span class="st"> </span><span class="kw">merge</span>(producers, movies, <span class="dt">by.x =</span> <span class="st">&quot;surname&quot;</span>, <span class="dt">by.y =</span> <span class="st">&quot;name&quot;</span>)</a>
-<a class="sourceLine" id="cb5-5" data-line-number="5"><span class="co"># Print head of the data</span></a>
-<a class="sourceLine" id="cb5-6" data-line-number="6"><span class="kw">head</span>(m2)</a></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a><span class="co"># Change name of ` movies ` dataframe</span></span>
+<span id="cb5-2"><a href="#cb5-2"></a><span class="kw">colnames</span>(movies)[<span class="kw">colnames</span>(movies) <span class="op">==</span><span class="st"> &#39;surname&#39;</span>] &lt;-<span class="st"> &#39;name&#39;</span></span>
+<span id="cb5-3"><a href="#cb5-3"></a><span class="co"># Merge with different key value</span></span>
+<span id="cb5-4"><a href="#cb5-4"></a>m2 &lt;-<span class="st"> </span><span class="kw">merge</span>(producers, movies, <span class="dt">by.x =</span> <span class="st">&quot;surname&quot;</span>, <span class="dt">by.y =</span> <span class="st">&quot;name&quot;</span>)</span>
+<span id="cb5-5"><a href="#cb5-5"></a><span class="co"># Print head of the data</span></span>
+<span id="cb5-6"><a href="#cb5-6"></a><span class="kw">head</span>(m2)</span></code></pre></div>
 <div class="kable-table">
 
 <table>
@@ -881,8 +897,8 @@ Catch Me If You Can
 </tbody>
 </table>
 </div>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="co"># Check if data are identical</span></a>
-<a class="sourceLine" id="cb6-2" data-line-number="2"><span class="kw">identical</span>(m1, m2)</a></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a><span class="co"># Check if data are identical</span></span>
+<span id="cb6-2"><a href="#cb6-2"></a><span class="kw">identical</span>(m1, m2)</span></code></pre></div>
 <pre><code>## [1] TRUE</code></pre>
 <p>This shows that merge operation is performed even if the column names are different.</p>
 </div>
@@ -892,22 +908,22 @@ Catch Me If You Can
 <p>It is not surprising that two dataframes do not have the same common key variables. In the <strong>full matching</strong>, the dataframe returns <strong>only</strong> rows found in both x and y data frame. With <strong>partial merging</strong>, it is possible to keep the rows with no matching rows in the other data frame. These rows will have NA in those columns that are usually filled with values from y. We can do that by setting <code>all.x = TRUE</code>.</p>
 <p>For instance, we can add a new producer, Lucas, in the producer data frame without the movie references in movies data frame. If we set <code>all.x = FALSE</code>, R will join only the matching values in both data set. In our case, the producer Lucas will not be join to the merge because it is missing from one dataset.</p>
 <p>Let’s see the dimension of each output when we specify all.x= TRUE and when we don’t.</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="co"># Create a new producer</span></a>
-<a class="sourceLine" id="cb8-2" data-line-number="2">add_producer &lt;-<span class="st">  </span><span class="kw">c</span>(<span class="st">&#39;Lucas&#39;</span>, <span class="st">&#39;US&#39;</span>)</a>
-<a class="sourceLine" id="cb8-3" data-line-number="3"><span class="co">#  Append it to the ` producer` dataframe</span></a>
-<a class="sourceLine" id="cb8-4" data-line-number="4">producers &lt;-<span class="st"> </span><span class="kw">rbind</span>(producers, add_producer)</a>
-<a class="sourceLine" id="cb8-5" data-line-number="5"><span class="co"># Use a partial merge </span></a>
-<a class="sourceLine" id="cb8-6" data-line-number="6">m3 &lt;-<span class="st"> </span><span class="kw">merge</span>(producers, movies, <span class="dt">by.x =</span> <span class="st">&quot;surname&quot;</span>, <span class="dt">by.y =</span> <span class="st">&quot;name&quot;</span>, <span class="dt">all.x =</span> <span class="ot">TRUE</span>)</a>
-<a class="sourceLine" id="cb8-7" data-line-number="7">m3</a></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a><span class="co"># Create a new producer</span></span>
+<span id="cb8-2"><a href="#cb8-2"></a>add_producer &lt;-<span class="st">  </span><span class="kw">c</span>(<span class="st">&#39;Lucas&#39;</span>, <span class="st">&#39;US&#39;</span>)</span>
+<span id="cb8-3"><a href="#cb8-3"></a><span class="co">#  Append it to the ` producer` dataframe</span></span>
+<span id="cb8-4"><a href="#cb8-4"></a>producers &lt;-<span class="st"> </span><span class="kw">rbind</span>(producers, add_producer)</span>
+<span id="cb8-5"><a href="#cb8-5"></a><span class="co"># Use a partial merge </span></span>
+<span id="cb8-6"><a href="#cb8-6"></a>m3 &lt;-<span class="st"> </span><span class="kw">merge</span>(producers, movies, <span class="dt">by.x =</span> <span class="st">&quot;surname&quot;</span>, <span class="dt">by.y =</span> <span class="st">&quot;name&quot;</span>, <span class="dt">all.x =</span> <span class="ot">TRUE</span>)</span>
+<span id="cb8-7"><a href="#cb8-7"></a>m3</span></code></pre></div>
 <p align="center">
 <img src="imgblock8/img1.png" />
 </p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" data-line-number="1"><span class="co"># Compare the dimension of each data frame</span></a>
-<a class="sourceLine" id="cb9-2" data-line-number="2"><span class="kw">dim</span>(m1)</a></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a><span class="co"># Compare the dimension of each data frame</span></span>
+<span id="cb9-2"><a href="#cb9-2"></a><span class="kw">dim</span>(m1)</span></code></pre></div>
 <pre><code>## [1] 7 3</code></pre>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb11-1" data-line-number="1"><span class="kw">dim</span>(m2)</a></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a><span class="kw">dim</span>(m2)</span></code></pre></div>
 <pre><code>## [1] 7 3</code></pre>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb13-1" data-line-number="1"><span class="kw">dim</span>(m3)</a></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1"></a><span class="kw">dim</span>(m3)</span></code></pre></div>
 <pre><code>## [1] 8 3</code></pre>
 <p>As we can see, the dimension of the new data frame 8x3 compared with 7x3 for m1 and m2. R includes NA for the missing author in the books data frame.</p>
 </div>
@@ -932,7 +948,7 @@ Catch Me If You Can
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();
@@ -971,7 +987,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0

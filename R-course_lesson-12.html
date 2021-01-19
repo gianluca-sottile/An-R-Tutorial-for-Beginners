@@ -23,6 +23,7 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -118,12 +119,21 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -133,14 +143,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -149,9 +161,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -238,6 +250,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -518,21 +531,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -620,6 +633,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -644,30 +660,30 @@ div.tocify {
 <div id="buttons" class="section level1 tabset tabset-fade tabset-pills">
 <h1>While Loop in R with Example</h1>
 <p>A loop is a statement that keeps running until a condition is satisfied. The syntax for a while loop is the following:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="cf">while</span> (condition) {</a>
-<a class="sourceLine" id="cb1-2" data-line-number="2">     Exp    </a>
-<a class="sourceLine" id="cb1-3" data-line-number="3">}</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="cf">while</span> (condition) {</span>
+<span id="cb1-2"><a href="#cb1-2"></a>     Exp    </span>
+<span id="cb1-3"><a href="#cb1-3"></a>}</span></code></pre></div>
 <p align="center">
-<img src="imgblock12/img1.png" alt="While Loop Flow Chart" />
+<img src="imgblock12/img1.png" title="fig:" alt="While Loop Flow Chart" />
 </p>
 <p><strong>Note:</strong> Remember to write a closing condition at some point otherwise the loop will go on indefinitely.</p>
 <div id="example-1" class="section level2">
 <h2>Example 1:</h2>
 <p>Let’s go through a very simple example to understand the concept of while loop. You will create a loop and after each run add 1 to the stored variable. You need to close the loop, therefore we explicitely tells R to stop looping when the variable reached 10.</p>
 <p><strong>Note:</strong> If you want to see current loop value, you need to wrap the variable inside the function print().</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" data-line-number="1"><span class="co">#Create a variable with value 1</span></a>
-<a class="sourceLine" id="cb2-2" data-line-number="2">begin &lt;-<span class="st"> </span><span class="dv">1</span></a>
-<a class="sourceLine" id="cb2-3" data-line-number="3"></a>
-<a class="sourceLine" id="cb2-4" data-line-number="4"><span class="co">#Create the loop</span></a>
-<a class="sourceLine" id="cb2-5" data-line-number="5"><span class="cf">while</span> (begin <span class="op">&lt;=</span><span class="st"> </span><span class="dv">10</span>){</a>
-<a class="sourceLine" id="cb2-6" data-line-number="6"></a>
-<a class="sourceLine" id="cb2-7" data-line-number="7"><span class="co">#See which we are  </span></a>
-<a class="sourceLine" id="cb2-8" data-line-number="8"><span class="kw">cat</span>(<span class="st">&#39;This is loop number&#39;</span>,begin)</a>
-<a class="sourceLine" id="cb2-9" data-line-number="9"></a>
-<a class="sourceLine" id="cb2-10" data-line-number="10"><span class="co">#add 1 to the variable begin after each loop</span></a>
-<a class="sourceLine" id="cb2-11" data-line-number="11">begin &lt;-<span class="st"> </span>begin<span class="op">+</span><span class="dv">1</span></a>
-<a class="sourceLine" id="cb2-12" data-line-number="12"><span class="kw">print</span>(begin)</a>
-<a class="sourceLine" id="cb2-13" data-line-number="13">}</a></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="co">#Create a variable with value 1</span></span>
+<span id="cb2-2"><a href="#cb2-2"></a>begin &lt;-<span class="st"> </span><span class="dv">1</span></span>
+<span id="cb2-3"><a href="#cb2-3"></a></span>
+<span id="cb2-4"><a href="#cb2-4"></a><span class="co">#Create the loop</span></span>
+<span id="cb2-5"><a href="#cb2-5"></a><span class="cf">while</span> (begin <span class="op">&lt;=</span><span class="st"> </span><span class="dv">10</span>){</span>
+<span id="cb2-6"><a href="#cb2-6"></a></span>
+<span id="cb2-7"><a href="#cb2-7"></a><span class="co">#See which we are  </span></span>
+<span id="cb2-8"><a href="#cb2-8"></a><span class="kw">cat</span>(<span class="st">&#39;This is loop number&#39;</span>,begin)</span>
+<span id="cb2-9"><a href="#cb2-9"></a></span>
+<span id="cb2-10"><a href="#cb2-10"></a><span class="co">#add 1 to the variable begin after each loop</span></span>
+<span id="cb2-11"><a href="#cb2-11"></a>begin &lt;-<span class="st"> </span>begin<span class="op">+</span><span class="dv">1</span></span>
+<span id="cb2-12"><a href="#cb2-12"></a><span class="kw">print</span>(begin)</span>
+<span id="cb2-13"><a href="#cb2-13"></a>}</span></code></pre></div>
 <pre><code>## This is loop number 1[1] 2
 ## This is loop number 2[1] 3
 ## This is loop number 3[1] 4
@@ -682,31 +698,31 @@ div.tocify {
 <div id="example-2" class="section level2">
 <h2>Example 2:</h2>
 <p>You bought a stock at price of 50 dollars. If the price goes below 45, we want to short it. Otherwise, we keep it in our portfolio. The price can fluctuate between -10 to +10 around 50 after each loop. You can write the code as follow:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb4-1" data-line-number="1"><span class="kw">set.seed</span>(<span class="dv">123</span>)</a>
-<a class="sourceLine" id="cb4-2" data-line-number="2"><span class="co"># Set variable stock and price</span></a>
-<a class="sourceLine" id="cb4-3" data-line-number="3">stock &lt;-<span class="st"> </span><span class="dv">50</span></a>
-<a class="sourceLine" id="cb4-4" data-line-number="4">price &lt;-<span class="st"> </span><span class="dv">50</span></a>
-<a class="sourceLine" id="cb4-5" data-line-number="5"></a>
-<a class="sourceLine" id="cb4-6" data-line-number="6"><span class="co"># Loop variable counts the number of loops </span></a>
-<a class="sourceLine" id="cb4-7" data-line-number="7">loop &lt;-<span class="st"> </span><span class="dv">1</span></a>
-<a class="sourceLine" id="cb4-8" data-line-number="8"></a>
-<a class="sourceLine" id="cb4-9" data-line-number="9"><span class="co"># Set the while statement</span></a>
-<a class="sourceLine" id="cb4-10" data-line-number="10"><span class="cf">while</span> (price <span class="op">&gt;</span><span class="st"> </span><span class="dv">45</span>){</a>
-<a class="sourceLine" id="cb4-11" data-line-number="11"></a>
-<a class="sourceLine" id="cb4-12" data-line-number="12"><span class="co"># Create a random price between 40 and 60</span></a>
-<a class="sourceLine" id="cb4-13" data-line-number="13">price &lt;-<span class="st"> </span>stock <span class="op">+</span><span class="st"> </span><span class="kw">sample</span>(<span class="op">-</span><span class="dv">10</span><span class="op">:</span><span class="dv">10</span>, <span class="dv">1</span>)</a>
-<a class="sourceLine" id="cb4-14" data-line-number="14"></a>
-<a class="sourceLine" id="cb4-15" data-line-number="15"><span class="co"># Count the number of loop</span></a>
-<a class="sourceLine" id="cb4-16" data-line-number="16">loop =<span class="st"> </span>loop <span class="op">+</span><span class="dv">1</span> </a>
-<a class="sourceLine" id="cb4-17" data-line-number="17"></a>
-<a class="sourceLine" id="cb4-18" data-line-number="18"><span class="co"># Print the number of loop</span></a>
-<a class="sourceLine" id="cb4-19" data-line-number="19"><span class="kw">print</span>(loop)</a>
-<a class="sourceLine" id="cb4-20" data-line-number="20">}</a></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw">set.seed</span>(<span class="dv">123</span>)</span>
+<span id="cb4-2"><a href="#cb4-2"></a><span class="co"># Set variable stock and price</span></span>
+<span id="cb4-3"><a href="#cb4-3"></a>stock &lt;-<span class="st"> </span><span class="dv">50</span></span>
+<span id="cb4-4"><a href="#cb4-4"></a>price &lt;-<span class="st"> </span><span class="dv">50</span></span>
+<span id="cb4-5"><a href="#cb4-5"></a></span>
+<span id="cb4-6"><a href="#cb4-6"></a><span class="co"># Loop variable counts the number of loops </span></span>
+<span id="cb4-7"><a href="#cb4-7"></a>loop &lt;-<span class="st"> </span><span class="dv">1</span></span>
+<span id="cb4-8"><a href="#cb4-8"></a></span>
+<span id="cb4-9"><a href="#cb4-9"></a><span class="co"># Set the while statement</span></span>
+<span id="cb4-10"><a href="#cb4-10"></a><span class="cf">while</span> (price <span class="op">&gt;</span><span class="st"> </span><span class="dv">45</span>){</span>
+<span id="cb4-11"><a href="#cb4-11"></a></span>
+<span id="cb4-12"><a href="#cb4-12"></a><span class="co"># Create a random price between 40 and 60</span></span>
+<span id="cb4-13"><a href="#cb4-13"></a>price &lt;-<span class="st"> </span>stock <span class="op">+</span><span class="st"> </span><span class="kw">sample</span>(<span class="op">-</span><span class="dv">10</span><span class="op">:</span><span class="dv">10</span>, <span class="dv">1</span>)</span>
+<span id="cb4-14"><a href="#cb4-14"></a></span>
+<span id="cb4-15"><a href="#cb4-15"></a><span class="co"># Count the number of loop</span></span>
+<span id="cb4-16"><a href="#cb4-16"></a>loop =<span class="st"> </span>loop <span class="op">+</span><span class="dv">1</span> </span>
+<span id="cb4-17"><a href="#cb4-17"></a></span>
+<span id="cb4-18"><a href="#cb4-18"></a><span class="co"># Print the number of loop</span></span>
+<span id="cb4-19"><a href="#cb4-19"></a><span class="kw">print</span>(loop)</span>
+<span id="cb4-20"><a href="#cb4-20"></a>}</span></code></pre></div>
 <pre><code>## [1] 2
 ## [1] 3
 ## [1] 4
 ## [1] 5</code></pre>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="kw">cat</span>(<span class="st">&#39;it took&#39;</span>,loop,<span class="st">&#39;loop before we short the price. The lowest price is&#39;</span>,price)</a></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a><span class="kw">cat</span>(<span class="st">&#39;it took&#39;</span>,loop,<span class="st">&#39;loop before we short the price. The lowest price is&#39;</span>,price)</span></code></pre></div>
 <pre><code>## it took 5 loop before we short the price. The lowest price is 42</code></pre>
 </div>
 </div>
@@ -731,7 +747,7 @@ div.tocify {
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();
@@ -770,7 +786,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0

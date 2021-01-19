@@ -23,7 +23,9 @@
 <link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
 <script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/accessible-code-block-0.0.1/empty-anchor.js"></script>
 <script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="site_libs/lightable-0.0.1/lightable.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
 <link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -119,12 +121,21 @@
 </body>
 </html>
 
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-a.sourceLine { display: inline-block; line-height: 1.25; }
-a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
-a.sourceLine:empty { height: 1.2em; }
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
@@ -134,14 +145,16 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 code.sourceCode { white-space: pre-wrap; }
-a.sourceLine { text-indent: -1em; padding-left: 1em; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
-pre.numberSource a.sourceLine
-  { position: relative; left: -4em; }
-pre.numberSource a.sourceLine::before
-  { content: attr(data-line-number);
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
     position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; pointer-events: all; display: inline-block;
+    border: none; display: inline-block;
     -webkit-touch-callout: none; -webkit-user-select: none;
     -khtml-user-select: none; -moz-user-select: none;
     -ms-user-select: none; user-select: none;
@@ -150,9 +163,9 @@ pre.numberSource a.sourceLine::before
   }
 pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
 div.sourceCode
-  {  }
+  {   }
 @media screen {
-a.sourceLine::before { text-decoration: underline; }
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -239,6 +252,7 @@ h6 {
   text-align: left;
 }
 </style>
+
 
 <link rel="stylesheet" href="style.css" type="text/css" />
 
@@ -519,21 +533,21 @@ div.tocify {
       <ul class="nav navbar-nav">
         <li>
   <a href="index.html">
-    <span class="fa fa-home"></span>
+    <span class="fas fa-home"></span>
      
     Home
   </a>
 </li>
 <li>
   <a href="about.html">
-    <span class="fa fa-info-circle"></span>
+    <span class="fas fa-info-circle"></span>
      
     About
   </a>
 </li>
 <li class="dropdown">
   <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-bars"></span>
+    <span class="fas fa-bars"></span>
      
     Lessons
      
@@ -621,6 +635,9 @@ div.tocify {
         <li>
           <a href="R-course_lesson-21.html">Lesson 21</a>
         </li>
+        <li>
+          <a href="R-course_lesson-22.html">Lesson 22</a>
+        </li>
       </ul>
     </li>
   </ul>
@@ -672,7 +689,7 @@ div.tocify {
 </ul>
 <p>You will learn how to control those arguments in the tutorial.</p>
 <p>The basic syntax of ggplot2 is:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="kw">ggplot</span>(data, <span class="dt">mapping=</span><span class="kw">aes</span>()) <span class="op">+</span><span class="st"> </span>geometric object </a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">ggplot</span>(data, <span class="dt">mapping=</span><span class="kw">aes</span>()) <span class="op">+</span><span class="st"> </span>geometric object </span></code></pre></div>
 <p><strong>Arguments:</strong></p>
 <ul>
 <li>data: Dataset used to plot the graph</li>
@@ -691,8 +708,8 @@ div.tocify {
 <p>Let’s see how ggplot works with the mtcars dataset. You start by plotting a scatterplot of the mpg variable and drat variable.</p>
 <div id="basic-scatter-plot" class="section level2">
 <h2>Basic scatter plot</h2>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" data-line-number="1"><span class="kw">library</span>(ggplot2)</a>
-<a class="sourceLine" id="cb2-2" data-line-number="2"><span class="kw">ggplot</span>(mtcars, <span class="kw">aes</span>(<span class="dt">x =</span> drat, <span class="dt">y =</span> mpg)) <span class="op">+</span><span class="st"> </span><span class="kw">geom_point</span>()</a></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="kw">library</span>(ggplot2)</span>
+<span id="cb2-2"><a href="#cb2-2"></a><span class="kw">ggplot</span>(mtcars, <span class="kw">aes</span>(<span class="dt">x =</span> drat, <span class="dt">y =</span> mpg)) <span class="op">+</span><span class="st"> </span><span class="kw">geom_point</span>()</span></code></pre></div>
 <p><img src="R-course_lesson-18_files/figure-html/unnamed-chunk-1-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -705,7 +722,7 @@ div.tocify {
 <div id="scatter-plot-with-groups" class="section level2">
 <h2>Scatter plot with groups</h2>
 <p>Sometimes, it can be interesting to distinguish the values by a group of data (i.e. factor level data).</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" data-line-number="1"><span class="kw">ggplot</span>(mtcars, <span class="kw">aes</span>(<span class="dt">x =</span> mpg, <span class="dt">y =</span> drat)) <span class="op">+</span><span class="st"> </span><span class="kw">geom_point</span>(<span class="kw">aes</span>(<span class="dt">color =</span> <span class="kw">factor</span>(gear)))</a></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a><span class="kw">ggplot</span>(mtcars, <span class="kw">aes</span>(<span class="dt">x =</span> mpg, <span class="dt">y =</span> drat)) <span class="op">+</span><span class="st"> </span><span class="kw">geom_point</span>(<span class="kw">aes</span>(<span class="dt">color =</span> <span class="kw">factor</span>(gear)))</span></code></pre></div>
 <p><img src="R-course_lesson-18_files/figure-html/unnamed-chunk-2-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -716,7 +733,7 @@ div.tocify {
 <div id="change-axis" class="section level2">
 <h2>Change axis</h2>
 <p>Rescale the data is a big part of the data scientist job. In rare occasion data comes in a nice bell shape. One solution to make your data less sensitive to outliers is to rescale them.</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb4-1" data-line-number="1"><span class="kw">ggplot</span>(mtcars, <span class="kw">aes</span>(<span class="dt">x =</span> <span class="kw">log</span>(mpg), <span class="dt">y =</span> <span class="kw">log</span>(drat))) <span class="op">+</span><span class="st"> </span><span class="kw">geom_point</span>(<span class="kw">aes</span>(<span class="dt">color =</span> <span class="kw">factor</span>(gear)))</a></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw">ggplot</span>(mtcars, <span class="kw">aes</span>(<span class="dt">x =</span> <span class="kw">log</span>(mpg), <span class="dt">y =</span> <span class="kw">log</span>(drat))) <span class="op">+</span><span class="st"> </span><span class="kw">geom_point</span>(<span class="kw">aes</span>(<span class="dt">color =</span> <span class="kw">factor</span>(gear)))</span></code></pre></div>
 <p><img src="R-course_lesson-18_files/figure-html/unnamed-chunk-3-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -728,13 +745,13 @@ div.tocify {
 <div id="scatter-plot-with-fitted-values" class="section level1">
 <h1>Scatter plot with fitted values</h1>
 <p>You can add another level of information to the graph. You can plot the fitted value of a linear regression.</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1">my_graph &lt;-<span class="st"> </span><span class="kw">ggplot</span>(mtcars, <span class="kw">aes</span>(<span class="dt">x =</span> <span class="kw">log</span>(mpg), <span class="dt">y =</span> <span class="kw">log</span>(drat))) <span class="op">+</span></a>
-<a class="sourceLine" id="cb5-2" data-line-number="2"><span class="st">    </span><span class="kw">geom_point</span>(<span class="kw">aes</span>(<span class="dt">color =</span> <span class="kw">factor</span>(gear))) <span class="op">+</span></a>
-<a class="sourceLine" id="cb5-3" data-line-number="3"><span class="st">    </span><span class="kw">stat_smooth</span>(<span class="dt">method =</span> <span class="st">&quot;lm&quot;</span>,</a>
-<a class="sourceLine" id="cb5-4" data-line-number="4">        <span class="dt">col =</span> <span class="st">&quot;#C42126&quot;</span>,</a>
-<a class="sourceLine" id="cb5-5" data-line-number="5">        <span class="dt">se =</span> <span class="ot">FALSE</span>,</a>
-<a class="sourceLine" id="cb5-6" data-line-number="6">        <span class="dt">size =</span> <span class="dv">1</span>)</a>
-<a class="sourceLine" id="cb5-7" data-line-number="7">my_graph</a></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a>my_graph &lt;-<span class="st"> </span><span class="kw">ggplot</span>(mtcars, <span class="kw">aes</span>(<span class="dt">x =</span> <span class="kw">log</span>(mpg), <span class="dt">y =</span> <span class="kw">log</span>(drat))) <span class="op">+</span></span>
+<span id="cb5-2"><a href="#cb5-2"></a><span class="st">    </span><span class="kw">geom_point</span>(<span class="kw">aes</span>(<span class="dt">color =</span> <span class="kw">factor</span>(gear))) <span class="op">+</span></span>
+<span id="cb5-3"><a href="#cb5-3"></a><span class="st">    </span><span class="kw">stat_smooth</span>(<span class="dt">method =</span> <span class="st">&quot;lm&quot;</span>,</span>
+<span id="cb5-4"><a href="#cb5-4"></a>        <span class="dt">col =</span> <span class="st">&quot;#C42126&quot;</span>,</span>
+<span id="cb5-5"><a href="#cb5-5"></a>        <span class="dt">se =</span> <span class="ot">FALSE</span>,</span>
+<span id="cb5-6"><a href="#cb5-6"></a>        <span class="dt">size =</span> <span class="dv">1</span>)</span>
+<span id="cb5-7"><a href="#cb5-7"></a>my_graph</span></code></pre></div>
 <p><img src="R-course_lesson-18_files/figure-html/unnamed-chunk-4-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -755,18 +772,18 @@ div.tocify {
 <h2>Add information to the graph</h2>
 <p>So far, we haven’t added information in the graphs. Graphs need to be informative. The reader should see the story behind the data analysis just by looking at the graph without referring additional documentation. Hence, graphs need good labels. You can add labels with labs()function.</p>
 <p>The basic syntax for lab() is :</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="kw">lab</span>(<span class="dt">title =</span> <span class="st">&quot;Hello Gianluca&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a><span class="kw">lab</span>(<span class="dt">title =</span> <span class="st">&quot;Hello Gianluca&quot;</span>)</span></code></pre></div>
 <p><strong>Argument:</strong> - title: Control the title. It is possible to change or add title with:<br />
 - subtitle: Add subtitle below title<br />
 - caption: Add caption below the graph<br />
 - x: rename x-axis<br />
 - y: rename y-axis</p>
-<p>Example: <code>lab(title = &quot;Hello Gianluca&quot;, subtitle = &quot;My first plot&quot;)</code></p>
+<p>Example: <code>lab(title = "Hello Gianluca", subtitle = "My first plot")</code></p>
 </div>
 <div id="add-a-title" class="section level2">
 <h2>Add a title</h2>
 <p>One mandatory information to add is obviously a title.</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb7-1" data-line-number="1">my_graph <span class="op">+</span><span class="st"> </span><span class="kw">labs</span>(<span class="dt">title =</span> <span class="st">&quot;Plot Mile per hours and drat, in log&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1"></a>my_graph <span class="op">+</span><span class="st"> </span><span class="kw">labs</span>(<span class="dt">title =</span> <span class="st">&quot;Plot Mile per hours and drat, in log&quot;</span>)</span></code></pre></div>
 <p><img src="R-course_lesson-18_files/figure-html/unnamed-chunk-5-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -781,18 +798,18 @@ div.tocify {
 <h2>Add a title with a dynamic name</h2>
 <p>A dynamic title is helpful to add more precise information in the title.</p>
 <p>You can use the paste() function to print static text and dynamic text. The basic syntax of paste() is:</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1"><span class="kw">paste</span>(<span class="st">&quot;This is a text&quot;</span>, A)</a></code></pre></div>
-<p><strong>Arguments:</strong> - &quot; &quot;: Text inside the quotation marks are the static text - A: Display the variable stored in A - Note you can add as much static text and variable as you want. You need to separate them with a comma</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a><span class="kw">paste</span>(<span class="st">&quot;This is a text&quot;</span>, A)</span></code></pre></div>
+<p><strong>Arguments:</strong> - " ": Text inside the quotation marks are the static text - A: Display the variable stored in A - Note you can add as much static text and variable as you want. You need to separate them with a comma</p>
 <p><strong>Example:</strong></p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" data-line-number="1">A &lt;-<span class="st"> </span><span class="dv">2010</span></a>
-<a class="sourceLine" id="cb9-2" data-line-number="2"><span class="kw">paste</span>(<span class="st">&quot;The first year is&quot;</span>, A)</a></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a>A &lt;-<span class="st"> </span><span class="dv">2010</span></span>
+<span id="cb9-2"><a href="#cb9-2"></a><span class="kw">paste</span>(<span class="st">&quot;The first year is&quot;</span>, A)</span></code></pre></div>
 <pre><code>## [1] &quot;The first year is 2010&quot;</code></pre>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb11-1" data-line-number="1">B &lt;-<span class="st"> </span><span class="dv">2018</span></a>
-<a class="sourceLine" id="cb11-2" data-line-number="2"><span class="kw">paste</span>(<span class="st">&quot;The first year is&quot;</span>, A, <span class="st">&quot;and the last year is&quot;</span>, B)</a></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a>B &lt;-<span class="st"> </span><span class="dv">2018</span></span>
+<span id="cb11-2"><a href="#cb11-2"></a><span class="kw">paste</span>(<span class="st">&quot;The first year is&quot;</span>, A, <span class="st">&quot;and the last year is&quot;</span>, B)</span></code></pre></div>
 <pre><code>## [1] &quot;The first year is 2010 and the last year is 2018&quot;</code></pre>
 <p>You can add a dynamic name to our graph, namely the average of mpg.</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb13-1" data-line-number="1">mean_mpg &lt;-<span class="st"> </span><span class="kw">mean</span>(mtcars<span class="op">$</span>mpg)</a>
-<a class="sourceLine" id="cb13-2" data-line-number="2">my_graph <span class="op">+</span><span class="st"> </span><span class="kw">labs</span>(<span class="dt">title =</span> <span class="kw">paste</span>(<span class="st">&quot;Plot Mile per hours and drat, in log. Average mpg is&quot;</span>, mean_mpg))</a></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1"></a>mean_mpg &lt;-<span class="st"> </span><span class="kw">mean</span>(mtcars<span class="op">$</span>mpg)</span>
+<span id="cb13-2"><a href="#cb13-2"></a>my_graph <span class="op">+</span><span class="st"> </span><span class="kw">labs</span>(<span class="dt">title =</span> <span class="kw">paste</span>(<span class="st">&quot;Plot Mile per hours and drat, in log. Average mpg is&quot;</span>, mean_mpg))</span></code></pre></div>
 <p><img src="R-course_lesson-18_files/figure-html/unnamed-chunk-7-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -803,14 +820,14 @@ div.tocify {
 <div id="add-a-subtitle" class="section level2">
 <h2>Add a subtitle</h2>
 <p>Two additional detail can make your graph more explicit. You are talking about the subtitle and the caption. The subtitle goes right below the title. The caption can inform about who did the computation and the source of the data.</p>
-<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb14-1" data-line-number="1">my_graph <span class="op">+</span></a>
-<a class="sourceLine" id="cb14-2" data-line-number="2"><span class="st">    </span><span class="kw">labs</span>(</a>
-<a class="sourceLine" id="cb14-3" data-line-number="3">        <span class="dt">title =</span></a>
-<a class="sourceLine" id="cb14-4" data-line-number="4">        <span class="st">&quot;Relation between Mile per hours and drat&quot;</span>,</a>
-<a class="sourceLine" id="cb14-5" data-line-number="5">        <span class="dt">subtitle =</span></a>
-<a class="sourceLine" id="cb14-6" data-line-number="6">        <span class="st">&quot;Relationship break down by gear class&quot;</span>,</a>
-<a class="sourceLine" id="cb14-7" data-line-number="7">        <span class="dt">caption =</span> <span class="st">&quot;Authors own computation&quot;</span></a>
-<a class="sourceLine" id="cb14-8" data-line-number="8">    )</a></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1"></a>my_graph <span class="op">+</span></span>
+<span id="cb14-2"><a href="#cb14-2"></a><span class="st">    </span><span class="kw">labs</span>(</span>
+<span id="cb14-3"><a href="#cb14-3"></a>        <span class="dt">title =</span></span>
+<span id="cb14-4"><a href="#cb14-4"></a>        <span class="st">&quot;Relation between Mile per hours and drat&quot;</span>,</span>
+<span id="cb14-5"><a href="#cb14-5"></a>        <span class="dt">subtitle =</span></span>
+<span id="cb14-6"><a href="#cb14-6"></a>        <span class="st">&quot;Relationship break down by gear class&quot;</span>,</span>
+<span id="cb14-7"><a href="#cb14-7"></a>        <span class="dt">caption =</span> <span class="st">&quot;Authors own computation&quot;</span></span>
+<span id="cb14-8"><a href="#cb14-8"></a>    )</span></code></pre></div>
 <p><img src="R-course_lesson-18_files/figure-html/unnamed-chunk-8-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -818,7 +835,7 @@ div.tocify {
 <ul>
 <li>title = “Relation between Mile per hours and drat”: Add title</li>
 <li>subtitle = “Relationship break down by gear class”: Add subtitle</li>
-<li>caption = &quot;Authors own computation: Add caption</li>
+<li>caption = "Authors own computation: Add caption</li>
 <li>You separate each new information with a comma, ,</li>
 </ul></li>
 <li>Note that you break the lines of code. It is not compulsory, and it only helps to read the code more easily</li>
@@ -827,15 +844,15 @@ div.tocify {
 <div id="rename-x-axis-and-y-axis" class="section level2">
 <h2>Rename x-axis and y-axis</h2>
 <p>Variables itself in the dataset might not always be explicit or by convention use the _ when there are multiple words (i.e. GDP_CAP). You don’t want such name appear in your graph. It is important to change the name or add more details, like the units.</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb15-1" data-line-number="1">my_graph <span class="op">+</span></a>
-<a class="sourceLine" id="cb15-2" data-line-number="2"><span class="st">    </span><span class="kw">labs</span>(</a>
-<a class="sourceLine" id="cb15-3" data-line-number="3">        <span class="dt">x =</span> <span class="st">&quot;Drat definition&quot;</span>,</a>
-<a class="sourceLine" id="cb15-4" data-line-number="4">        <span class="dt">y =</span> <span class="st">&quot;Mile per hours&quot;</span>,</a>
-<a class="sourceLine" id="cb15-5" data-line-number="5">        <span class="dt">color =</span> <span class="st">&quot;Gear&quot;</span>,</a>
-<a class="sourceLine" id="cb15-6" data-line-number="6">        <span class="dt">title =</span> <span class="st">&quot;Relation between Mile per hours and drat&quot;</span>,</a>
-<a class="sourceLine" id="cb15-7" data-line-number="7">        <span class="dt">subtitle =</span> <span class="st">&quot;Relationship break down by gear class&quot;</span>,</a>
-<a class="sourceLine" id="cb15-8" data-line-number="8">        <span class="dt">caption =</span> <span class="st">&quot;Authors own computation&quot;</span></a>
-<a class="sourceLine" id="cb15-9" data-line-number="9">    )</a></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1"></a>my_graph <span class="op">+</span></span>
+<span id="cb15-2"><a href="#cb15-2"></a><span class="st">    </span><span class="kw">labs</span>(</span>
+<span id="cb15-3"><a href="#cb15-3"></a>        <span class="dt">x =</span> <span class="st">&quot;Drat definition&quot;</span>,</span>
+<span id="cb15-4"><a href="#cb15-4"></a>        <span class="dt">y =</span> <span class="st">&quot;Mile per hours&quot;</span>,</span>
+<span id="cb15-5"><a href="#cb15-5"></a>        <span class="dt">color =</span> <span class="st">&quot;Gear&quot;</span>,</span>
+<span id="cb15-6"><a href="#cb15-6"></a>        <span class="dt">title =</span> <span class="st">&quot;Relation between Mile per hours and drat&quot;</span>,</span>
+<span id="cb15-7"><a href="#cb15-7"></a>        <span class="dt">subtitle =</span> <span class="st">&quot;Relationship break down by gear class&quot;</span>,</span>
+<span id="cb15-8"><a href="#cb15-8"></a>        <span class="dt">caption =</span> <span class="st">&quot;Authors own computation&quot;</span></span>
+<span id="cb15-9"><a href="#cb15-9"></a>    )</span></code></pre></div>
 <p><img src="R-course_lesson-18_files/figure-html/unnamed-chunk-9-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -850,23 +867,23 @@ div.tocify {
 <h2>Control the scales</h2>
 <p>You can control the scale of the axis.</p>
 <p>The function seq() is convenient when you need to create a sequence of number. The basic syntax is:</p>
-<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb16-1" data-line-number="1"><span class="kw">seq</span>(begin, last, <span class="dt">by =</span> x)</a></code></pre></div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1"></a><span class="kw">seq</span>(begin, last, <span class="dt">by =</span> x)</span></code></pre></div>
 <p><strong>Arguments:</strong> - begin: First number of the sequence - last: Last number of the sequence - by = x: The step. For instance, if x is 2, the code adds 2 to <code>begin-1</code> until it reaches <code>last</code></p>
 <p>For instance, if you want to create a range from 0 to 12 with a step of 3, you will have four numbers, 0 4 8 12</p>
-<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb17-1" data-line-number="1"><span class="kw">seq</span>(<span class="dv">0</span>, <span class="dv">12</span>, <span class="dv">4</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1"></a><span class="kw">seq</span>(<span class="dv">0</span>, <span class="dv">12</span>, <span class="dv">4</span>)</span></code></pre></div>
 <pre><code>## [1]  0  4  8 12</code></pre>
 <p>You can control the scale of the x-axis and y-axis as below</p>
-<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb19-1" data-line-number="1">my_graph <span class="op">+</span></a>
-<a class="sourceLine" id="cb19-2" data-line-number="2"><span class="st">    </span><span class="kw">scale_x_continuous</span>(<span class="dt">breaks =</span> <span class="kw">seq</span>(<span class="dv">1</span>, <span class="fl">3.6</span>, <span class="dt">by =</span> <span class="fl">0.2</span>)) <span class="op">+</span></a>
-<a class="sourceLine" id="cb19-3" data-line-number="3"><span class="st">    </span><span class="kw">scale_y_continuous</span>(<span class="dt">breaks =</span> <span class="kw">seq</span>(<span class="dv">1</span>, <span class="fl">1.6</span>, <span class="dt">by =</span> <span class="fl">0.1</span>)) <span class="op">+</span></a>
-<a class="sourceLine" id="cb19-4" data-line-number="4"><span class="st">    </span><span class="kw">labs</span>(</a>
-<a class="sourceLine" id="cb19-5" data-line-number="5">        <span class="dt">x =</span> <span class="st">&quot;Drat definition&quot;</span>,</a>
-<a class="sourceLine" id="cb19-6" data-line-number="6">        <span class="dt">y =</span> <span class="st">&quot;Mile per hours&quot;</span>,</a>
-<a class="sourceLine" id="cb19-7" data-line-number="7">        <span class="dt">color =</span> <span class="st">&quot;Gear&quot;</span>,</a>
-<a class="sourceLine" id="cb19-8" data-line-number="8">        <span class="dt">title =</span> <span class="st">&quot;Relation between Mile per hours and drat&quot;</span>,</a>
-<a class="sourceLine" id="cb19-9" data-line-number="9">        <span class="dt">subtitle =</span> <span class="st">&quot;Relationship break down by gear class&quot;</span>,</a>
-<a class="sourceLine" id="cb19-10" data-line-number="10">        <span class="dt">caption =</span> <span class="st">&quot;Authors own computation&quot;</span></a>
-<a class="sourceLine" id="cb19-11" data-line-number="11">    )</a></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1"></a>my_graph <span class="op">+</span></span>
+<span id="cb19-2"><a href="#cb19-2"></a><span class="st">    </span><span class="kw">scale_x_continuous</span>(<span class="dt">breaks =</span> <span class="kw">seq</span>(<span class="dv">1</span>, <span class="fl">3.6</span>, <span class="dt">by =</span> <span class="fl">0.2</span>)) <span class="op">+</span></span>
+<span id="cb19-3"><a href="#cb19-3"></a><span class="st">    </span><span class="kw">scale_y_continuous</span>(<span class="dt">breaks =</span> <span class="kw">seq</span>(<span class="dv">1</span>, <span class="fl">1.6</span>, <span class="dt">by =</span> <span class="fl">0.1</span>)) <span class="op">+</span></span>
+<span id="cb19-4"><a href="#cb19-4"></a><span class="st">    </span><span class="kw">labs</span>(</span>
+<span id="cb19-5"><a href="#cb19-5"></a>        <span class="dt">x =</span> <span class="st">&quot;Drat definition&quot;</span>,</span>
+<span id="cb19-6"><a href="#cb19-6"></a>        <span class="dt">y =</span> <span class="st">&quot;Mile per hours&quot;</span>,</span>
+<span id="cb19-7"><a href="#cb19-7"></a>        <span class="dt">color =</span> <span class="st">&quot;Gear&quot;</span>,</span>
+<span id="cb19-8"><a href="#cb19-8"></a>        <span class="dt">title =</span> <span class="st">&quot;Relation between Mile per hours and drat&quot;</span>,</span>
+<span id="cb19-9"><a href="#cb19-9"></a>        <span class="dt">subtitle =</span> <span class="st">&quot;Relationship break down by gear class&quot;</span>,</span>
+<span id="cb19-10"><a href="#cb19-10"></a>        <span class="dt">caption =</span> <span class="st">&quot;Authors own computation&quot;</span></span>
+<span id="cb19-11"><a href="#cb19-11"></a>    )</span></code></pre></div>
 <p><img src="R-course_lesson-18_files/figure-html/unnamed-chunk-11-1.png" width="672" style="display: block; margin: auto;" /></p>
 <p><strong>Code Explanation</strong></p>
 <ul>
@@ -892,49 +909,49 @@ div.tocify {
 <li>theme_gray()</li>
 <li>theme_void()</li>
 </ul>
-<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb20-1" data-line-number="1">my_graph <span class="op">+</span></a>
-<a class="sourceLine" id="cb20-2" data-line-number="2"><span class="st">    </span><span class="kw">theme_dark</span>() <span class="op">+</span></a>
-<a class="sourceLine" id="cb20-3" data-line-number="3"><span class="st">    </span><span class="kw">labs</span>(</a>
-<a class="sourceLine" id="cb20-4" data-line-number="4">        <span class="dt">x =</span> <span class="st">&quot;Drat definition, in log&quot;</span>,</a>
-<a class="sourceLine" id="cb20-5" data-line-number="5">        <span class="dt">y =</span> <span class="st">&quot;Mile per hours, in log&quot;</span>,</a>
-<a class="sourceLine" id="cb20-6" data-line-number="6">        <span class="dt">color =</span> <span class="st">&quot;Gear&quot;</span>,</a>
-<a class="sourceLine" id="cb20-7" data-line-number="7">        <span class="dt">title =</span> <span class="st">&quot;Relation between Mile per hours and drat&quot;</span>,</a>
-<a class="sourceLine" id="cb20-8" data-line-number="8">        <span class="dt">subtitle =</span> <span class="st">&quot;Relationship break down by gear class&quot;</span>,</a>
-<a class="sourceLine" id="cb20-9" data-line-number="9">        <span class="dt">caption =</span> <span class="st">&quot;Authors own computation&quot;</span></a>
-<a class="sourceLine" id="cb20-10" data-line-number="10">    )</a></code></pre></div>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1"></a>my_graph <span class="op">+</span></span>
+<span id="cb20-2"><a href="#cb20-2"></a><span class="st">    </span><span class="kw">theme_dark</span>() <span class="op">+</span></span>
+<span id="cb20-3"><a href="#cb20-3"></a><span class="st">    </span><span class="kw">labs</span>(</span>
+<span id="cb20-4"><a href="#cb20-4"></a>        <span class="dt">x =</span> <span class="st">&quot;Drat definition, in log&quot;</span>,</span>
+<span id="cb20-5"><a href="#cb20-5"></a>        <span class="dt">y =</span> <span class="st">&quot;Mile per hours, in log&quot;</span>,</span>
+<span id="cb20-6"><a href="#cb20-6"></a>        <span class="dt">color =</span> <span class="st">&quot;Gear&quot;</span>,</span>
+<span id="cb20-7"><a href="#cb20-7"></a>        <span class="dt">title =</span> <span class="st">&quot;Relation between Mile per hours and drat&quot;</span>,</span>
+<span id="cb20-8"><a href="#cb20-8"></a>        <span class="dt">subtitle =</span> <span class="st">&quot;Relationship break down by gear class&quot;</span>,</span>
+<span id="cb20-9"><a href="#cb20-9"></a>        <span class="dt">caption =</span> <span class="st">&quot;Authors own computation&quot;</span></span>
+<span id="cb20-10"><a href="#cb20-10"></a>    )</span></code></pre></div>
 <p><img src="R-course_lesson-18_files/figure-html/unnamed-chunk-12-1.png" width="672" style="display: block; margin: auto;" /></p>
 </div>
 <div id="save-plots" class="section level2">
 <h2>Save Plots</h2>
 <p>After all these steps, it is time to save and share your graph. You add ggsave(’NAME OF THE FILE) right after you plot the graph and it will be stored on the hard drive.</p>
 <p>The graph is saved in the working directory. To check the working directory, you can run this code:</p>
-<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb21-1" data-line-number="1">directory &lt;-<span class="st"> </span><span class="kw">getwd</span>()</a>
-<a class="sourceLine" id="cb21-2" data-line-number="2">directory       </a></code></pre></div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1"></a>directory &lt;-<span class="st"> </span><span class="kw">getwd</span>()</span>
+<span id="cb21-2"><a href="#cb21-2"></a>directory       </span></code></pre></div>
 <pre><code>## [1] &quot;/Volumes/GoogleDrive/Il mio Drive/An-R-Tutorial-for-Beginners&quot;</code></pre>
 <p>Let’s plot your fantastic graph, saves it and check the location</p>
-<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb23-1" data-line-number="1">my_graph <span class="op">+</span></a>
-<a class="sourceLine" id="cb23-2" data-line-number="2"><span class="st">    </span><span class="kw">theme_dark</span>() <span class="op">+</span></a>
-<a class="sourceLine" id="cb23-3" data-line-number="3"><span class="st">    </span><span class="kw">labs</span>(</a>
-<a class="sourceLine" id="cb23-4" data-line-number="4">        <span class="dt">x =</span> <span class="st">&quot;Drat definition, in log&quot;</span>,</a>
-<a class="sourceLine" id="cb23-5" data-line-number="5">        <span class="dt">y =</span> <span class="st">&quot;Mile per hours, in log&quot;</span>,</a>
-<a class="sourceLine" id="cb23-6" data-line-number="6">        <span class="dt">color =</span> <span class="st">&quot;Gear&quot;</span>,</a>
-<a class="sourceLine" id="cb23-7" data-line-number="7">        <span class="dt">title =</span> <span class="st">&quot;Relation between Mile per hours and drat&quot;</span>,</a>
-<a class="sourceLine" id="cb23-8" data-line-number="8">        <span class="dt">subtitle =</span> <span class="st">&quot;Relationship break down by gear class&quot;</span>,</a>
-<a class="sourceLine" id="cb23-9" data-line-number="9">        <span class="dt">caption =</span> <span class="st">&quot;Authors own computation&quot;</span></a>
-<a class="sourceLine" id="cb23-10" data-line-number="10">    )</a></code></pre></div>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1"></a>my_graph <span class="op">+</span></span>
+<span id="cb23-2"><a href="#cb23-2"></a><span class="st">    </span><span class="kw">theme_dark</span>() <span class="op">+</span></span>
+<span id="cb23-3"><a href="#cb23-3"></a><span class="st">    </span><span class="kw">labs</span>(</span>
+<span id="cb23-4"><a href="#cb23-4"></a>        <span class="dt">x =</span> <span class="st">&quot;Drat definition, in log&quot;</span>,</span>
+<span id="cb23-5"><a href="#cb23-5"></a>        <span class="dt">y =</span> <span class="st">&quot;Mile per hours, in log&quot;</span>,</span>
+<span id="cb23-6"><a href="#cb23-6"></a>        <span class="dt">color =</span> <span class="st">&quot;Gear&quot;</span>,</span>
+<span id="cb23-7"><a href="#cb23-7"></a>        <span class="dt">title =</span> <span class="st">&quot;Relation between Mile per hours and drat&quot;</span>,</span>
+<span id="cb23-8"><a href="#cb23-8"></a>        <span class="dt">subtitle =</span> <span class="st">&quot;Relationship break down by gear class&quot;</span>,</span>
+<span id="cb23-9"><a href="#cb23-9"></a>        <span class="dt">caption =</span> <span class="st">&quot;Authors own computation&quot;</span></span>
+<span id="cb23-10"><a href="#cb23-10"></a>    )</span></code></pre></div>
 <p><img src="R-course_lesson-18_files/figure-html/unnamed-chunk-14-1.png" width="672" style="display: block; margin: auto;" /></p>
-<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb24-1" data-line-number="1"><span class="kw">ggsave</span>(<span class="st">&quot;my_fantastic_plot.png&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1"></a><span class="kw">ggsave</span>(<span class="st">&quot;my_fantastic_plot.png&quot;</span>)</span></code></pre></div>
 <p><strong>Note:</strong> For pedagogical purpose only, we created a function called open_folder() to open the directory folder for you. You just need to run the code below and see where the picture is stored. You should see a file names my_fantastic_plot.png.</p>
-<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb25-1" data-line-number="1"><span class="co"># Run this code to create the function</span></a>
-<a class="sourceLine" id="cb25-2" data-line-number="2">open_folder &lt;-<span class="st"> </span><span class="cf">function</span>(dir) {</a>
-<a class="sourceLine" id="cb25-3" data-line-number="3">    <span class="cf">if</span> (.Platform[<span class="st">&#39;OS.type&#39;</span>] <span class="op">==</span><span class="st"> &quot;windows&quot;</span>) {</a>
-<a class="sourceLine" id="cb25-4" data-line-number="4">        <span class="kw">shell.exec</span>(dir)</a>
-<a class="sourceLine" id="cb25-5" data-line-number="5">    } <span class="cf">else</span> {</a>
-<a class="sourceLine" id="cb25-6" data-line-number="6">        <span class="kw">system</span>(<span class="kw">paste</span>(<span class="kw">Sys.getenv</span>(<span class="st">&quot;R_BROWSER&quot;</span>), dir))</a>
-<a class="sourceLine" id="cb25-7" data-line-number="7">    }</a>
-<a class="sourceLine" id="cb25-8" data-line-number="8">}</a>
-<a class="sourceLine" id="cb25-9" data-line-number="9"></a>
-<a class="sourceLine" id="cb25-10" data-line-number="10"><span class="co"># Call the function to open the folder open_folder(directory)</span></a></code></pre></div>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1"></a><span class="co"># Run this code to create the function</span></span>
+<span id="cb25-2"><a href="#cb25-2"></a>open_folder &lt;-<span class="st"> </span><span class="cf">function</span>(dir) {</span>
+<span id="cb25-3"><a href="#cb25-3"></a>    <span class="cf">if</span> (.Platform[<span class="st">&#39;OS.type&#39;</span>] <span class="op">==</span><span class="st"> &quot;windows&quot;</span>) {</span>
+<span id="cb25-4"><a href="#cb25-4"></a>        <span class="kw">shell.exec</span>(dir)</span>
+<span id="cb25-5"><a href="#cb25-5"></a>    } <span class="cf">else</span> {</span>
+<span id="cb25-6"><a href="#cb25-6"></a>        <span class="kw">system</span>(<span class="kw">paste</span>(<span class="kw">Sys.getenv</span>(<span class="st">&quot;R_BROWSER&quot;</span>), dir))</span>
+<span id="cb25-7"><a href="#cb25-7"></a>    }</span>
+<span id="cb25-8"><a href="#cb25-8"></a>}</span>
+<span id="cb25-9"><a href="#cb25-9"></a></span>
+<span id="cb25-10"><a href="#cb25-10"></a><span class="co"># Call the function to open the folder open_folder(directory)</span></span></code></pre></div>
 </div>
 </div>
 <div id="summary" class="section level1">
@@ -1077,7 +1094,7 @@ ggsave(“my_fantastic_plot.png”)
 
 // add bootstrap table styles to pandoc tables
 function bootstrapStylePandocTables() {
-  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
 }
 $(document).ready(function () {
   bootstrapStylePandocTables();
@@ -1116,7 +1133,7 @@ $(document).ready(function ()  {
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {
-        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_').toLowerCase();
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
       },
       ignoreSelector: ".toc-ignore",
       scrollTo: 0
