@@ -1,0 +1,30 @@
+# History files
+.Rhistory
+.Rapp.history
+
+# Session Data files
+.RData
+.Rproj.user/
+
+# User-specific files
+.renv.lock
+.Renv.lock
+
+# Output files from R CMD build
+/*.tar.gz
+
+# Output files from R CMD check
+/*.Rcheck/
+
+# Generated files
+*_files/
+_site/
+docs/
+index_cache/
+*.html
+*.pdf
+*.docx
+
+# knitr and R markdown
+.Rproj.user/
+auto
