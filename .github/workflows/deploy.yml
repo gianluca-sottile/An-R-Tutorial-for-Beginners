@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ master ]  # o 'main' se usi main
+    branches: [ master ]  # Cambia in 'main' se usi main
 
 permissions:
   contents: read
@@ -23,15 +23,15 @@ jobs:
     - name: Setup Pandoc
       uses: r-lib/actions/setup-pandoc@v2
     - name: Install packages
-      uses: r-lib/actions/setup-renv@v2
+      run: |
+        Rscript -e 'install.packages(c("rmarkdown", "knitr", "ggplot2", "dplyr"))'  # Aggiungi pacchetti tuoi qui
     - name: Render site
       run: |
-        Rscript -e 'install.packages(c("rmarkdown"))'
-        rmarkdown::render_site()
+        Rscript -e 'rmarkdown::render_site(input = "index.Rmd")'  # O "index.Rmd" se esiste
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
-        path: _site/ #./docs  # o _site/ se usi quello
-    - name: Deploy to GitHub pages
+        path: ./_site/  # O /docs/ se generi lì
+    - name: Deploy
       id: deployment
       uses: actions/deploy-pages@v4
