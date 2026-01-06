@@ -24,7 +24,7 @@ jobs:
       uses: r-lib/actions/setup-pandoc@v2
     - name: Install packages
       run: |
-        Rscript -e 'install.packages(c("rmarkdown", "knitr", "ggplot2", "dplyr"))'  # Aggiungi pacchetti tuoi qui
+        Rscript -e 'install.packages(c("rmarkdown", "knitr", "ggplot2", "dplyr", "png", "grid", "lattice"))'  # Aggiunto png + basics
     - name: Render site
       run: |
         Rscript -e 'rmarkdown::render_site(input = "index.Rmd")'  # O "index.Rmd" se esiste
