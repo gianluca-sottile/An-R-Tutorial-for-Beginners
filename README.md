@@ -40,3 +40,6 @@ No prior coding experience is necessary to follow this tutorial! All you need is
 If you are eager to dive deeper, check out the [hosted webpage](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/) for additional examples, explanations, and useful resources.
 
 Happy coding!
+
+[![License](https://img.shields.io/badge/License-CC%20BY--SA%204.0-blue.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/gianluca-sottile/An-R-Tutorial-for-Beginners)](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners)
