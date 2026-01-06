@@ -1,41 +1,61 @@
 ---
+
 pagetitle: "About This Course"
+
 ---
 
 <br>
 
 # About This Course {#buttons .tabset .tabset-fade .tabset-pills}
-## Prerequisities
+
+## Prerequisites
 ***
-Basic notions of descriptive and inferential statistics and  minimal computer skills (Windows, Mac or Linux). It is required that each attendee brings his own device. 
 
-## Expected results
+This course assumes basic knowledge of descriptive and inferential statistics, along with minimal computer literacy (Windows, Mac, or Linux). Participants should bring their own device.
+
+## Expected Outcomes
 ***
-__Knowledge:__ outline of the programming environment R, description of the main objects used in R,  list of the commands to import and export data, description and identification of the appropriate inferential tools, interpretation of the result outcomes.
 
-__Skills:__ general use of R programming environment, create and manipulate R objects, build tables and graphs, use of data import/export functions, build user-defined functions, identification of the statistical model to analyse collected data.
+**Knowledge:**
+- Understand the R programming environment.
+- Familiarize yourself with the main objects used in R.
+- Learn how to import and export data.
+- Identify and utilize suitable statistical tools in R.
 
-__Communication skills:__ Use tables and plots to present results, critical assessment of the results obtained.
+**Skills:**
+- Navigate and use the R programming environment.
+- Create and manipulate data objects in R.
+- Prepare structured tables and informative graphs.
+- Import/export datasets and define user functions.
+- Recognize appropriate statistical techniques for data analysis.
 
-__Learning skills:__ Use R as a programming environment.
+**Communication Skills:**
+- Present results effectively using graphs and tables.
+- Perform critical analysis of outcomes and their implications.
+
+**Learning Skills:**
+- Develop self-sufficiency and confidence in using R as a programming environment.
 
 ## Objectives
 ***
-At the end of the course the student will be able to:
 
-1. Use the R software environment for basic statistical analyses;
-1. Analyse data using basic statistical model and synthetize results
-1. Make a critical assessment of the main outcomes.
+By the end of this course, you will be able to:
 
+1. Use the R software environment for basic statistical analysis.
+2. Analyze data, gaining insights while synthesizing results.
+3. Critically assess the outcomes of statistical models and reports.
 
-## Textbook
+## Recommended Textbook
 ***
-- W. N. Venables, D. M. Smith and the R Core Team, An Introduction to R. Notes on R: A Programming Environment for Data Analysis and Graphics. Published on the website of CRAN.
-- Any tutorial on the web…
 
-## Lecture schedule
+- W. N. Venables, D. M. Smith, and the R Core Team: *An Introduction to R*. Notes on R: A Programming Environment for Data Analysis and Graphics. Available on [CRAN](https://cran.r-project.org/).
+
+- Additional tutorials and resources available online.
+
+## Lecture Schedule
 ***
+
 | Hours | Topics |
-|:-----:|:----------|
-| 5 | What is R programming Language? Introduction and basics. How to Download and install R, RStudio on Mac or Windows. R Data types, arithmetic and logical operators. R matrix tutorial (create, print, add columns/rows). Factor in R: categorical and continuous variables. R data frame tutorial (create, append, select, subset). List in R (create, select elements). R sort elements. Functions in R programming. If - else statement in R. For loop in R (with examples for list and matrix). While loop in R. apply(), lapply(), sapply(), tapply() functions in R. Import data into R (read CSV, Excel, SPSS, Stata, SAS files). How to replace missing values (NA) in R. R exporting data (write CSV, Excel, SPSS, Stata, SAS files). Correlation in R: Pearson and Spearman with matrix. |
-| 5 | If - else statement in R. For loop in R (with examples for list and matrix). While loop in R. apply(), lapply(), sapply(), tapply() functions in R. Import data into R (read CSV, Excel, SPSS, Stata, SAS files). How to replace missing values (NA) in R. R exporting data (write CSV, Excel, SPSS, Stata, SAS files). Correlation in R: Pearson and Spearman with matrix. Scatter plot, boxplot, bar chart and histogram in R. T-test in R (one sample and paired). R ANOVA tutorial (one way and two way. Simple and multiple linear regression in R. Generalized linear model (GLM) in R. K-means clustering in R. Applications to real world (case studies, groupwork and discussions about the results). |
+|:---:|:----------|
+| 5 | What is R Programming? Introduction and basics. How to download and install R and RStudio on Mac/Windows. Understanding R data types, operators, and basic tutorials on R matrices.|  
+| 5 | Decision-making statements: if-else, for/while loops (with examples using lists and matrices). Importing data (CSV, Excel, SPSS, etc.) and the utilization of apply functions.|
