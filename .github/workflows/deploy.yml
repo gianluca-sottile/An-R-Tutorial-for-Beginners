@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ master ]  # Cambia in 'main' se usi main
+    branches: [ master ]
 
 permissions:
   contents: read
@@ -22,16 +22,23 @@ jobs:
       uses: r-lib/actions/setup-r@v2
     - name: Setup Pandoc
       uses: r-lib/actions/setup-pandoc@v2
+    - name: Cache R packages
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.R_LIBS_USER }}
+        key: ${{ runner.os }}-r-${{ hashFiles('DESCRIPTION') }}-${{ hashFiles('**/DESCRIPTION') }}
+        restore-keys: ${{ runner.os }}-r-
     - name: Install packages
-      run: |
-        Rscript -e 'install.packages(c("rmarkdown", "knitr", "png", "grid", "lattice", "ggplot2", "dplyr", "tidyr", "stats", "datasets", "utils", "graphics", "magrittr", "scales"), dependencies = TRUE)'
+      uses: r-lib/actions/setup-r-dependencies@v2  # Magico: cache + binaries veloci
+      with:
+        packages: any::rmarkdown, any::knitr, any::png, any::ggplot2, any::dplyr
     - name: Render site
-      run: |
-        Rscript -e 'rmarkdown::render_site(input = "index.Rmd")'  # O "index.Rmd" se esiste
+      shell: Rscript {0}
+      run: rmarkdown::render_site()
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
-        path: ./_site/  # O /docs/ se generi lì
+        path: ./_site/
     - name: Deploy
       id: deployment
       uses: actions/deploy-pages@v4
