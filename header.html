@@ -1,69 +1,52 @@
-<!-- header.html per R Markdown website: solo script, senza <html>/<head>/<body> -->
+<!-- header.html per R Markdown: fix tabset scroll + anchor offset -->
 
-<!-- Smooth scroll a sezioni con navbar fissa (offset ~65px) -->
+<script>
+$(document).ready(function() {
+  // Intercepta TUTTI i click sui tab R Markdown (tabs + pills)
+  $(document).on('click', 
+    '[data-toggle="tab"], [data-toggle="pill"], .nav-tabs a, .nav-pills a', 
+    function (e) {
+      // Salva posizione scroll
+      var scrollmem = $(window).scrollTop();
+      
+      // Cambia tab SENZA movimento di scroll
+      e.preventDefault();
+      $(this).tab('show');
+      
+      // Ripristina posizione
+      setTimeout(function() {
+        $(window).scrollTop(scrollmem);
+      }, 0);
+    }
+  );
+});
+</script>
+
+<!-- Smooth scroll per anchor/TOC (opzionale, ma pulito) -->
 <script>
 (function (document, history, location) {
   var HISTORY_SUPPORT = !!(history && history.pushState);
+  var OFFSET_HEIGHT_PX = 65;
 
-  var anchorScrolls = {
-    ANCHOR_REGEX: /^#[^ ]+$/,
-    OFFSET_HEIGHT_PX: 65,
+  function scrollIfAnchor(href, pushToHistory) {
+    if (!/^#[^ ]+$/.test(href)) return false;
 
-    init: function () {
-      this.scrollToCurrent();
-      $(window).on("hashchange", $.proxy(this, "scrollToCurrent"));
-      $("body").on("click", "a", $.proxy(this, "delegateAnchors"));
-    },
-
-    getFixedOffset: function () {
-      return this.OFFSET_HEIGHT_PX;
-    },
-
-    scrollIfAnchor: function (href, pushToHistory) {
-      if (!this.ANCHOR_REGEX.test(href)) {
-        return false;
-      }
-
-      var match = document.getElementById(href.slice(1));
-      if (match) {
-        var anchorOffset = $(match).offset().top - this.getFixedOffset();
-        $("html, body").animate({ scrollTop: anchorOffset });
-
-        if (HISTORY_SUPPORT && pushToHistory) {
-          history.pushState({}, document.title, location.pathname + href);
-        }
-      }
-      return !!match;
-    },
-
-    scrollToCurrent: function (e) {
-      if (this.scrollIfAnchor(window.location.hash) && e) {
-        e.preventDefault();
-      }
-    },
-
-    delegateAnchors: function (e) {
-      var elem = e.target;
-      // salta se non c'è href (es. <span>, icone, ecc.)
-      var href = elem.getAttribute && elem.getAttribute("href");
-      if (href && this.scrollIfAnchor(href, true)) {
-        e.preventDefault();
+    var match = document.getElementById(href.slice(1));
+    if (match) {
+      var anchorOffset = $(match).offset().top - OFFSET_HEIGHT_PX;
+      $('html, body').animate({ scrollTop: anchorOffset });
+      if (HISTORY_SUPPORT && pushToHistory) {
+        history.pushState({}, document.title, location.pathname + href);
       }
     }
-  };
+    return !!match;
+  }
 
-  $(document).ready($.proxy(anchorScrolls, "init"));
-})(window.document, window.history, window.location);
-</script>
-
-<!-- Evita lo scroll verso l'alto quando clicchi tab/pill delle lezioni -->
-<script>
-$(function () {
-  $(document).on("click", "a[data-toggle='tab'], a[data-toggle='pill']", function (e) {
-    var scrollmem = $(window).scrollTop();
-    e.preventDefault();
-    $(this).tab("show");
-    $(window).scrollTop(scrollmem);
+  $(window).on('hashchange', function() {
+    scrollIfAnchor(window.location.hash);
   });
-});
+  $('body').on('click', 'a[href^="#"]', function (e) {
+    scrollIfAnchor(this.getAttribute('href'), true);
+  });
+})(window.document, window.history, window.location);
 </script>
