@@ -1,315 +1,277 @@
 ---
-title: 'K-means Clustering in R (with Example)'
-pagetitle: Lesson 25
+title: "K-means Clustering in R (with Example)"
+pagetitle: "Lesson 25"
 editor_options:
   chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, fig.align="center", message=FALSE, warning = FALSE)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
 ```
 
-# What is Cluster analysis?
+# What is cluster analysis?
 
-Cluster analysis is part of the unsupervised learning. A cluster is a group of data that share similar features. We can say, clustering analysis is more about discovery than a prediction. The machine searches for similarity in the data. For instance, you can use cluster analysis for the following application:
+Cluster analysis is a core technique in **unsupervised learning**. A *cluster* is a group of observations that are similar to one another according to a chosen distance measure. In many business contexts, clustering is more about *discovery* than prediction: the goal is to find structure in the data and then interpret it.
 
-- Customer segmentation: Looks for similarity between groups of customers
-- Stock Market clustering: Group stock based on performances
-- Reduce dimensionality of a dataset by grouping observations with similar values
+Typical applications include:
 
-Clustering analysis is not too difficult to implement and is meaningful as well as actionable for business.
+- Customer segmentation: Identify groups of customers with similar behavior.
+- Stock clustering: Group stocks that move similarly over time.
+- Pattern discovery: Find groups of observations that share common feature profiles.
 
-The most striking difference between supervised and unsupervised learning lies in the results. Unsupervised learning creates a new variable, the label, while supervised learning predicts an outcome. The machine helps the practitioner in the quest to label the data based on close relatedness. It is up to the analyst to make use of the groups and give a name to them.
+A key distinction from supervised learning is that clustering creates a new variable (a cluster label), rather than predicting a known target.
 
-Let's make an example to understand the concept of clustering. For simplicity, we work in two dimensions. You have data on the total spend of customers and their ages. To improve advertising, the marketing team wants to send more targeted emails to their customers.
+To build intuition, consider a simple dataset with customer age and total spend:
 
-In the following graph, you plot the total spend and the age of the customers.
 ```{r}
 library(ggplot2)
-df <- data.frame(age = c(18, 21, 22, 24, 26, 26, 27, 30, 31, 35, 39, 40, 41, 42, 44, 46, 47, 48, 49, 54),
-    spend = c(10, 11, 22, 15, 12, 13, 14, 33, 39, 37, 44, 27, 29, 20, 28, 21, 30, 31, 23, 24)
+
+toy <- data.frame(
+  age   = c(18, 21, 22, 24, 26, 26, 27, 30, 31, 35, 39, 40, 41, 42, 44, 46, 47, 48, 49, 54),
+  spend = c(10, 11, 22, 15, 12, 13, 14, 33, 39, 37, 44, 27, 29, 20, 28, 21, 30, 31, 23, 24)
 )
-ggplot(df, aes(x = age, y = spend)) + geom_point()
+
+ggplot(toy, aes(age, spend)) +
+  geom_point() +
+  labs(x = "Age", y = "Total spend")
 ```
-A pattern is visible at this point
 
-1. At the bottom-left, you can see young people with a lower purchasing power
-1. Upper-middle reflects people with a job that they can afford spend more
-1. Finally, older people with a lower budget.
+Visually, you may already guess a few groups. K-means is a simple and popular method to create those groups in a reproducible way.
 
-<p align="center">
-![](imgblock25/img1.png)
-</p>
+# The k-means algorithm
 
-In the figure above, you cluster the observations by hand and define each of the three groups. This example is somewhat straightforward and highly visual. If new observations are appended to the data set, you can label them within the circles. You define the circle based on our judgment. Instead, you can use Machine Learning to group the data objectively.
+K-means is one of the most widely used clustering algorithms. Given a number of clusters \(k\), it partitions the data by minimizing the within-cluster variability (points in the same cluster should be close to each other).
 
-In this tutorial, you will learn how to use the __k-means__ algorithm.
+A simplified workflow is:
 
-# K-means algorithm
+- Initialize \(k\) centroids (often randomly).
+- Assign each observation to the nearest centroid (usually Euclidean distance).
+- Update each centroid as the mean of the assigned observations.
+- Repeat until assignments stop changing (or a maximum number of iterations is reached).
 
-K-mean is, without doubt, the most popular clustering method. Researchers released the algorithm decades ago, and lots of improvements have been done to k-means.
+Because the initialization is random, k-means can converge to different local optima. For this reason, it is standard practice to use multiple random starts with `nstart` (e.g., 25 or 50) and keep the best solution. [web:454][web:523]
 
-The algorithm tries to find groups by minimizing the distance between the observations, called local optimal solutions. The distances are measured based on the coordinates of the observations. For instance, in a two-dimensional space, the coordinates are simple.
+# Import data
 
-<p align="center">
-![](imgblock25/img2.png)
-</p>
+We will use the “Prices of Personal Computers” dataset (1993–1995). K-means relies on distances, so categorical variables are not directly appropriate in this form; we remove a few categorical columns and keep the numeric ones.
 
-The algorithm works as follow:
-
-- Step 1: Choose groups in the feature plan randomly
-- Step 2: Minimize the distance between the cluster center and the different observations (centroid). It results in groups with observations
-- Step 3: Shift the initial centroid to the mean of the coordinates within a group.
-- Step 4: Minimize the distance according to the new centroids. New boundaries are created. Thus, observations will move from one group to another
-- Repeat until no observation changes groups
-
-K-means usually takes the Euclidean distance between the feature and feature :
-$$\text{distance}(x,y)=\sum_{i=1}^n(x_i-y_i)^2$$
-Different measures are available such as the Manhattan distance or Minlowski distance. Note that, K-mean returns different groups each time you run the algorithm. Recall that the first initial guesses are random and compute the distances until the algorithm reaches a homogeneity within groups. That is, k-mean is very sensitive to the first choice, and unless the number of observations and groups are small, it is almost impossible to get the same clustering.
-
-## Select the number of clusters
-
-Another difficulty found with k-mean is the choice of the number of clusters. You can set a high value of , i.e. a large number of groups, to improve stability but you might end up with overfit of data. Overfitting means the performance of the model decreases substantially for new coming data. The machine learnt the little details of the data set and struggle to generalize the overall pattern.
-
-The number of clusters depends on the nature of the data set, the industry, business and so on. However, there is a rule of thumb to select the appropriate number of clusters:
-$$\text{cluster}=\sqrt{2/n}$$
-with equals to the number of observation in the dataset.
-
-Generally speaking, it is interesting to spend times to search for the best value of to fit with the business need.
-
-We will use the Prices of Personal Computers dataset to perform our clustering analysis. This dataset contains 6259 observations and 10 features. The dataset observes the price from 1993 to 1995 of 486 personal computers in the US. The variables are price, speed, ram, screen, cd among other.
-
-You will proceed as follow:
-
-- Import data
-- Train the model
-- Evaluate the model
-
-## Import data
-
-K means is not suitable for factor variables because it is based on the distance and discrete values do not return meaningful values. You can delete the three categorical variables in our dataset. Besides, there are no missing values in this dataset.
 ```{r}
 library(dplyr)
-PATH <- "https://raw.githubusercontent.com/guru99-edu/R-Programming/master/computers.csv"
-df <- read.csv(PATH) %>% select(-c(X, cd, multi, premium))
+library(readr)
+
+path <- "https://raw.githubusercontent.com/guru99-edu/R-Programming/master/computers.csv"
+
+df <- read_csv(path, show_col_types = FALSE) |>
+  select(-X, -cd, -multi, -premium)
+
 glimpse(df)
 ```
-From the summary statistics, you can see the data has large values. A good practice with k mean and distance calculation is to rescale the data so that the mean is equal to one and the standard deviation is equal to zero.
+
+# Standardize features
+
+Distance-based methods are sensitive to variable scales (e.g., `price` vs `ram`). Standardization (z-scores) is therefore a common pre-processing step for k-means.
+
 ```{r}
 summary(df)
 ```
-You rescale the variables with the scale() function of the dplyr library. The transformation reduces the impact of outliers and allows to compare a sole observation against the mean. If a standardized value (or z-score) is high, you can be confident that this observation is indeed above the mean (a large z-score implies that this point is far away from the mean in term of standard deviation. A z-score of two indicates the value is 2 standard deviations away from the mean. Note, the z-score follows a Gaussian distribution and is symmetrical around the mean.
+
 ```{r}
-rescale_df <- df %>%
-mutate(price_scal = scale(price),
-    hd_scal = scale(hd),
-    ram_scal = scale(ram),
-    screen_scal = scale(screen),
-    ads_scal = scale(ads),
-    trend_scal = scale(trend)) %>%
-select(-c(price, speed, hd, ram, screen, ads, trend))
+rescale_df <- df |>
+  mutate(across(where(is.numeric), scale)) |>
+  as.data.frame()
 ```
-R base has a function to run the k mean algorithm. The basic function of k mean is:
-```{r, dont-eval, eval = FALSE}
-kmeans(df, k)
-```
-__arguments:__
 
-- df: dataset used to run the algorithm
-- k: Number of clusters
+# Train a first k-means model
 
-## Train the model
-
-In figure three, you detailed how the algorithm works. You can see each step graphically with the great package build by Yi Hui (also creator of Knit for Rmarkdown). The package animation is not available in the conda library. You can use the other way to install the package with _install.packages("animation")_. 
-
-After you load the library, you add .ani after kmeans and R will plot all the steps. For illustration purpose, you only run the algorithm with the rescaled variables hd and ram with three clusters.
-```{r, dont-eval2, eval = FALSE}
+```{r}
 set.seed(2345)
-library(animation)
-kmeans.ani(rescale_df[2:3], 3)
-```
-__Code Explanation__
-
-- kmeans.ani(rescale_df[2:3], 3): Select the columns 2 and 3 of rescale_df data set and run the algorithm with k sets to 3. Plot the animation.
-
-<p align="center">
-![](imgblock25/img3.png)
-</p>
-
-You can interpret the animation as follow:
-
-- Step 1: R randomly chooses three points
-- Step 2: Compute the Euclidean distance and draw the clusters. You have one cluster in green at the bottom left, one large cluster colored in black at the right and a red one between them.
-- Step 3: Compute the centroid, i.e. the mean of the clusters
-- Repeat until no data changes cluster
-
-The algorithm converged after seven iterations. You can run the k-mean algorithm in our dataset with five clusters and call it pc_cluster.
-```{r}
-pc_cluster <-kmeans(rescale_df, 5)
+pc_cluster <- kmeans(rescale_df, centers = 5, nstart = 25)
+pc_cluster$size
 ```
 
-The list pc_cluster contains seven interesting elements:
+Key objects returned by `kmeans()`:
 
-- pc_cluster$cluster: Indicates the cluster of each observation
-- pc_cluster$centers: The cluster centres
-- pc_cluster$totss: The total sum of squares
-- pc_cluster$withinss: Within sum of square. The number of components return is equal to `k`
-- pc_cluster$tot.withinss: Sum of withinss
-- pc_clusterbetweenss: Total sum of square minus Within sum of square
-- pc_cluster$size: Number of observation within each cluster
+- `$cluster`: the assigned cluster for each observation.
+- `$centers`: the cluster centroids.
+- `$tot.withinss`: total within-cluster sum of squares (WSS).
+- `$betweenss`: between-cluster sum of squares.
+- `$size`: cluster sizes.
 
-You will use the sum of the within sum of square (i.e. tot.withinss) to compute the optimal number of clusters k. Finding k is indeed a substantial task.
+# Choosing the number of clusters (k)
 
-## Optimal k
+There is no universally correct \(k\). In practice, common approaches include:
 
-One technique to choose the best k is called the elbow method. This method uses within-group homogeneity or within-group heterogeneity to evaluate the variability. In other words, you are interested in the percentage of the variance explained by each cluster. You can expect the variability to increase with the number of clusters, alternatively, heterogeneity decreases. Our challenge is to find the k that is beyond the diminishing returns. Adding a new cluster does not improve the variability in the data because very few information is left to explain.
+- Elbow method (WSS).
+- Average silhouette method.
+- Gap statistic. [web:473][web:479]
 
-In this tutorial, we find this point using the heterogeneity measure. The Total within clusters sum of squares is the tot.withinss in the list return by kmean().
+## Elbow method (WSS)
 
-You can construct the elbow graph and find the optimal k as follow:
+Compute WSS over a range of \(k\) values and look for a “knee” (diminishing returns).
 
-- Step 1: Construct a function to compute the total within clusters sum of squares
-- Step 2: Run the algorithm times
-- Step 3: Create a data frame with the results of the algorithm
-- Step 4: Plot the results
-
-__Step 1)__ Construct a function to compute the total within clusters sum of squares
-
-You create the function that runs the k-mean algorithm and store the total within clusters sum of squares
 ```{r}
-kmean_withinss <- function(k) {
-    cluster <- kmeans(rescale_df, k)
-    return (cluster$tot.withinss)
+kmeans_wss <- function(k, x, seed = 2345, nstart = 25) {
+  set.seed(seed)
+  kmeans(x, centers = k, nstart = nstart)$tot.withinss
 }
+
+max_k <- 20
+elbow <- data.frame(
+  k   = 2:max_k,
+  wss = sapply(2:max_k, kmeans_wss, x = rescale_df)
+)
+
+ggplot(elbow, aes(k, wss)) +
+  geom_point() +
+  geom_line() +
+  scale_x_continuous(breaks = 2:max_k) +
+  labs(x = "Number of clusters (k)", y = "Total within-cluster sum of squares (WSS)")
 ```
-__Code Explanation__
 
-- function(k): Set the number of arguments in the function
-- kmeans(rescale_df, k): Run the algorithm k times
-- return(cluster$tot.withinss): Store the total within clusters sum of squares
+## Average silhouette method (optional)
 
-You can test the function with equals 2.
-```{r}
-## Try with 2 cluster
-kmean_withinss(2)
+Silhouette width measures how well-separated clusters are; higher average silhouette is generally better. [web:481]
+
+```{r, eval=FALSE}
+library(factoextra)
+
+set.seed(2345)
+fviz_nbclust(rescale_df, kmeans, method = "silhouette", k.max = 20, nstart = 25) +
+  labs(subtitle = "Average silhouette method")
 ```
-__Step 2)__ Run the algorithm n times
 
-You will use the sapply() function to run the algorithm over a range of k. This technique is faster than creating a loop and store the value.
-```{r}
-# Set maximum cluster 
-max_k <- 20 
-# Run algorithm over a range of k 
-wss <- sapply(2:max_k, kmean_withinss)
+## Gap statistic (optional)
+
+The gap statistic compares the observed clustering structure to a reference null distribution to help choose \(k\). [web:479][web:488]
+
+```{r, eval=FALSE}
+library(cluster)
+library(factoextra)
+
+set.seed(2345)
+gap_stat <- clusGap(rescale_df, FUN = kmeans, K.max = 20, B = 50, nstart = 25)
+
+fviz_gap_stat(gap_stat)
 ```
-__Code Explanation__
 
-- max_k <- 20: Set a maximum number of to 20
-- sapply(2:max_k, kmean_withinss): Run the function kmean_withinss() over a range 2:max_k, i.e. 2 to 20.
+In the rest of this lesson, we continue with \(k = 7\) (as an example) and show how to interpret and validate the solution.
 
-__Step 3)__ Create a data frame with the results of the algorithm
-
-Post creation and testing our function, you can run the k-mean algorithm over a range from 2 to 20, store the tot.withinss values.
-```{r}
-# Create a data frame to plot the graph
-elbow <- data.frame(2:max_k, wss)
-```
-__Code Explanation__
-
-- data.frame(2:max_k, wss): Create a data frame with the output of the algorithm store in wss
-
-__Step 4)__ Plot the results
-
-You plot the graph to visualize where is the elbow point
-```{r}
-# Plot the graph with gglop
-ggplot(elbow, aes(x = X2.max_k, y = wss)) +
-    geom_point() +
-    geom_line() +
-    scale_x_continuous(breaks = seq(1, 20, by = 1))
-```
-From the graph, you can see the optimal k is seven, where the curve is starting to have a diminishing return.
-
-Once you have our optimal k, you re-run the algorithm with k equals to 7 and evaluate the clusters.
-
-__Examining the cluster__
+# Fit the final model (k = 7)
 
 ```{r}
-pc_cluster_2 <-kmeans(rescale_df, 7)
-```
-As mention before, you can access the remaining interesting information in the list returned by kmean().
+set.seed(2345)
+pc_cluster_2 <- kmeans(rescale_df, centers = 7, nstart = 25)
 
-- pc_cluster_2$cluster
-- pc_cluster_2$centers
-- pc_cluster_2$size		
-
-The evaluation part is subjective and relies on the use of the algorithm. Our goal here is to gather computer with similar features. A computer guy can do the job by hand and group computer based on his expertise. However, the process will take lots of time and will be error prone. K-mean algorithm can prepare the field for him/her by suggesting clusters.
-
-As a prior evaluation, you can examine the size of the clusters.
-```{r}
 pc_cluster_2$size
 ```
-The first cluster is composed of 608 observations, while the smallest cluster, number 4, has only 580 computers. It might be good to have homogeneity between clusters, if not, a thinner data preparation might be required.
 
-You get a deeper look at the data with the center component. The rows refer to the numeration of the cluster and the columns the variables used by the algorithm. The values are the average score by each cluster for the interested column. Standardization makes the interpretation easier. Positive values indicate the z-score for a given cluster is above the overall mean. For instance, cluster 2 has the highest price average among all the clusters.
+## Examine cluster centers
+
+Because the features are standardized, each centroid coordinate is a z-score: positive values are above the overall mean for that feature, and negative values are below it.
+
 ```{r}
-center <- pc_cluster_2$centers
-center
+centers <- pc_cluster_2$centers
+centers
 ```
-You can create a heat map with ggplot to help us highlight the difference between categories.
 
-The default colors of ggplot need to be changed with the RColorBrewer library. 
+# Cluster profiles (heatmap)
 
-To create a heat map, you proceed in three steps:
+A heatmap makes it easier to compare centroid profiles across clusters.
 
-- Build a data frame with the values of the center and create a variable with the number of the cluster
-- Reshape the data with the gather() function of the tidyr library. You want to transform data from wide to long.
-- Create the palette of colors with colorRampPalette() function
-
-__Step 1)__ Build a data frame
-
-Let's create the reshape dataset
 ```{r}
 library(tidyr)
-# create dataset with the cluster number
-cluster <- c(1:7)
-center_df <- data.frame(cluster, center)
 
-# Reshape the data
-center_reshape <- gather(center_df, features, values, price_scal: trend_scal)
-head(center_reshape)
+centers_df <- data.frame(
+  cluster = factor(seq_len(nrow(centers))),
+  centers,
+  row.names = NULL
+)
+
+centers_long <- centers_df |>
+  pivot_longer(
+    cols = -cluster,
+    names_to = "feature",
+    values_to = "value"
+  )
 ```
-__Step 2)__ Reshape the data
 
-The code below create the palette of colors you will use to plot the heat map.
 ```{r}
 library(RColorBrewer)
-# Create the palette
-hm.palette <-colorRampPalette(rev(brewer.pal(10, 'RdYlGn')),space='Lab')
-```
-__Step 3)__ Visualize
 
-You can plot the graph and see what the clusters look like.
-```{r}
-# Plot the heat map
-ggplot(data = center_reshape, aes(x = features, y = cluster, fill = values)) +
-    scale_y_continuous(breaks = seq(1, 7, by = 1)) +
-    geom_tile() +
-    coord_equal() +
-    scale_fill_gradientn(colours = hm.palette(90)) +
-    theme_classic()
+hm_palette <- colorRampPalette(rev(brewer.pal(10, "RdYlGn")), space = "Lab")
+
+ggplot(centers_long, aes(x = feature, y = cluster, fill = value)) +
+  geom_tile() +
+  scale_fill_gradientn(colours = hm_palette(90)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
+
+# Interpretation and validation
+
+## Practical interpretation
+
+At this point, the goal is to map each cluster to a meaningful description (e.g., “high price + high RAM” machines vs “budget machines”). Standardization helps because every feature is on the same scale.
+
+A useful quick check is:
+- Are cluster sizes reasonable (no tiny clusters unless expected)?
+- Do centroid profiles differ in meaningful ways?
+
+## Internal validation with silhouette
+
+Silhouette values summarize cohesion and separation; the average silhouette width can be used as an internal quality check. [web:481]
+
+```{r}
+library(cluster)
+
+d <- dist(rescale_df)  # Euclidean distance matrix
+sil <- silhouette(pc_cluster_2$cluster, d)
+
+summary(sil)
+plot(sil, border = NA)
+```
+
+## Simple stability check (sensitivity to random starts)
+
+K-means can vary depending on initialization. A simple diagnostic is to re-fit the model multiple times (same k) and examine how much the objective function varies. [web:454][web:523]
+
+```{r}
+set.seed(2345)
+
+k <- 7
+n_rep <- 20
+
+wss_rep <- replicate(
+  n_rep,
+  kmeans(rescale_df, centers = k, nstart = 25)$tot.withinss
+)
+
+summary(wss_rep)
+```
+
+If the objective varies substantially, consider increasing `nstart` (e.g., 50), revisiting preprocessing (outliers, scaling), or trying alternative clustering methods (e.g., PAM, hierarchical clustering).
+
 # Summary
 
-We can summarize the k-mean algorithm in the table below
+- K-means is a simple and popular clustering algorithm for numeric data.
+- Standardizing features is important because k-means is distance-based.
+- Choosing \(k\) can be guided by elbow (WSS), silhouette, and gap statistic. [web:473][web:479]
+- Use `nstart` (e.g., 25+) and a fixed seed for more stable results. [web:454][web:523]
 
 ```{r, echo=FALSE}
 library(knitr)
-library(kableExtra)
+
 dt <- data.frame(
-  "Library" = c("base"), 
-  "Objective" = c("Train k-mean"),
-  "Function" = c("kmeans()"),
-  "Arguments" = c("df, k"))
-kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+  Library   = c("stats (base R)", "cluster", "factoextra"),
+  Objective = c("Fit k-means", "Silhouette & gap statistic", "Visualize optimal k"),
+  Function  = c("kmeans()", "silhouette(), clusGap()", "fviz_nbclust(), fviz_gap_stat()"),
+  Notes     = c("Use nstart for stability", "Distance-based validation", "Optional but convenient")
+)
+
+knitr::kable(dt)
 ```
