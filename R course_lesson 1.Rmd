@@ -1,149 +1,134 @@
+adesso vorrei che mi revisionassi ognuno degli rmd che ti incollo, in termini di linguaggio, correttezza di inglese, e chunk R, rendendo l'uso di R moderno, grazie
+
 ---
 pagetitle: "Lesson 1"
-title: "What is R? How to Download and Install R and RStudio"
-# author: "Gianluca Sottile"
-editor_options:
+title: "What is R Programming Language? How to Download & Install"
+# author: "Dott. Gianluca Sottile"
+editor_options: 
   chunk_output_type: inline
-output:
-  html_document:
-    toc: true
-    toc_depth: 2
-    toc_float: true
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-  echo = TRUE,
-  message = FALSE,
-  warning = FALSE,
-  fig.align = "center"
-)
+knitr::opts_chunk$set(echo = TRUE, fig.align="center", cache=TRUE)
 ```
 
+<br>
+
 # What is R?
+***
+R is a programming language developed by Ross Ihaka and Robert Gentleman in 1993. R possesses an extensive catalog of statistical and graphical methods. It includes machine learning algorithm, linear regression, time series, statistical inference to name a few. Most of the R libraries are written in R, but for heavy computational task, C, C++ and Fortran codes are preferred.
 
-R is a programming language and environment for statistical computing and graphics, created by Ross Ihaka and Robert Gentleman in the early 1990s. It offers a large ecosystem of packages for data analysis, visualization, statistical modeling, and machine learning.
+R is not only entrusted by academic, but many large companies also use R programming language, including Uber, Google, Airbnb, Facebook and so on.
 
-Many R packages are written in R itself; for computationally intensive tasks, high-performance code is often written in C, C++, or Fortran and then exposed to R.
+Data analysis with R is done in a series of steps; programming, transforming, discovering, modeling and communicate the results
 
-R is widely used in academia and in industry (e.g., technology, healthcare, finance) for data science, reporting, and automation.
-
-A typical data analysis workflow in R often follows these steps:
-
-- **Program**: Use R as a clear and accessible programming tool.
-- **Transform**: Clean and reshape data using packages designed for data science.
-- **Discover**: Explore the data, refine hypotheses, and perform analysis.
-- **Model**: Fit statistical and machine learning models.
-- **Communicate**: Produce reports with R Markdown or build interactive apps with Shiny.
++ __Program__: R is a clear and accessible programming tool
++ __Transform__: R is made up of a collection of libraries designed specifically for data science
++ __Discover__: Investigate the data, refine your hypothesis and analyze them
++ __Model__: R provides a wide array of tools to capture the right model for your data
++ __Communicate__: Integrate codes, graphs, and outputs to a report with R Markdown or build Shiny apps to share with the world
 
 # What is R used for?
+***
 
-R is commonly used for:
++ Statistical inference
++ Data analysis
++ Machine learning algorithm
 
-- Statistical inference.
-- Data analysis and reporting.
-- Machine learning.
-
-# R by industry
-
-If we break down the use of R by industry, academia is typically the largest user. R is a language built for statistics, and it is also widely used in healthcare, government, and consulting.
-
-<p align="center">
-
-</p>
-
-# R packages
-
-The primary uses of R have always been statistics, visualization, and (in recent years) machine learning.
-
-The figure below shows which R packages receive the most questions on Stack Overflow. Many of the top packages relate to the core workflow of data science: data preparation and communicating results.
+# R by Industry
+***
+If we break down the use of R by industry, we see that academics come first. R is a language to do statistic. R is the first choice in the healthcare industry, followed by government and consulting.
 
 <p align="center">
-
+![](imgblock1/img1.png)
 </p>
 
-Most R packages are distributed through CRAN (the Comprehensive R Archive Network), a free and open-source repository. You can install thousands of packages from CRAN to perform tasks such as time series analysis, statistical modeling, and machine learning.
+# R package
+***
+The primary uses of R is and will always be, statistic, visualization, and machine learning. The picture below shows which R package got the most questions in Stack Overflow. In the top 10, most of them are related to the workflow of a data scientist: data preparation and communicate the results.
 
 <p align="center">
-
+![](imgblock1/img2.png)
 </p>
 
-# Communicating with R
+All the libraries of R, almost 12k, are stored in CRAN. CRAN is a free and open source. You can download and use the numerous libraries to perform Machine Learning or time series analysis.
 
-R offers multiple ways to present and share results, from documents to interactive web applications:
+<p align="center">
+![](imgblock1/img3.jpg)
+</p>
 
-- **R Markdown** for reports, slides, and websites.
-- **Shiny** for interactive web applications.
-- Hosting options include RPubs, GitHub Pages, or your organization’s website.
+# Communicate with R
+***
+R has multiple ways to present and share work, either through a markdown document or a shiny app. Everything can be hosted in Rpub, GitHub or the business's website.
 
-Below is an example of a presentation hosted on RPubs: <https://rpubs.com/>
+Below is an example of a presentation hosted on [Rpub](<https://rpubs.com/g>).
 
-RStudio supports R Markdown and lets you export documents in several formats, including:
+Rstudio accepts markdown to write a document. You can export the documents in different formats:
 
-- Documents: HTML, PDF (LaTeX)
-- Presentations: HTML, PDF (Beamer)
+* Document :
+  + HTML
+  + PDF/Latex
+* Word :
+  + Presentation
+  + HTML
+  + PDF beamer
 
 # Why use R?
+***
+Data science is shaping the way companies run their businesses. Without a doubt, staying away from Artificial Intelligence and Machine will lead the company to fail. The big question is which tool/language should you use?
 
-Data science is changing how companies and institutions work. Choosing a tool is a trade-off: easier tools are quick to learn but may be limiting for advanced analysis; powerful tools often require more time to learn.
-
-The figure below shows an example of this trade-off between learning curve and “business capability”.
-
-<p align="center">
-
-</p>
-
-Tools such as Excel or Power BI are often easier to learn, but they can be limiting for statistical modeling. Python and SAS are widely used in analytics: SAS is a commercial, “click-and-run” ecosystem, while Python is flexible and strong for deployment and software engineering.
-
-R is often a good compromise: it supports statistical modeling, modern data workflows, and strong reporting/communication through R Markdown and Shiny.
-
-Stack Overflow is a large community for programming. Over the years, interest in R has grown strongly, reflecting its popularity in data science.
+They are plenty of tools available in the market to perform data analysis. Learning a new language requires some time investment. The picture below depicts the learning curve compared to the business capability a language offers. The negative relationship implies that there is no free lunch. If you want to give the best insight from the data, then you need to spend some time learning the appropriate tool, which is R.
 
 <p align="center">
-
+![](imgblock1/img4.png)
 </p>
 
-In data science, the two most common programming languages are R and Python.
+On the top left of the graph, you can see Excel and PowerBI. These two tools are simple to learn but don't offer outstanding business capability, especially in term of modeling. In the middle, you can see Python and SAS. SAS is a dedicated tool to run a statistical analysis for business, but it is not free. SAS is a click and run software. Python, however, is a language with a monotonous learning curve. Python is a fantastic tool to deploy Machine Learning and AI but lacks communication features. With an identical learning curve, R is a good trade-off between implementation and data analysis.
+
+When it comes to data visualization (DataViz), you'd probably heard about Tableau. Tableau is, without a doubt, a great tool to discover patterns through graphs and charts. Besides, learning Tableau is not time-consuming. One big problem with data visualization is you might end up never finding a pattern or just create plenty of useless charts. Tableau is a good tool for quick visualization of the data or Business Intelligence. When it comes to statistics and decision-making tool, R is more appropriate.
+
+Stack Overflow is a big community for programming languages. If you have a coding issue or need to understand a model, Stack Overflow is here to help. Over the year, the percentage of question-views has increased sharply for R compared to the other languages. This trend is of course highly correlated with the booming age of data science but, it reflects the demand of R language for data science.
+
+<p align="center">
+![](imgblock1/img5.png)
+</p>
+
+In data science, there are two tools competing with each other. R and Python are probably the programming language that defines data science.
 
 # Should you choose R?
+***
+Data scientist can use two excellent tools: R and Python. You may not have time to learn them both, especially if you get started to learn data science. Learning statistical modeling and algorithm is far more important than to learn a programming language. A programming language is a tool to compute and communicate your discovery. The most important task in data science is the way you deal with the data: import, clean, prep, feature engineering, feature selection. This should be your primary focus. If you are trying to learn R and Python at the same time without a solid background in statistics, its plain stupid. Data scientist are not programmers. Their job is to understand the data, manipulate it and expose the best approach. If you are thinking about which language to learn, let's see which language is the most appropriate for you.
 
-Many data scientists use both R and Python, but learning one language well is usually better than trying to learn both at the same time.
-
-In many projects, the most important skills are not the language itself but the *data workflow*: importing data, cleaning, feature engineering, model selection, and communication of results. A programming language is mainly a tool to implement and share this work.
-
-Because business and research contexts require communication (reports, dashboards, web apps), R can be a strong choice thanks to its integrated ecosystem.
+The principal audience for data science is business professional. In the business, one big implication is communication. There are many ways to communicate: report, web app, dashboard. You need a tool that does all this together.
 
 # Is R difficult?
+***
+Years ago, R was a difficult language to master. The language was confusing and not as structured as the other programming tools. To overcome this major issue, Hadley Wickham developed a collection of packages called tidyverse. The rule of the game changed for the best. Data manipulation become trivial and intuitive. Creating a graph was not so difficult anymore.
 
-In the past, R could feel difficult, especially for data manipulation. The ecosystem improved significantly with packages such as the **tidyverse**, which made many common tasks more consistent and easier to learn.
+The best algorithms for machine learning can be implemented with R. Packages like Keras and TensorFlow allow to create high-end machine learning technique. R also has a package to perform Xgboost, one the best algorithm for Kaggle competition.
 
-Modern R supports a broad range of machine learning tools. For example, interfaces exist for TensorFlow/Keras, and packages such as xgboost are widely used in competitions and real-world applications.
+R can communicate with the other language. It is possible to call Python, Java, C++ in R. The world of big data is also accessible to R. You can connect R with different databases like Spark or Hadoop.
 
-R also integrates with other languages and platforms: you can call Python or C++ from R, and connect to big-data tools and databases.
+Finally, R has evolved and allowed parallelizing operation to speed up the computation. In fact, R was criticized for using only one CPU at a time. The parallel package lets you to perform tasks in different cores of the machine.
 
 # Summary
-
-R is a powerful tool to explore data, build models, and communicate results. It is widely used for tasks such as clustering, correlation analysis, and dimensionality reduction, and it integrates well with reproducible reporting.
+***
+In a nutshell, R is a great tool to explore and investigate the data. Elaborate analysis like clustering, correlation, and data reduction are done with R. This is the most crucial part, without a good feature engineering and model, the deployment of the machine learning will not give meaningful results.
 
 # Download R
+***
+Go to <https://cran.r-project.org>. Precompiled binary distributions of the base system and contributed packages, Windows and Mac users most likely want one of these versions of R:
 
-Go to <https://cran.r-project.org>. Precompiled binary distributions are available for all major operating systems:
-
-- [Download R for Linux](https://cran.r-project.org/bin/linux/)
-- [Download R for macOS](https://cran.r-project.org/bin/macosx/)
-- [Download R for Windows](https://cran.r-project.org/bin/windows/)
+* [Download R for Linux](https://cran.r-project.org/bin/linux/)
+* [Download R for (Mac) OS X](https://cran.r-project.org/bin/macosx/)
+* [Download R for Windows](https://cran.r-project.org/bin/windows/)
 
 # What is RStudio?
+***
+RStudio is an integrated development environment (IDE) for R. It includes a console, syntax-highlighting editor that supports direct code execution, as well as tools for plotting, history, debugging and workspace management.
 
-RStudio is an integrated development environment (IDE) for R. It provides:
-
-- A console and a syntax-highlighting editor.
-- Tools for plotting, debugging, history, and workspace management.
-
-RStudio is available in open-source and commercial editions. It runs as a desktop app (Windows, macOS, Linux) or in a browser via RStudio Server.
+RStudio is available in open source and commercial editions and runs on the desktop (Windows, Mac, and Linux) or in a browser connected to RStudio Server or RStudio Server Pro (Debian/Ubuntu, Red Hat/CentOS, and SUSE Linux).
 
 # Download RStudio
-
-Go to <https://posit.co/download/rstudio-desktop/> and download the installer for your operating system.
-
-After downloading, double-click the installer to begin installation (e.g., `.dmg` on macOS and `.exe` on Windows), then follow the prompts.
+***
+Go to <https://rstudio.com>. Click on __Products -> RStudio -> RStudio Desktop -> Download RStudio Desktop__. By default, the browser selects the downloading page of your system. Double-click on the downloaded file to begin the installation. It is .dmg for mac and .exe for windows. You will be asked to confirm the installation.
