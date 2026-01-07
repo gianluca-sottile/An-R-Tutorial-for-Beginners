@@ -86,6 +86,18 @@
 })(window.document, window.history, window.location);
 </script>
 
+<script>
+$(function () {
+  $(document).on("click", "a[data-toggle='tab'], a[data-toggle='pill']", function (e) {
+    var scrollmem = $(window).scrollTop();
+    e.preventDefault();          // prevents the anchor jump [web:405]
+    $(this).tab("show");         // show tab without navigation [web:405]
+    $(window).scrollTop(scrollmem);
+  });
+});
+</script>
+
+
 </head>
 <body>
 </body>
