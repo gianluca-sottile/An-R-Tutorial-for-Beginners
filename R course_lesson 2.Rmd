@@ -1,39 +1,44 @@
 ---
 pagetitle: "Lesson 2"
-title: "R Data Types, Arithmetic & Logical Operators with Example"
+title: "R Data Types, Arithmetic, and Logical Operators (with Examples)"
 # author: "Dott. Gianluca Sottile"
 editor_options: 
   chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
 ```
 
 <br>
 
 # Basic data types {#buttons .tabset .tabset-fade .tabset-pills}
 ***
-R Programming works with numerous data types, including
+
+R works with several data types and data structures, including:
 
 + Scalars
-+ Vectors (numerical, character, logical)
++ Vectors (numeric, character, logical)
 + Matrices
 + Data frames
 + Lists
 
-__Basics types__
+__Basic types__
 
-+ 4.5 is a decimal value called numerics.
-+ 4 is a natural value called integers. Integers are also numerics.
-+ TRUE or FALSE is a Boolean value called logical.
-+ The value inside " " or ' ' are text (string). They are called characters.
++ `4.5` is a decimal number (type: numeric).
++ `4L` is an integer (type: integer). Integers are a subset of numeric values.
++ `TRUE` or `FALSE` are Boolean values (type: logical).
++ Values inside `" "` or `' '` are text (strings). They are stored as type: character.
 
-We can check the type of a variable with the class function
+You can check the type of an object with `class()`.
 
 ## Example 1:
 ```{r}
-# Declare variables of different types
 # Numeric
 x <- 28
 class(x)
@@ -41,149 +46,162 @@ class(x)
 
 ## Example 2:
 ```{r}
-# String
-y <- "R is Fantastic"
+# Character
+y <- "R is fantastic"
 class(y)
 ```
 
 ## Example 3:
 ```{r}
-# Boolean
+# Logical
 z <- TRUE
 class(z)
 ```
 
+## Example 4 (optional):
+```{r}
+# Integer (note the L suffix)
+w <- 4L
+class(w)
+```
+
 # Variables {#buttons1 .tabset .tabset-fade .tabset-pills}
 ***
-Variables store values and are an important component in programming, especially for a data scientist. A variable can store a number, an object, a statistical result, vector, dataset, a model prediction basically anything R outputs. We can use that variable later simply by calling the name of the variable.
 
-To declare a variable, we need to assign a variable name. The name should not have space. We can use _ to connect to words.
+Variables store values and are a key component in programming. In R, a variable can store almost anything: a number, an object, a statistical result, a vector, a dataset, a model, or predictions. You can reuse a variable later by typing its name.
 
-To add a value to the variable, use <- or =.
+To create a variable, you assign a value to a name. Variable names should not contain spaces; you can use `_` to separate words.
+
+To assign a value, use `<-` (recommended) or `=`.
 
 Here is the syntax:
 
-```{r, don-eval, eval=FALSE}
-# First way to declare a variable:  use the `<-`
+```{r, eval=FALSE}
+# Recommended assignment operator
 name_of_variable <- value
-# Second way to declare a variable:  use the `=`
+
+# Also used sometimes (e.g., inside function calls)
 name_of_variable = value
 ```
 
-In the command line, we can write the following codes to see what happens:
+In the console, you can run the following examples:
 
 ## Example 1:
 ```{r}
-# Print variable x
+# Create a variable
 x <- 42
+x
 ```
 
 ## Example 2:
 ```{r}
-y  <- 10
+y <- 10
 y
 ```
 
 ## Example 3:
 ```{r}
-# We call x and y and apply a subtraction
+# Use variables in an expression
 x - y
 ```
 
 # Vectors {#buttons2 .tabset .tabset-fade .tabset-pills}
 ***
-A vector is a one-dimensional array. We can create a vector with all the basic data type we learnt before. The simplest way to build a vector in R, is to use the c command.
+
+A vector is a one-dimensional sequence of values. You can create a vector from any basic type. The simplest way to build a vector is using `c()`.
 
 ## Example 1:
 ```{r}
-# Numerical
+# Numeric
 vec_num <- c(1, 10, 49)
 vec_num
 ```
 
 ## Example 2:
 ```{r}
-# Character 
+# Character
 vec_chr <- c("a", "b", "c")
 vec_chr
 ```
 
 ## Example 3:
 ```{r}
-# Boolean 
-vec_bool <-  c(TRUE, FALSE, TRUE)
-vec_bool
+# Logical
+vec_lgl <- c(TRUE, FALSE, TRUE)
+vec_lgl
 ```
 
 ## Example 4:
-We can do arithmetic calculations on vectors.
+You can perform arithmetic operations on vectors element-by-element.
+
 ```{r}
-# Create the vectors
 vect_1 <- c(1, 3, 5)
 vect_2 <- c(2, 4, 6)
-# Take the sum of A_vector and B_vector
+
 sum_vect <- vect_1 + vect_2
-# Print out total_vector
 sum_vect
 ```
 
 ## Example 5:
-In R, it is possible to slice a vector. In some occasion, we are interested in only the first five rows of a vector. We can use the `[1:5]` command to extract the value 1 to 5.
+In R, you can slice a vector using square brackets `[]`. For example, `x[1:5]` selects elements 1 to 5.
+
 ```{r}
-# Slice the first five rows of the vector
-slice_vector <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+slice_vector <- 1:10
 slice_vector[1:5]
 ```
 
 ## Example 6:
-The shortest way to create a range of value is to use the: between two numbers. For instance, from the above example, we can write `c(1:10)` to create a vector of value from one to ten.
+A quick way to create a sequence is `:`.
+
 ```{r}
-# Faster way to create adjacent values
-c(1:10)
+1:10
 ```
 
 # Arithmetic Operators {#buttons3 .tabset .tabset-fade .tabset-pills}
 ***
-We will first see the basic arithmetic operations in R. The following operators stand for:
+
+Let’s look at basic arithmetic operators in R:
 
 ```{r, echo=FALSE}
-library(knitr)
-library(kableExtra)
-dt <- data.frame(
-  "Operator" = c("+", "-", "*", "/", "^ or **"), 
-  "Description" = c("Addition", "Subtraction", "Multiplication", "Division", "Exponentiation"))
-kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+ops_arith <- data.frame(
+  Operator = c("+", "-", "*", "/", "^", "%%"),
+  Description = c(
+    "Addition",
+    "Subtraction",
+    "Multiplication",
+    "Division",
+    "Exponentiation",
+    "Modulo (remainder)"
+  )
+)
+
+knitr::kable(ops_arith) |>
+  kableExtra::kable_styling(
+    bootstrap_options = c("striped", "hover"),
+    full_width = FALSE
+  )
 ```
 
-<!-- | Operator | Description |  -->
-<!-- |:---------|:------------| -->
-<!-- | + |	Addition | -->
-<!-- | - |	Subtraction | -->
-<!-- | * |	Multiplication | -->
-<!-- | / |	Division | -->
-<!-- | ^ or ** |	Exponentiation | -->
+Notes:
 
-You can easily copy and paste the above R code into Rstudio Console. The __output__ is displayed after the character #. For instance, we write the code print('Hello world') the output will be ##[1] "Hello world".
-
-The ## means we print an output and the number in the square bracket ([1]) is the number of the display
-
-The sentences starting with # __annotation__. We can use # inside an R script to add any comment we want. R won't read it during the running time.
+- Lines starting with `#` are comments; R ignores them.
+- In rendered R Markdown, printed output is often shown with a `##` prefix.
 
 ## Example 1:
 ```{r}
-# An addition
+# Addition
 3 + 4
 ```
 
 ## Example 2:
 ```{r}
-# A multiplication
+# Multiplication
 3 * 5
 ```
 
 ## Example 3:
 ```{r}
-# A division
+# Division
 (5 + 5) / 2
 ```
 
@@ -196,61 +214,65 @@ The sentences starting with # __annotation__. We can use # inside an R script to
 ## Example 5:
 ```{r}
 # Modulo
-28 %% 6
+28%% 6
 ```
 
 # Logical Operators {#buttons4 .tabset .tabset-fade .tabset-pills}
 ***
-With logical operators, we want to return values inside the vector based on logical conditions. Following is a detailed list of logical operators available in R
+
+Logical operators return `TRUE` or `FALSE`. They are used to test conditions and filter values.
 
 ```{r, echo=FALSE}
-library(knitr)
-library(kableExtra)
-dt <- data.frame(
-  "Operator" = c("<", "<=", ">", ">=", "==", "!=", "!x", "x & y", "isTRUE(x"), 
-  "Description" = c("Less than", "Less than or equal to", "Greater than", "Greater than or equal to", "Exactly equal to", "Not equal to", "Not x", "x AND y", "Test if x is TRUE"))
-kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+ops_logical <- data.frame(
+  Operator = c("<", "<=", ">", ">=", "==", "!=", "!", "x & y", "x | y", "isTRUE(x)"),
+  Description = c(
+    "Less than",
+    "Less than or equal to",
+    "Greater than",
+    "Greater than or equal to",
+    "Exactly equal to",
+    "Not equal to",
+    "Not x",
+    "x AND y (vectorised)",
+    "x OR y (vectorised)",
+    "Test whether x is TRUE"
+  )
+)
+
+knitr::kable(ops_logical) |>
+  kableExtra::kable_styling(
+    bootstrap_options = c("striped", "hover"),
+    full_width = FALSE
+  )
 ```
 
-<!-- | Operator | Description |  -->
-<!-- |:---------|:------------| -->
-<!-- | < |	Less than | -->
-<!-- | <= | Less than or equal to | -->
-<!-- | > |	Greater than | -->
-<!-- | >= | Greater than or equal to | -->
-<!-- | == | Exactly equal to | -->
-<!-- | != | Not equal to | -->
-<!-- | !x | Not X | -->
-<!-- | x & y |	x AND y | -->
-<!-- | isTRUE(x) |	Test if x is TRUE | -->
+To select values that satisfy a condition, use:
 
-The logical statements in R are wrapped inside the `[ ]`. We can add many conditional statements as we like but we need to include them in a parenthesis. We can follow this structure to create a conditional statement:
-
-```{r, don-eval1, eval=FALSE}
-variable_name[(conditional_statement)]
+```{r, eval=FALSE}
+variable_name[condition]
 ```
-
-With variable_name referring to the variable, we want to use for the statement. We create the logical statement i.e. `variable_name > 0`. Finally, we use the square bracket to finalize the logical statement. Below, an example of a logical statement.
 
 ## Example 1:
 ```{r}
 # Create a vector from 1 to 10
-logical_vector <- c(1:10)
+logical_vector <- 1:10
+
+# Test a condition (returns TRUE/FALSE for each element)
 logical_vector > 5
 ```
 
-In the output above, R reads each value and compares it to the statement `logical_vector > 5`. If the value is strictly superior to five, then the condition is TRUE, otherwise FALSE. R returns a vector of TRUE and FALSE.
+In the output above, R compares each element to the condition `logical_vector > 5`. If the element is strictly greater than 5, the result is `TRUE`; otherwise it is `FALSE`.
 
 ## Example 2:
-In the example below, we want to extract the values that only meet the condition 'is strictly superior to five'. For that, we can wrap the condition inside a square bracket precede by the vector containing the values.
+To extract only the values that meet the condition, put the condition inside `[]` after the vector.
+
 ```{r}
-# Print value strictly above 5
-logical_vector[(logical_vector > 5)]
+logical_vector[logical_vector > 5]
 ```
 
 ## Example 3:
+You can combine conditions with `&` (AND) and use parentheses for clarity.
+
 ```{r}
-# Print 5 and 6
-logical_vector <- c(1:10)
 logical_vector[(logical_vector > 4) & (logical_vector < 7)]
 ```
