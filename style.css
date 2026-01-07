@@ -1,117 +1,321 @@
-h1, .h1, h2, .h2, h3, .h3 {
-    margin-top: 20px;
-    font-family: Arial, sans-serif;
-    color: #333;
+/* =========================================================
+   Modern R / RStudio theme for R Markdown (Bootstrap 3)
+   Palette inspired by:
+   - R logo blues: #276DC2 / #165CAA
+   - RStudio blues: #1F65CC / #4AA4DE
+   ========================================================= */
+
+:root{
+  --r-blue: #276DC2;        /* R logo blue */
+  --r-blue-dark: #165CAA;   /* R logo darker blue */
+  --rstudio-blue: #1F65CC;  /* RStudio palette */
+  --rstudio-sky: #4AA4DE;   /* RStudio palette */
+
+  --bg: #f7f8fb;
+  --surface: #ffffff;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --border: rgba(15, 23, 42, 0.12);
+
+  --radius: 12px;
+  --radius-sm: 10px;
+
+  --shadow-sm: 0 6px 18px rgba(17, 24, 39, 0.08);
+  --shadow-md: 0 12px 30px rgba(17, 24, 39, 0.12);
+
+  --focus: rgba(74, 164, 222, 0.55);
+
+  --container-max: 1320px;
+  --container-pad: clamp(16px, 2.5vw, 28px);
+
+  --navbar-h: 64px;
 }
 
-.btn {
-    border-width: 0;
-    border-radius: 5px;
-    font-weight: bold;
-    text-transform: uppercase;
-    padding: 10px 20px;
-    transition: all 0.3s ease;
+/* ---------- Base ---------- */
+html { scroll-behavior: smooth; }
+
+body{
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  line-height: 1.75;
+  font-size: 16.5px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+
+  margin: 0;
+  padding-top: calc(var(--navbar-h) + 14px);
+  padding-bottom: 48px;
+
+  background: radial-gradient(1200px 500px at 10% 0%, rgba(74,164,222,0.12), transparent 60%),
+              radial-gradient(900px 400px at 90% 10%, rgba(39,109,194,0.10), transparent 55%),
+              var(--bg);
+  color: var(--text);
 }
 
-.btn-default {
-    color: #ffffff;
-    background-color: #2ecc71;
-    border: none;
+/* Make headings cleaner and more “product” */
+h1, .h1, h2, .h2, h3, .h3{
+  margin-top: 28px;
+  margin-bottom: 12px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+h1{ font-size: clamp(30px, 3.2vw, 40px); }
+h2{ font-size: clamp(22px, 2.2vw, 28px); }
+h3{ font-size: clamp(18px, 1.7vw, 22px); color: rgba(31,41,55,0.92); }
+
+p { margin: 0 0 12px; color: rgba(31,41,55,0.92); }
+small, .small { color: var(--muted); }
+
+/* Links */
+a{
+  color: var(--r-blue);
+  text-decoration: none;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+a:hover{ color: var(--rstudio-blue); text-decoration: underline; }
+a:focus, a:focus-visible{
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+  border-radius: 6px;
 }
 
-.btn-default:hover {
-    color: #2ecc71;
-    background-color: #ffffff;
-    border: 2px solid #2ecc71;
+/* ---------- Layout container ---------- */
+.container{
+  width: min(94%, var(--container-max));
+  margin: 0 auto;
+  padding: var(--container-pad);
+}
+.main-container{ padding-top: 10px; }
+
+/* Card-like feel for the main content block (Bootstrap main container wrapper) */
+.main-container .container,
+.container .main-container {
+  background: rgba(255,255,255,0.72);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
 }
 
-/* TOC visibile sempre */
-#TOC {
-    opacity: 1 !important;
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 15px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    transition: box-shadow 0.3s ease;
+/* ---------- Code blocks ---------- */
+code, pre{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.95em;
+}
+code{
+  color: #0f172a;
+  background: rgba(31, 101, 204, 0.08);
+  border: 1px solid rgba(31, 101, 204, 0.14);
+  padding: 0.12em 0.35em;
+  border-radius: 8px;
+}
+pre{
+  background: #0b1220;
+  color: #e5e7eb;
+  border-radius: var(--radius);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 16px;
+  overflow-x: auto;
+}
+pre code{
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
 }
 
-#TOC:hover {
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+/* ---------- Buttons (Bootstrap 3) ---------- */
+.btn{
+  border-width: 0;
+  border-radius: 999px;
+  font-weight: 600;
+  text-transform: none;
+  padding: 10px 16px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+.btn:focus, .btn:focus-visible{
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.btn:hover{ transform: translateY(-1px); box-shadow: 0 10px 20px rgba(17,24,39,0.12); }
+
+.btn-default{
+  color: #fff;
+  background: linear-gradient(135deg, var(--r-blue), var(--rstudio-sky));
+  border: 1px solid rgba(255,255,255,0.25);
+}
+.btn-default:hover{
+  color: #fff;
+  background: linear-gradient(135deg, var(--r-blue-dark), var(--rstudio-blue));
 }
 
-#TOC > ul > li {
-    list-style: none;
-    margin-bottom: 5px;
+/* ---------- Navbar (Bootstrap 3) ---------- */
+.navbar, .navbar-default, .navbar-fixed-top{
+  border: none !important;
+  min-height: var(--navbar-h);
 }
 
-#TOC ul {
-    padding-left: 15px;
+.navbar-fixed-top{
+  /* RStudio-blue glass */
+  background: linear-gradient(
+      135deg,
+      rgba(31, 101, 204, 0.92),   /* #1F65CC */
+      rgba(74, 164, 222, 0.86)    /* #4AA4DE */
+  ) !important;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(17,24,39,0.18);
+  border-bottom: 1px solid rgba(255,255,255,0.22) !important;
 }
 
-.blue { 
-    background-color: #e6f0ff; 
-    border-radius: 5px; 
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.navbar-brand{
+  color: #fff !important;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
-/* FIX 1: Padding-top per navbar fissa (60px) */
-body {
-    font-family: 'Roboto', sans-serif;
-    line-height: 1.7;  /* +0.1 per spaziatura */
-    font-size: 16px;   /* Testo più grande */
-    margin: 0;
-    padding-top: 70px; /* Spazio per navbar (altezza ~60px + margine) */
-    padding-bottom: 40px;
-    background-color: #f9f9f9;
-    color: #444;
+.navbar-nav > li > a{
+  color: rgba(255,255,255,0.92) !important;
+  font-weight: 700;
+  border-radius: 12px;
+  margin: 10px 6px;
+  padding: 10px 12px !important;
 }
 
-/* FIX 2: Container testo più largo */
-.container {
-    width: 80%;        /* Da 90% a 80% per più respiro */
-    max-width: 1400px; /* +200px */
-    margin: 0 auto;
-    padding: 20px;
+.navbar-nav > li > a:hover,
+.navbar-nav > li > a:focus{
+  background: rgba(255,255,255,0.18) !important;
+  color: #fff !important;
+  outline: none;
 }
 
-.main-container {
-    padding-top: 20px; /* Extra spazio contenuto */
+.navbar-nav > .active > a,
+.navbar-nav > .active > a:hover,
+.navbar-nav > .active > a:focus{
+  background: rgba(255,255,255,0.22) !important;
+  color: #fff !important;
 }
 
-a {
-    color: #2ecc71;
-    text-decoration: none;
+/* ---------- TOC (Table of contents) ---------- */
+#TOC{
+  opacity: 1 !important;
+  background: rgba(255,255,255,0.78);
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: var(--radius);
+  padding: 14px 14px;
+  box-shadow: var(--shadow-sm);
+
+  position: sticky;
+  top: calc(var(--navbar-h) + 18px);
+  max-height: calc(100vh - (var(--navbar-h) + 36px));
+  overflow: auto;
+
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+#TOC:hover{
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+#TOC ul{ padding-left: 16px; }
+#TOC > ul > li{ list-style: none; margin-bottom: 6px; }
+#TOC a{
+  display: inline-block;
+  padding: 6px 8px;
+  border-radius: 10px;
+  color: rgba(31,41,55,0.92);
+  text-decoration: none;
+}
+#TOC a:hover{
+  background: rgba(74,164,222,0.16);
+  color: var(--rstudio-blue);
+  text-decoration: none;
 }
 
-a:hover {
-    text-decoration: underline;
+/* ---------- Tabsets (R Markdown tabset uses Bootstrap nav-tabs/nav-pills) ---------- */
+.nav-tabs{
+  border-bottom: 1px solid rgba(15, 23, 42, 0.12);
+  margin-top: 10px;
+}
+.nav-tabs > li > a{
+  border: 1px solid transparent;
+  border-radius: 12px 12px 0 0;
+  color: rgba(31,41,55,0.90);
+  font-weight: 600;
+  padding: 10px 12px;
+}
+.nav-tabs > li > a:hover{
+  background: rgba(39,109,194,0.08);
+  border-color: rgba(15, 23, 42, 0.10);
+}
+.nav-tabs > li.active > a,
+.nav-tabs > li.active > a:hover,
+.nav-tabs > li.active > a:focus{
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-bottom-color: rgba(255,255,255,0.92);
+  color: var(--r-blue-dark);
 }
 
-/* Navbar semi-trasparente */
-.navbar-fixed-top {
-    background: rgba(46, 204, 113, 0.85) !important;  /* Verde 85% opaco (0.85=trasparente) */
-    /* O gradiente: linear-gradient(135deg, rgba(46,204,113,0.9), rgba(39,174,96,0.8)) */
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    opacity: 1 !important;
-    backdrop-filter: blur(10px);  /* Effetto vetro (opzionale, moderno) */
-    border-bottom: 1px solid rgba(255,255,255,0.2);  /* Bordo sottile sotto */
+/* Pills (if used) */
+.nav-pills > li > a{
+  border-radius: 999px;
+  font-weight: 700;
+  color: rgba(31,41,55,0.90);
+}
+.nav-pills > li > a:hover{
+  background: rgba(74,164,222,0.14);
+}
+.nav-pills > li.active > a,
+.nav-pills > li.active > a:hover,
+.nav-pills > li.active > a:focus{
+  background: linear-gradient(135deg, var(--r-blue), var(--rstudio-sky));
 }
 
-.navbar-brand, .navbar-nav > li > a {
-    color: #fff !important;
-    font-weight: bold;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.3);  /* Ombra testo per leggibilità */
+/* Panel content under tabs */
+.tab-content{
+  background: rgba(255,255,255,0.72);
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  padding: 14px 16px;
 }
 
-.navbar-nav > li > a:hover {
-    background-color: rgba(255,255,255,0.25);
-    color: #fff !important;
-    border-radius: 4px;
+/* ---------- Tables (generic + kable) ---------- */
+table{
+  background: rgba(255,255,255,0.86);
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+}
+table > thead > tr > th{
+  background: rgba(39,109,194,0.10);
+  color: rgba(31,41,55,0.92);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.10) !important;
+}
+table > tbody > tr:hover{
+  background: rgba(74,164,222,0.10);
 }
 
-/* Responsive mobile */
-@media (max-width: 768px) {
-    body { padding-top: 60px; }
-    .container { width: 95%; }
+/* ---------- “Callout” block you already used ---------- */
+.blue{
+  background: linear-gradient(135deg, rgba(39,109,194,0.10), rgba(74,164,222,0.10));
+  border: 1px solid rgba(39,109,194,0.14);
+  border-radius: var(--radius);
+  padding: 18px 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---------- Images ---------- */
+img{
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 768px){
+  :root{ --navbar-h: 58px; }
+  body{ padding-top: calc(var(--navbar-h) + 10px); font-size: 16px; }
+  .container{ width: min(96%, var(--container-max)); padding: 16px; }
+  #TOC{ position: static; max-height: none; }
+  .navbar-nav > li > a{ margin: 6px 6px; }
 }
