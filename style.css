@@ -29,12 +29,37 @@ body{
   font-size: 12;
 }
 
-/* Prevent anchor links from landing under fixed navbar */
-html { scroll-padding-top: 84px; }
+/* Links */
+a {
+  color: #276DC2; /* R blue */
+  text-decoration: none;
+}
+a:hover {
+  color: #1F65CC; /* RStudio blue */
+  text-decoration: underline;
+}
 
-/* Responsive mobile */
-@media (max-width: 768px) {
-  body { padding-top: 62px; font-size: 16px; }
-  .container { width: 95%; padding: 16px; }
-  html { scroll-padding-top: 70px; }
+/* Buttons */
+.btn {
+  border-width: 0;
+  border-radius: 999px;
+  font-weight: 700;
+  text-transform: none;
+  padding: 10px 18px;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+}
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(0,0,0,0.10);
+}
+
+/* Bootstrap "default" button -> RStudio gradient */
+.btn-default {
+  color: #ffffff;
+  background: linear-gradient(135deg, #1F65CC, #4AA4DE);
+  border: none;
+}
+.btn-default:hover {
+  color: #ffffff;
+  background: linear-gradient(135deg, #165CAA, #1F65CC);
 }
