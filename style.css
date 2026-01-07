@@ -25,18 +25,17 @@ h1, .h1, h2, .h2, h3, .h3 {
     border: 2px solid #2ecc71;
 }
 
-/* FIX TOC: visibile sempre, hover più luminosa */
+/* TOC visibile sempre */
 #TOC {
-    opacity: 1 !important;  /* Sempre visibile */
+    opacity: 1 !important;
     background: #f8f9fa;
     border-radius: 8px;
     padding: 15px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    transition: opacity 0.3s ease, box-shadow 0.3s ease;
+    transition: box-shadow 0.3s ease;
 }
 
 #TOC:hover {
-    opacity: 1;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
@@ -56,13 +55,28 @@ h1, .h1, h2, .h2, h3, .h3 {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+/* FIX 1: Padding-top per navbar fissa (60px) */
 body {
     font-family: 'Roboto', sans-serif;
-    line-height: 1.6;
+    line-height: 1.7;  /* +0.1 per spaziatura */
+    font-size: 16px;   /* Testo più grande */
     margin: 0;
-    padding: 0;
+    padding-top: 70px; /* Spazio per navbar (altezza ~60px + margine) */
+    padding-bottom: 40px;
     background-color: #f9f9f9;
     color: #444;
+}
+
+/* FIX 2: Container testo più largo */
+.container {
+    width: 85%;        /* Da 90% a 85% per più respiro */
+    max-width: 1400px; /* +200px */
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.main-container {
+    padding-top: 20px; /* Extra spazio contenuto */
 }
 
 a {
@@ -74,26 +88,28 @@ a:hover {
     text-decoration: underline;
 }
 
-.container {
-    width: 90%;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px;
-}
-
-/* Navbar migliorato: fisso, visibile */
+/* Navbar: non copre, colori belli */
 .navbar-fixed-top {
     background: linear-gradient(135deg, #2ecc71, #27ae60) !important;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     opacity: 1 !important;
+    margin-bottom: 0;  /* No margine extra */
 }
 
 .navbar-brand, .navbar-nav > li > a {
     color: #fff !important;
     font-weight: bold;
+    font-size: 16px;   /* Font navbar più grande */
 }
 
 .navbar-nav > li > a:hover {
     background-color: rgba(255,255,255,0.2);
     color: #fff !important;
+    border-radius: 4px;
+}
+
+/* Responsive mobile */
+@media (max-width: 768px) {
+    body { padding-top: 60px; }
+    .container { width: 95%; }
 }
