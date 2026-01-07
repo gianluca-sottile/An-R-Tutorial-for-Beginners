@@ -79,10 +79,6 @@ RStudio [Installa](https://posit.co/download/rstudio-desktop/)
 ✅ **Italiano/Inglese** bilingue  
 ✅ **CI/CD completo** (license, gitignore, Actions)
 
-## 📱 Preview
-
-![Lezione 1 preview](R-course_lesson-1_files/figure-html/unnamed-chunk-1-1.png)
-
 ## 🤝 Contribuisci
 
 1. 🍴 **Fork** il repository
