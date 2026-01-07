@@ -2,6 +2,18 @@ h1, .h1, h2, .h2, h3, .h3 {
     margin-top: 20px;
 }
 
+/* Content width */
+.container {
+  width: 84%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 22px;
+}
+
+.main-container {
+  padding-top: 10px;
+}
+
 .btn {
     border-width: 0 0px 0px 0px;
     font-weight: normal;
@@ -59,6 +71,7 @@ a:hover {
   background: linear-gradient(135deg, #1F65CC, #4AA4DE);
   border: none;
 }
+
 .btn-default:hover {
   color: #ffffff;
   background: linear-gradient(135deg, #165CAA, #1F65CC);
