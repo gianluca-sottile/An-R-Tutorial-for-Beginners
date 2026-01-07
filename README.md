@@ -65,7 +65,9 @@ cd An-R-Tutorial-for-Beginners
 **Inizia**: Knit `index.Rmd` → [Sito locale](http://127.0.0.1:XXXXX)
 
 ### Prerequisiti
+
 R ≥ 4.3 [Installa](https://posit.co/download/r)
+
 RStudio [Installa](https://posit.co/download/rstudio-desktop/)
 
 ## ✨ Caratteristiche
