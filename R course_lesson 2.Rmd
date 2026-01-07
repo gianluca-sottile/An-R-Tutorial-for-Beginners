@@ -20,6 +20,24 @@ knitr::opts_chunk$set(
 )
 ```
 
+```{=html}
+<script>
+// Keep scroll position when switching R Markdown tabsets (Bootstrap tabs)
+$(function () {
+  var scrollmem = 0;
+
+  $('a[data-toggle="tab"]').on('show.bs.tab', function () {
+    scrollmem = $(window).scrollTop();
+  });
+
+  $('a[data-toggle="tab"]').on('shown.bs.tab', function () {
+    $(window).scrollTop(scrollmem);
+  });
+});
+</script>
+```
+
+
 # Basic data types {#buttons .tabset .tabset-fade .tabset-pills}
 
 R works with several data types and data structures. The most common ones are:
