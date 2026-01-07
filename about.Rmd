@@ -1,7 +1,5 @@
 ---
-
 pagetitle: "About This Course"
-
 ---
 
 <br>
