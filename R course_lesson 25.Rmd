@@ -54,7 +54,7 @@ A simplified workflow is:
 - Update each centroid as the mean of the assigned observations.
 - Repeat until assignments stop changing (or a maximum number of iterations is reached).
 
-Because the initialization is random, k-means can converge to different local optima. For this reason, it is standard practice to use multiple random starts with `nstart` (e.g., 25 or 50) and keep the best solution. [web:454][web:523]
+Because the initialization is random, k-means can converge to different local optima. For this reason, it is standard practice to use multiple random starts with `nstart` (e.g., 25 or 50) and keep the best solution.
 
 # Import data
 
@@ -67,7 +67,7 @@ library(readr)
 path <- "https://raw.githubusercontent.com/guru99-edu/R-Programming/master/computers.csv"
 
 df <- read_csv(path, show_col_types = FALSE) |>
-  select(-X, -cd, -multi, -premium)
+  select(-cd, -multi, -premium)
 
 glimpse(df)
 ```
@@ -108,7 +108,7 @@ There is no universally correct \(k\). In practice, common approaches include:
 
 - Elbow method (WSS).
 - Average silhouette method.
-- Gap statistic. [web:473][web:479]
+- Gap statistic.
 
 ## Elbow method (WSS)
 
@@ -135,7 +135,7 @@ ggplot(elbow, aes(k, wss)) +
 
 ## Average silhouette method (optional)
 
-Silhouette width measures how well-separated clusters are; higher average silhouette is generally better. [web:481]
+Silhouette width measures how well-separated clusters are; higher average silhouette is generally better.
 
 ```{r, eval=FALSE}
 library(factoextra)
@@ -147,7 +147,7 @@ fviz_nbclust(rescale_df, kmeans, method = "silhouette", k.max = 20, nstart = 25)
 
 ## Gap statistic (optional)
 
-The gap statistic compares the observed clustering structure to a reference null distribution to help choose \(k\). [web:479][web:488]
+The gap statistic compares the observed clustering structure to a reference null distribution to help choose \(k\).
 
 ```{r, eval=FALSE}
 library(cluster)
@@ -224,7 +224,7 @@ A useful quick check is:
 
 ## Internal validation with silhouette
 
-Silhouette values summarize cohesion and separation; the average silhouette width can be used as an internal quality check. [web:481]
+Silhouette values summarize cohesion and separation; the average silhouette width can be used as an internal quality check.
 
 ```{r}
 library(cluster)
@@ -238,7 +238,7 @@ plot(sil, border = NA)
 
 ## Simple stability check (sensitivity to random starts)
 
-K-means can vary depending on initialization. A simple diagnostic is to re-fit the model multiple times (same k) and examine how much the objective function varies. [web:454][web:523]
+K-means can vary depending on initialization. A simple diagnostic is to re-fit the model multiple times (same k) and examine how much the objective function varies.
 
 ```{r}
 set.seed(2345)
@@ -260,8 +260,8 @@ If the objective varies substantially, consider increasing `nstart` (e.g., 50), 
 
 - K-means is a simple and popular clustering algorithm for numeric data.
 - Standardizing features is important because k-means is distance-based.
-- Choosing \(k\) can be guided by elbow (WSS), silhouette, and gap statistic. [web:473][web:479]
-- Use `nstart` (e.g., 25+) and a fixed seed for more stable results. [web:454][web:523]
+- Choosing \(k\) can be guided by elbow (WSS), silhouette, and gap statistic.
+- Use `nstart` (e.g., 25+) and a fixed seed for more stable results.
 
 ```{r, echo=FALSE}
 library(knitr)
