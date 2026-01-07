@@ -133,7 +133,7 @@ If a worksheet includes many sheets, it is easy to select a particular sheet by 
 ```{r}
 example <- readxl_example("datasets.xlsx")
 quake <- read_excel(example, sheet = "quakes")
-quake_1 <-read_excel(example, sheet = 4)
+quake_1 <-read_excel(example, sheet = 3)
 identical(quake, quake_1)
 ```
 
