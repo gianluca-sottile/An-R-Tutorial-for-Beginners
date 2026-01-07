@@ -1,4 +1,3 @@
-```markdown
 [![GitHub stars](https://img.shields.io/github/stars/gianluca-sottile/An-R-Tutorial-for-Beginners?style=social)](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners)
 [![License](https://img.shields.io/github/license/gianluca-sottile/An-R-Tutorial-for-Beginners?color=blue)](LICENSE)
 [![GitHub last commit](https://img.shields.io/github/last-commit/gianluca-sottile/An-R-Tutorial-for-Beginners)](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners)
@@ -105,4 +104,3 @@ RStudio [Installa](https://posit.co/download/rstudio-desktop/)
 **👨‍💻 Autore**: [Gianluca Sottile](https://github.com/gianluca-sottile)  
 **📄 License**: [CC-BY-SA-4.0](LICENSE)  
 **🌟 Dai una ⭐ se ti è utile!**
-```
