@@ -66,9 +66,8 @@ cd An-R-Tutorial-for-Beginners
 
 ### Prerequisiti
 
-R ≥ 4.3 [Installa](https://posit.co/download/r)
-
-RStudio [Installa](https://posit.co/download/rstudio-desktop/)
+- R ≥ 4.3 [Installa](https://posit.co/download/r)
+- RStudio [Installa](https://posit.co/download/rstudio-desktop/)
 
 ## ✨ Caratteristiche
 
