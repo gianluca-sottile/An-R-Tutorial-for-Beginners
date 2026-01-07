@@ -1,5 +1,5 @@
 name: "An R Tutorial for Beginners"
-output_dir: "."
+output_dir: "docs"
 navbar:
   title: "An R Tutorial for Beginners"
   left:
