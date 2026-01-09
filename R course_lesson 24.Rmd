@@ -173,13 +173,13 @@ Check how `educational.num` relates to the recoded groups:
 
 ```{r}
 recast_data |>
-  group_by(education) |>
-  summarize(
+  dplyr::group_by(education) |>
+  dplyr::summarize(
     average_educ_year = mean(educational.num, na.rm = TRUE),
     count = n(),
     .groups = "drop"
   ) |>
-  arrange(average_educ_year)
+  dplyr::arrange(average_educ_year)
 ```
 
 ### Recode marital.status
