@@ -20,7 +20,7 @@ read.csv(file, header = TRUE, sep = ",")
 ```
 
 Notes:
-- Since R 4.0, strings are **not** converted to factors by default, but older code often included `stringsAsFactors = FALSE`; keeping it can be useful for portability. [web:691][web:693]
+- Since R 4.0, strings are **not** converted to factors by default, but older code often included `stringsAsFactors = FALSE`; keeping it can be useful for portability.
 - On Windows, paths in quotes need escaping (`\\`) or use forward slashes (`/`).
 
 ```{r}
@@ -41,7 +41,7 @@ readr::read_csv(PATH)
 
 # Read Excel
 
-The `readxl` package reads both `.xls` and `.xlsx` files. [web:695][web:703]
+The `readxl` package reads both `.xls` and `.xlsx` files.
 
 ```{r}
 library(readxl)
@@ -49,7 +49,7 @@ library(readxl)
 
 ## readxl_example()
 
-`readxl_example()` lists example spreadsheets shipped with the package. [web:695]
+`readxl_example()` lists example spreadsheets shipped with the package.
 
 ```{r}
 readxl_example()
@@ -62,7 +62,7 @@ readxl_example("datasets.xlsx")
 read_excel(path, sheet = NULL, range = NULL, col_names = TRUE, n_max = Inf, na = "")
 ```
 
-Examples (sheet by name or index): [web:695]
+Examples (sheet by name or index):
 
 ```{r}
 example <- readxl_example("datasets.xlsx")
@@ -93,7 +93,7 @@ dim(range_ab)
 
 ### Read specific rows/columns (cell_rows / cell_cols)
 
-`cell_rows()` and `cell_cols()` give fine control over the imported rectangle. [web:701][web:695]
+`cell_rows()` and `cell_cols()` give fine control over the imported rectangle.
 
 ```{r}
 rows_1_5 <- read_excel(example, range = cell_rows(1:5), col_names = TRUE)
@@ -112,7 +112,7 @@ sum(is.na(iris_na))
 
 # Import SAS / Stata / SPSS
 
-The `haven` package imports (and exports) common file formats from other statistical software, including SAS, Stata, and SPSS. [web:699][web:672]
+The `haven` package imports (and exports) common file formats from other statistical software, including SAS, Stata, and SPSS.
 
 ```{r}
 library(haven)
@@ -142,7 +142,7 @@ df_spss <- read_sav(PATH_spss)
 head(df_spss)
 ```
 
-Tip: `haven::read_spss()` can also choose between SPSS formats based on file extension. [web:699]
+Tip: `haven::read_spss()` can also choose between SPSS formats based on file extension.
 
 # Best practices
 
