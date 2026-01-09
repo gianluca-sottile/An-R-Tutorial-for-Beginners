@@ -1,6 +1,6 @@
 ---
 pagetitle: "Lesson 16"
-title: "R: Exporting Data to Excel, CSV, SAS, STATA, Text File"
+title: "Exporting Data to Excel, CSV, SAS, STATA, Text File"
 editor_options:
   chunk_output_type: inline
 ---
