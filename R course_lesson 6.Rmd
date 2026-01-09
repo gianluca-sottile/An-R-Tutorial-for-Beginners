@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 
 # What is a list?
 
-A list is R’s most flexible data structure: it can store objects of **different types** in a single container (vectors, matrices, data frames, even other lists or functions). [web:807]
+A list is R’s most flexible data structure: it can store objects of **different types** in a single container (vectors, matrices, data frames, even other lists or functions).
 
 # Create a list
 
@@ -54,7 +54,7 @@ head(df)
 
 ### Step 4: Put them into a list
 
-It is best practice to **name** list elements so you can extract them by name later. [web:811]
+It is best practice to **name** list elements so you can extract them by name later.
 
 ```{r}
 my_list <- list(
@@ -71,9 +71,9 @@ names(my_list)
 
 There are three common ways to extract elements:
 
-- `my_list[1]` returns a **sub-list** (still a list) [web:813]
-- `my_list[[1]]` returns the **element itself** [web:813]
-- `my_list$name` is shorthand for `my_list[["name"]]` [web:813]
+- `my_list[1]` returns a **sub-list** (still a list)
+- `my_list[[1]]` returns the **element itself**
+- `my_list$name` is shorthand for `my_list[["name"]]`
 
 ## Example: single vs double brackets
 
