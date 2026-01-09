@@ -23,7 +23,7 @@ In this lesson you will export a small summary table to:
 - CSV
 - Excel (.xlsx)
 - R data formats (.rds / .RData)
-- SPSS / SAS / Stata (via **haven**) [web:672]
+- SPSS / SAS / Stata (via **haven**)
 
 # Working directory
 
@@ -79,8 +79,8 @@ write.csv2(df, "table_car.csv", row.names = FALSE)
 
 ## Recommended (no Java): openxlsx
 
-The historical `xlsx` package depends on Java and `rJava`, which can be painful on Mac/Linux/CI systems. [web:660]  
-A smoother option is `openxlsx` (no Java), using `write.xlsx()`. [web:668]
+The historical `xlsx` package depends on Java and `rJava`, which can be painful on Mac/Linux/CI systems.
+A smoother option is `openxlsx` (no Java), using `write.xlsx()`.
 
 ```{r, eval=FALSE}
 library(openxlsx)
@@ -88,7 +88,7 @@ library(openxlsx)
 write.xlsx(df, file = "table_car.xlsx", overwrite = TRUE)
 ```
 
-You can also export multiple sheets by passing a named list. [web:668]
+You can also export multiple sheets by passing a named list.
 
 ```{r, eval=FALSE}
 write.xlsx(
@@ -108,7 +108,7 @@ writexl::write_xlsx(df, "table_car.xlsx")
 
 # Export to other statistical software (haven)
 
-The **haven** package reads/writes common formats from SPSS, SAS, and Stata. [web:672]
+The **haven** package reads/writes common formats from SPSS, SAS, and Stata.
 
 ```{r}
 library(haven)
