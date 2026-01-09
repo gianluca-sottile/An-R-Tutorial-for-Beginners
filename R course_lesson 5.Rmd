@@ -1,6 +1,6 @@
 ---
 pagetitle: "Lesson 5"
-title: "R Data Frames: Create, Append, Select, Subset"
+title: "Data Frames: Create, Append, Select, Subset"
 editor_options:
   chunk_output_type: inline
 ---
