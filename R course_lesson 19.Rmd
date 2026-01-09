@@ -1,255 +1,204 @@
 ---
-title: "How to make Boxplot in R (with Example)"
-pagetitle: Lesson 19
+title: "How to Make a Boxplot in R (with Example)"
+pagetitle: "Lesson 19"
 editor_options:
   chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, fig.align="center", message=FALSE, warning = FALSE)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
 ```
 
-You can use the geometric object geom_boxplot() from ggplot2 library to draw a box plot. Box plot helps to __visualize the distribution of the data by quartile and detect the presence of outliers__.
+`geom_boxplot()` from **ggplot2** creates a box plot. A box plot visualizes the distribution of a numeric variable using quartiles and helps detect potential outliers.
 
-We will use the airquality dataset to introduce box plot with ggplot. This dataset measures the airquality of New York from May to September 1973. The dataset contains 154 observations. We will use the following variables:
+We will use the `airquality` dataset (New York air quality measurements from May to September 1973). We will focus on:
 
-- Ozone: Numerical variable
-- Wind: Numerical variable
-- Month: May to September. Numerical variable
+- `Ozone` (numeric)
+- `Wind` (numeric)
+- `Month` (May to September; we will treat it as a factor)
 
-# Create Box Plot
-Before you start to create your first box plot, you need to manipulate the data as follow:
+# Create a box plot
 
-- Step 1: Import the data
-- Step 2: Drop unnecessary variables
-- Step 3: Convert Month in factor level
-- Step 4: Create a new categorical variable dividing the month with three level: begin, middle and end.
-- Step 5: Remove missing observations
+Before plotting, we will:
 
-All these steps are done with dplyr and the pipeline operator `%>%`.
+1. Start from `airquality`
+2. Drop variables we won’t use
+3. Convert `Month` to an ordered factor with labels
+4. Create a new categorical variable for the day of the month: Begin / Middle / End
+5. Remove missing values
 
 ```{r}
 library(dplyr)
 library(ggplot2)
-# Step 1
-data_air <- airquality %>%
 
-#Step 2
-select(-c(Solar.R, Temp)) %>%
+data_air <- airquality |>
+  select(-Solar.R, -Temp) |>
+  mutate(
+    Month = factor(
+      Month,
+      ordered = TRUE,
+      labels = c("May", "June", "July", "August", "September")
+    ),
+    day_cat = case_when(
+      Day < 10 ~ "Begin",
+      Day < 20 ~ "Middle",
+      TRUE ~ "End"
+    ) |>
+      factor(levels = c("Begin", "Middle", "End"))
+  )
 
-#Step 3
-mutate(Month = factor(Month, order = TRUE, labels = c("May", "June", "July", "August", "September")), 
-       
-#Step 4 
-day_cat = factor(ifelse(Day < 10, "Begin", ifelse(Day < 20, "Middle", "End"))))
-```
-A good practice is to check the structure of the data with the function glimpse().
-
-```{r}
 glimpse(data_air)
-```
 
-There are NA's in the dataset. Removing them is wise.
-
-```{r}
-# Step 5
-data_air_nona <- data_air %>% na.omit()	
+data_air_nona <- data_air |>
+  tidyr::drop_na()
 ```
 
 # Basic box plot
-Let's plot the basic box plot with the distribution of ozone by month.
+
+Let’s plot the distribution of ozone by month.
 
 ```{r}
-# Store the graph
 box_plot <- ggplot(data_air_nona, aes(x = Month, y = Ozone))
-# Add the geometric object box plot
-box_plot + geom_boxplot()
+
+box_plot +
+  geom_boxplot() +
+  theme_classic()
 ```
 
-__Code Explanation__
-
-- Store the graph for further use
-  - box_plot: You store the graph into the variable box_plot It is helpful for further use or avoid too  complex line of codes
-- Add the geometric object box plot
-  - You pass the dataset data_air_nona to ggplot.
-  - Inside the aes() argument, you add the x-axis and y-axis.
-  - The + sign means you want R to keep reading the code. It makes the code more readable by breaking it.
-  - Use geom_boxplot() to create a box plot
-  
-# Change side of the graph
-
-You can flip the side of the graph.
-
-```{r}
-box_plot + geom_boxplot() + coord_flip()
-```
-
-__Code Explanation__
-
-- box_plot: You use the graph you stored. It avoids rewriting all the codes each time you add new information to the graph.
-- geom_boxplot(): Create the box plot
-- coord_flip(): Flip the side of the graph
-
-# Change color of outlier
-
-You can change the color, shape and size of the outliers.
+# Flip the orientation
 
 ```{r}
 box_plot +
-    geom_boxplot(outlier.colour = "red",
-        outlier.shape = 2,
-        outlier.size = 3) +
-    theme_classic()
+  geom_boxplot() +
+  coord_flip() +
+  theme_classic()
 ```
 
-__Code Explanation__
+# Customize outliers
 
-- outlier.colour="red": Control the color of the outliers
-- outlier.shape=2: Change the shape of the outlier. 2 refers to triangle
-- outlier.size=3: Change the size of the triangle. The size is proportional to the number.
-
-# Add a summary statistic
-
-You can add a summary statistic to the box plot.
+You can change the outlier appearance (color, shape, and size).
 
 ```{r}
 box_plot +
-    geom_boxplot() +
-    stat_summary(fun.y = mean,
-        geom = "point",
-        size = 3,
-        color = "steelblue") +
-    theme_classic()
+  geom_boxplot(
+    outlier.colour = "red",
+    outlier.shape = 2,
+    outlier.size = 2.8
+  ) +
+  theme_classic()
 ```
 
-__Code Explanation__
+# Add a summary statistic (mean)
 
-- stat_summary() allows adding a summary to the box plot
-- The argument fun.y controls the statistics returned. You will use mean
-- Note: Other statistics are available such as min and max. More than one statistics can be exhibited in the same graph
-- geom = "point": Plot the average with a point
-- size=3: Size of the point
-- color ="steelblue": Color of the points
- 
-# Box Plot with Dots
-
-In the next plot, you add the dot plot layers. Each dot represents an observation.
+You can add the mean as an overlay point. Note: in recent ggplot2 versions, use `fun =` (the old `fun.y` is deprecated). [web:600]
 
 ```{r}
 box_plot +
-    geom_boxplot() +
-    geom_dotplot(binaxis = 'y',
-        dotsize = 1,
-        stackdir = 'center') +
-    theme_classic()
+  geom_boxplot() +
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    size = 3,
+    color = "steelblue"
+  ) +
+  theme_classic()
 ```
 
-__Code Explanation__
+# Box plot with dots
 
-- geom_dotplot() allows adding dot to the bin width
-- binaxis='y': Change the position of the dots along the y-axis. By default, x-axis
-- dotsize=1: Size of the dots
-- stackdir='center': Way to stack the dots: Four values:
-  - "up" (default),
-  - "down"
-  - "center"
-  - "centerwhole"
-  
-# Control Aesthetic of the Box Plot
+A dot layer helps show individual observations.
 
-## Change the color of the box
+```{r}
+box_plot +
+  geom_boxplot() +
+  geom_dotplot(
+    binaxis = "y",
+    stackdir = "center",
+    dotsize = 0.8
+  ) +
+  theme_classic()
+```
 
-You can change the colors of the group.
+# Control aesthetics
+
+## Color boxes by group
 
 ```{r}
 ggplot(data_air_nona, aes(x = Month, y = Ozone, color = Month)) +
-    geom_boxplot() +
-    theme_classic()
+  geom_boxplot() +
+  theme_classic() +
+  guides(color = "none")
 ```
-
-__Code Explanation__
-
-- The colors of the groups are controlled in the aes() mapping. You can use color= Month to change the color of the box according to the months
 
 # Box plot with multiple groups
 
-It is also possible to add multiple groups. You can visualize the difference in the air quality according to the day of the measure.
+Here we compare ozone by month, further split by `day_cat`.
 
 ```{r}
-ggplot(data_air_nona, aes(Month, Ozone)) +
-    geom_boxplot(aes(fill = day_cat)) +
-    theme_classic()
+ggplot(data_air_nona, aes(x = Month, y = Ozone, fill = day_cat)) +
+  geom_boxplot() +
+  theme_classic() +
+  labs(fill = "Day in month")
 ```
 
-__Code Explanation__
+# Box plot with jittered points
 
-- The aes() mapping of the geometric object controls the groups to display (this variable has to be a factor)
-- aes(fill= day_cat) allows creating three boxes for each month in the x-axis
-
-# Box Plot with Jittered Dots
-
-Another way to show the dot is with jittered points. It is a convenient way to visualize points with a categorical variable. This method avoids the overlapping of the discrete data.
+Jittered points are another common way to display observations and reduce overlap.
 
 ```{r}
 box_plot +
-    geom_boxplot() +
-    geom_jitter(shape = 15,
-        color = "steelblue",
-        position = position_jitter(width = 0.21)) +
-    theme_classic()
+  geom_boxplot() +
+  geom_jitter(
+    width = 0.18,
+    shape = 15,
+    color = "steelblue",
+    alpha = 0.7
+  ) +
+  theme_classic()
 ```
 
-__Code Explanation__
-
-- geom_jitter() adds a little decay to each point.
-- shape=15 changes the shape of the points. 15 represents the squares
-- color = "steelblue": Change the color of the point
-- position=position_jitter(width = 0.21): Way to place the overlapping points. position_jitter(width = 0.21) means you move the points by 20 percent from the x-axis. By default, 40 percent.
-
-You can see the difference between the first graph with the jitter method and the second with the point method.
+For comparison, here is the same plot using `geom_point()` without jitter:
 
 ```{r}
 box_plot +
-    geom_boxplot() +
-    geom_point(shape = 5,
-        color = "steelblue") +
-    theme_classic()
+  geom_boxplot() +
+  geom_point(shape = 5, color = "steelblue") +
+  theme_classic()
 ```
 
-# Notched Box Plot
+# Notched box plot
 
-An interesting feature of geom_boxplot(), is a notched box plot. The notch plot narrows the box around the median. The main purpose of a notched box plot is to compare the significance of the median between groups. There is strong evidence two groups have different medians when the notches do not overlap. A notch is computed as follow:
+A notched box plot narrows the box around the median. Non-overlapping notches provide visual evidence that medians may differ.
 
-$$\text{median}\pm 1.57\times\frac{\text{IQR}}{\sqrt{n}}$$
-
-with is the interquartile and number of observations.
+\[
+\text{median} \pm 1.57 \times \frac{\text{IQR}}{\sqrt{n}}
+\]
 
 ```{r}
 box_plot +
-    geom_boxplot(notch = TRUE) +
-    theme_classic()
+  geom_boxplot(notch = TRUE) +
+  theme_classic()
 ```
-
-__Code Explanation__
-
-- geom_boxplot(notch=TRUE): Creabox_plotte a notched box plot
 
 # Summary
 
-We can summarize the different types of box plot in the table below:
-
 ```{r, echo=FALSE}
 library(knitr)
-library(kableExtra)
-dt <- data.frame(
-  "Objective" = c("Basic box plot", "Flip the side", "Notched box plot", "Box plot with jittered dots"), 
-  "Code" = c("ggplot(df, aes(x = x1, y = y)) + geom_boxplot()", "ggplot(df, aes(x = x1, y = y)) + geom_boxplot() + coord_flip()", "ggplot(df, aes(x = x1, y = y)) + geom_boxplot(notch = TRUE)", "ggplot(df, aes(x = x1, y = y)) + geom_boxplot() + geom_jitter(position = position_jitter(0.21))"))
-kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
-```
 
-<!-- | Objective | Code | -->
-<!-- |:----------|:-----| -->
-<!-- | Basic box plot | ggplot(df, aes( x = x1, y =y)) + geom_boxplot() | -->
-<!-- | flip the side | ggplot(df, aes( x = x1, y =y)) + geom_boxplot() + coord_flip() | -->
-<!-- | Notched box plot | ggplot(df, aes( x = x1, y =y)) + geom_boxplot(notch = TRUE) | -->
-<!-- | Box plot with jittered dots | ggplot(df, aes( x = x1, y =y)) + geom_boxplot() + geom_jitter(position = position_jitter(0.21)) | -->
+dt <- data.frame(
+  Objective = c("Basic box plot", "Flip orientation", "Notched box plot", "Box plot with jitter"),
+  Code = c(
+    "ggplot(df, aes(x, y)) + geom_boxplot()",
+    "ggplot(df, aes(x, y)) + geom_boxplot() + coord_flip()",
+    "ggplot(df, aes(x, y)) + geom_boxplot(notch = TRUE)",
+    "ggplot(df, aes(x, y)) + geom_boxplot() + geom_jitter(width = 0.18)"
+  )
+)
+
+knitr::kable(dt)
+```
