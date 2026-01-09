@@ -8,7 +8,7 @@ A practical, beginner-friendly R course: from zero to data analysis and visualiz
 
 Live website: https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/
 
-## What you will learn
+## 🎯 What you will learn
 
 - **Core R fundamentals**: objects, data types, matrices, factors
 - **Data preparation**: data frames, lists, sorting, merging, user-defined functions
@@ -17,7 +17,7 @@ Live website: https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/
 - **Exploratory analysis & visualization**: correlation, scatter plots, boxplots, histograms, tests
 - **Machine learning foundations**: regression (linear/stepwise, GLM) and k-means
 
-## Lesson index (25 lessons)
+## 📋 Lesson index (25 lessons)
 
 ### Fundamentals
 | # | Lesson | Source (.Rmd) | Rendered (HTML) |
@@ -64,7 +64,7 @@ Live website: https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/
 | 24 | Generalized Linear Model | [Rmd](R%20course_lesson%2024.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-24.html) |
 | 25 | K-means Clustering | [Rmd](R%20course_lesson%2025.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-25.html) |
 
-## Quick start
+## Quick start 🚀
 
 ```r
 # Option 1: clone with usethis (RStudio)
@@ -79,6 +79,28 @@ cd An-R-Tutorial-for-Beginners
 
 Open `An-R-Tutorial-for-Beginners.Rproj` in RStudio, then knit `index.Rmd` (or build the site).
 
-## License
+### Prerequisiti
 
-CC-BY-SA-4.0 (see [LICENSE](LICENSE)).
+- R ≥ 4.3 [Install](https://posit.co/download/r)
+- RStudio [Install](https://posit.co/download/rstudio-desktop/)
+
+## 🤝 Contribute
+
+1. 🍴 **Fork** il repository
+2. 🔀 **Branch** `feature/nome-feature`
+3. 💾 **Commit** + **Push**
+4. 📤 **Pull Request**
+5. 🌟 **Star** for support!
+
+[![Issues](https://img.shields.io/github/issues/gianluca-sottile/An-R-Tutorial-for-Beginners)](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners/issues)
+
+## 📚 Risorse extra
+
+- [R per tutti](https://www.r4datasciencebook.com/)
+- [ggplot2 guida](https://ggplot2.tidyverse.org/)
+
+---
+
+**👨‍💻 Author**: [Gianluca Sottile](https://github.com/gianluca-sottile)  
+**📄 License**: [CC-BY-SA-4.0](LICENSE)  
+**🌟 Give it a ⭐ if you find it useful!
