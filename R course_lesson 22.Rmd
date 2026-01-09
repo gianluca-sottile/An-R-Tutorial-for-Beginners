@@ -100,7 +100,7 @@ summary(anova_one_way)
 
 ### Step 5) Post-hoc comparisons (Tukey HSD)
 
-The ANOVA tells you whether *any* difference exists, but not *which* pairs differ. Tukey’s HSD provides pairwise comparisons with multiple-testing adjustment. [web:566]
+The ANOVA tells you whether *any* difference exists, but not *which* pairs differ. Tukey’s HSD provides pairwise comparisons with multiple-testing adjustment.
 
 ```{r}
 tukey_one_way <- TukeyHSD(anova_one_way)
