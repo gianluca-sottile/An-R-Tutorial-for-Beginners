@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 
 # The if / else statement {#buttons .tabset .tabset-fade .tabset-pills}
 
-Conditional statements let you run different code depending on whether a condition is `TRUE` or `FALSE`. The basic syntax in R is: [web:749]
+Conditional statements let you run different code depending on whether a condition is `TRUE` or `FALSE`. The basic syntax in R is:
 
 ```{r, eval=FALSE}
 if (condition) {
@@ -46,7 +46,7 @@ Tip: consistent indentation matters a lot for readability.
 
 # The else if statement
 
-Use `else if` to check multiple conditions in sequence. [web:749]
+Use `else if` to check multiple conditions in sequence.
 
 ```{r, eval=FALSE}
 if (condition1) {
@@ -73,7 +73,7 @@ if (quantity < 20) {
 ```
 
 Note:
-- `&&` is the scalar “AND” operator typically used in `if()` statements; `&` is vectorized and compares element-by-element. [web:755]
+- `&&` is the scalar “AND” operator typically used in `if()` statements; `&` is vectorized and compares element-by-element.
 
 # Example: VAT rate by product category
 
@@ -121,7 +121,7 @@ if (category == "A") {
 
 # Extra (optional): vectorized if-else
 
-If you need to apply conditions to an entire vector (not just a single value), you typically use `ifelse()` (base R) or `dplyr::if_else()` (type-stable). [web:753][web:763]
+If you need to apply conditions to an entire vector (not just a single value), you typically use `ifelse()` (base R) or `dplyr::if_else()` (type-stable).
 
 ```{r, eval=FALSE}
 x <- c(10, 25, 40)
