@@ -18,11 +18,11 @@ Very often, data comes from multiple sources. To analyze it, you typically need 
 
 # Join types (concepts)
 
-In base R, the main tool is `merge()`. By default, `merge(x, y)` performs an **inner join** (keeps only matching keys). [web:778]  
+In base R, the main tool is `merge()`. By default, `merge(x, y)` performs an **inner join** (keeps only matching keys).
 You can control outer joins with:
-- `all.x = TRUE` → **left join** (keep all rows from `x`) [web:778]
-- `all.y = TRUE` → **right join** (keep all rows from `y`) [web:778]
-- `all = TRUE` (or both `all.x` and `all.y`) → **full join** (keep all rows from both) [web:778]
+- `all.x = TRUE` → **left join** (keep all rows from `x`)
+- `all.y = TRUE` → **right join** (keep all rows from `y`)
+- `all = TRUE` (or both `all.x` and `all.y`) → **full join** (keep all rows from both)
 
 # Example data
 
@@ -61,7 +61,7 @@ m_inner
 dim(m_inner)
 ```
 
-This returns only producers that appear in both tables (matching `surname`). [web:778]
+This returns only producers that appear in both tables (matching `surname`).
 
 ## dplyr alternative (optional)
 
@@ -72,7 +72,7 @@ m_inner2 <- producers |>
   inner_join(movies, by = "surname")
 ```
 
-`inner_join()` keeps rows with keys present in both tables and adds columns from `y` to `x`. [web:786]
+`inner_join()` keeps rows with keys present in both tables and adds columns from `y` to `x`.
 
 # Join with different key names
 
@@ -88,7 +88,7 @@ head(m_inner_diffkey)
 
 # Left join (keep all from x)
 
-A left join keeps all rows from the left table (`x`) and fills missing matches from the right table (`y`) with `NA`. [web:778]
+A left join keeps all rows from the left table (`x`) and fills missing matches from the right table (`y`) with `NA`.
 
 ```{r}
 library(dplyr)
@@ -102,7 +102,7 @@ m_left
 dim(m_left)
 ```
 
-Because “Lucas” has no match in `movies2`, the `title` column becomes `NA` for that row. [web:778]
+Because “Lucas” has no match in `movies2`, the `title` column becomes `NA` for that row.
 
 ## dplyr equivalent (optional)
 
@@ -113,7 +113,7 @@ m_left2 <- producers_plus |>
 
 # Full join (keep all rows)
 
-A full join keeps all rows from both tables and uses `NA` where there is no match. [web:778]
+A full join keeps all rows from both tables and uses `NA` where there is no match.
 
 ```{r}
 m_full <- merge(producers_plus, movies2, by.x = "surname", by.y = "name", all = TRUE)
