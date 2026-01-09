@@ -1,26 +1,28 @@
 ---
 pagetitle: "Lesson 10"
-title: "IF, ELSE, ELSE IF Statement in R"
-# author: "Dott. Gianluca Sottile"
-editor_options: 
+title: "IF, ELSE, and ELSE IF Statements in R"
+editor_options:
   chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
 ```
 
-<br>
+# The if / else statement {#buttons .tabset .tabset-fade .tabset-pills}
 
-# The if else statement
-***
-An if-else statement is a great tool for the developer trying to return an output based on a condition. In R, the syntax is:
+Conditional statements let you run different code depending on whether a condition is `TRUE` or `FALSE`. The basic syntax in R is: [web:749]
 
-```{r, dont-eval, eval=FALSE}
+```{r, eval=FALSE}
 if (condition) {
-    Expr1 
+  expr1
 } else {
-    Expr2
+  expr2
 }
 ```
 
@@ -28,84 +30,100 @@ if (condition) {
 ![](imgblock10/img1.png)
 </p>
 
-We want to examine whether a variable stored as "quantity" is above 20. If quantity is greater than 20, the code will print "You sold a lot!" otherwise Not enough for today.
+## Example 1: Simple condition
 
 ```{r}
-# Create vector quantity
 quantity <- 25
-# Set the is-else statement
+
 if (quantity > 20) {
-    print('You sold a lot!')
+  print("You sold a lot!")
 } else {
-    print('Not enough for today')  
+  print("Not enough for today.")
 }
 ```
 
-Note: Make sure you correctly write the indentations. Code with multiple conditions can become unreadable when the indentations are not in correct position.
+Tip: consistent indentation matters a lot for readability.
 
 # The else if statement
-***
-We can further customize the control level with the else if statement. With else if, you can add as many conditions as we want. The syntax is:
 
-```{r, dont-eval1, eval=FALSE}
-if (condition1) { 
-    expr1
+Use `else if` to check multiple conditions in sequence. [web:749]
+
+```{r, eval=FALSE}
+if (condition1) {
+  expr1
 } else if (condition2) {
-    expr2
-} else if  (condition3) {
-    expr3
+  expr2
 } else {
-    expr4
+  expr3
 }
 ```
 
-We are interested to know if we sold quantities between 20 and 30. If we do, then the pint Average day. If quantity is > 30 we print What a great day!, otherwise Not enough for today.
-
-You can try to change the amount of quantity.
+## Example 2: Multiple conditions
 
 ```{r}
-# Create vector quantiy
-quantity <-  10
-# Create multiple condition statement
+quantity <- 10
+
 if (quantity < 20) {
-      print('Not enough for today')
-} else if (quantity > 20  & quantity <= 30) {
-     print('Average day')
+  print("Not enough for today.")
+} else if (quantity > 20 && quantity <= 30) {
+  print("Average day.")
 } else {
-      print('What a great day!')
+  print("What a great day!")
 }
 ```
 
-__Example:__
-VAT has different rate according to the product purchased. Imagine we have three different kind of products with different VAT applied:
+Note:
+- `&&` is the scalar “AND” operator typically used in `if()` statements; `&` is vectorized and compares element-by-element. [web:755]
+
+# Example: VAT rate by product category
+
+Imagine three product categories with different VAT rates:
 
 ```{r, echo=FALSE}
 library(knitr)
-library(kableExtra)
+
 dt <- data.frame(
-  "Categories" = c("A", "B", "C"), 
-  "Products" = c("Book, magazine, newspaper, etc..", "Vegetable, meat, beverage, etc..", "Tee-shirt, jean, pant, etc.."),
-  "VAT" = c("8%", "10%", "20%"))
-kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+  Category = c("A", "B", "C"),
+  Products = c(
+    "Books, magazines, newspapers, ...",
+    "Vegetables, meat, beverages, ...",
+    "T-shirts, jeans, pants, ..."
+  ),
+  VAT = c("8%", "10%", "20%")
+)
+
+k <- knitr::kable(dt)
+
+if (requireNamespace("kableExtra", quietly = TRUE)) {
+  k <- kableExtra::kable_styling(k, bootstrap_options = c("striped", "hover"))
+}
+
+k
 ```
 
-<!-- | Categories | Products |	VAT | -->
-<!-- |:-----------|:---------|:----| -->
-<!-- | A | Book, magazine, newspaper, etc.. | 8% | -->
-<!-- | B |	Vegetable, meat, beverage, etc.. | 10% | -->
-<!-- | C |	Tee-shirt, jean, pant, etc.. | 20% | -->
-
-We can write a chain to apply the correct VAT rate to the product a customer bought.
+We can apply the correct VAT rate with an `if / else if` chain:
 
 ```{r}
-category <- 'A'
+category <- "A"
 price <- 10
-if (category == 'A'){
-  cat('A vat rate of 8% is applied.','The total price is', price * 1.08)  
-} else if (category == 'B'){
-    cat('A vat rate of 10% is applied.','The total price is', price * 1.10)  
+
+if (category == "A") {
+  total <- price * 1.08
+  cat("VAT rate: 8%.\nTotal price:", total, "\n")
+} else if (category == "B") {
+  total <- price * 1.10
+  cat("VAT rate: 10%.\nTotal price:", total, "\n")
 } else {
-    cat('A vat rate of 20% is applied.','The total price is', price * 1.20)  
+  total <- price * 1.20
+  cat("VAT rate: 20%.\nTotal price:", total, "\n")
 }
 ```
 
+# Extra (optional): vectorized if-else
+
+If you need to apply conditions to an entire vector (not just a single value), you typically use `ifelse()` (base R) or `dplyr::if_else()` (type-stable). [web:753][web:763]
+
+```{r, eval=FALSE}
+x <- c(10, 25, 40)
+ifelse(x > 20, "big", "small")
+```
