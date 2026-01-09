@@ -73,7 +73,8 @@ In many cases, we want to know the length of a vector for computation or to be u
 Note: `length()` returns the number of elements in a vector. If the function is passed into a matrix or a data frame, the number of columns is returned.
 
 ```{r}
-dt <- datasets::cars
+data("cars", package = "datasets")
+dt <- cars
 ## number columns
 length(dt)
 ## number rows
