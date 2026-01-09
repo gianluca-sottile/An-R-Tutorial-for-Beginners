@@ -1,100 +1,121 @@
 ---
 pagetitle: "Lesson 4"
-title: "Factor in R: Categorical & Continuous Variables"
-# author: "Dott. Gianluca Sottile"
-editor_options: 
+title: "Factors in R: Categorical vs Continuous Variables"
+editor_options:
   chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
 ```
 
-<br>
+# What is a factor in R?
 
-# What is Factor in R?
-***
-Factors are variables in R which take on a limited number of different values; such variables are often referred to as categorical variables.
+A **factor** is R’s data type for **categorical variables** (variables that take a limited set of values, called *levels*). [web:833]  
+In most datasets you will see two broad types of variables:
 
-In a dataset, we can distinguish two types of variables: categorical and continuous.
+- **Categorical**: a finite set of categories (e.g., country, gender, job title).
+- **Continuous**: numeric measurements on a scale (e.g., income, temperature, price).
 
-In a categorical variable, the value is limited and usually based on a particular finite group. For example, a categorical variable can be countries, year, gender, occupation.
-A continuous variable, however, can take any values, from integer to decimal. For example, we can have the revenue, price of a share, etc..
+R models and plotting functions often treat factors differently from numeric variables, which is why it matters to store categorical data as factors. [web:837]
 
-# Categorical Variables
-***
-R stores categorical variables into a factor. Let's check the code below to convert a character variable into a factor variable. Characters are not supported in machine learning algorithm, and the only way is to convert a string to an integer.
+# Categorical variables
 
-__Syntax__
+You create factors with `factor()`:
 
-```{r, don-eval, eval=FALSE}
-factor(x = character(), levels, labels = levels, ordered = is.ordered(x))
+```{r, eval=FALSE}
+factor(x, levels = NULL, labels = levels, ordered = FALSE)
 ```
 
-__Arguments:__
-+ x: A vector of data. Need to be a string or integer, not decimal.
-+ Levels: A vector of possible values taken by x. This argument is optional. The default value is the unique list of items of the vector x.
-+ Labels: Add a label to the x data. For example, 1 can take the label `male` while 0, the label `female`.
-+ ordered: Determine if the levels should be ordered.
+Key arguments: [web:833]
+- `x`: a vector (typically character, integer, or numeric codes).
+- `levels`: the set of possible values (and their order, if provided).
+- `labels`: the human-readable labels for the levels.
+- `ordered`: whether levels should be treated as ordered.
 
-__Example:__
-Let's create a factor data frame.
+## Example: character to factor
+
 ```{r}
-# Create gender vector
-gender_vector <- c("Male", "Female", "Female", "Male", "Male")
-class(gender_vector)
-# Convert gender_vector to a factor
-factor_gender_vector <- factor(gender_vector)
-class(factor_gender_vector)
+gender <- c("Male", "Female", "Female", "Male", "Male")
+
+class(gender)
+gender_f <- factor(gender)
+class(gender_f)
+
+gender_f
+levels(gender_f)
 ```
 
-It is important to transform a string into factor when we perform Machine Learning task.
+## Example: numeric codes with labels
 
-A categorical variable can be divided into nominal categorical variable and ordinal categorical variable.
-
-# Nominal Categorical Variable
-***
-A categorical variable has several values but the order does not matter. For instance, male or female categorical variable do not have ordering.
 ```{r}
-# Create a color vector
-color_vector <- c('blue', 'red', 'green', 'white', 'black', 'yellow')
-# Convert the vector to factor
-factor_color <- factor(color_vector)
-factor_color
+gender_code <- c(1, 0, 0, 1, 1)
+
+gender_labeled <- factor(
+  gender_code,
+  levels = c(0, 1),
+  labels = c("Female", "Male")
+)
+
+gender_labeled
 ```
 
-From the factor_color, we can't tell any order.
+# Nominal vs ordinal categorical variables
 
-# Ordinal Categorical Variable {#buttons .tabset .tabset-fade .tabset-pills}
-***
-Ordinal categorical variables do have a natural ordering. We can specify the order, from the lowest to the highest with `order = TRUE` and highest to lowest with `order = FALSE`.
+## Nominal factors
 
-## Example 1:
-We can use summary to count the values for each factor.
+Nominal categories have **no natural order** (e.g., colors).
+
 ```{r}
-# Create Ordinal categorical vector 
-day_vector <- c('evening', 'morning', 'afternoon', 'midday', 'midnight', 'evening')
-# Convert `day_vector` to a factor with ordered level
-factor_day <- factor(day_vector, order = TRUE, levels = c('morning', 'midday', 'afternoon', 'evening', 'midnight'))
-# Print the new variable
-factor_day
+color <- c("blue", "red", "green", "white", "black", "yellow")
+color_f <- factor(color)
+color_f
+levels(color_f)
 ```
 
-## Example 2:
+The level order is just how R stores it (often alphabetical unless you specify levels explicitly). [web:837]
+
+## Ordinal factors {#buttons .tabset .tabset-fade .tabset-pills}
+
+Ordinal categories have a **natural order** (e.g., low < medium < high).  
+In R, you can encode that by setting `ordered = TRUE` and supplying levels in the correct order. [web:833][web:844]
+
+### Example 1: create an ordered factor
+
 ```{r}
-## Levels: morning < midday < afternoon < evening < midnight
-# Append the line to above code
-# Count the number of occurence of each level
-summary(factor_day)
+day <- c("evening", "morning", "afternoon", "midday", "midnight", "evening")
+
+day_ord <- factor(
+  day,
+  ordered = TRUE,
+  levels = c("morning", "midday", "afternoon", "evening", "midnight")
+)
+
+day_ord
 ```
 
-R ordered the level from 'morning' to 'midnight' as specified in the levels parenthesis.
+### Example 2: summarize levels
 
-# Continuous Variables
-***
-Continuous class variables are the default value in R. They are stored as numeric or integer. We can see it from the dataset below. mtcars is a built-in dataset. It gathers information on different types of car. We can import it by using mtcars and check the class of the variable mpg, mile per gallon. It returns a numeric value, indicating a continuous variable.
+```{r}
+summary(day_ord)
+```
+
+Because the factor is ordered, printing shows the order of levels using `<`. [web:837]
+
+# Continuous variables
+
+Continuous variables are usually stored as `numeric` (or sometimes `integer`). For example, `mtcars$mpg` is numeric, so it is a continuous variable.
+
 ```{r}
 dataset <- mtcars
 class(dataset$mpg)
 ```
 
+# Practical tip (modeling)
+
+In many modeling functions, factors are automatically expanded into indicator (dummy) variables in the design matrix. This is one reason factors are important for regression and other ML methods. [web:839]
