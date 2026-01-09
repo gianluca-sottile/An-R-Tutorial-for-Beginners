@@ -21,8 +21,8 @@ Use:
 - `apply()` for matrices (or data frames you *treat as matrices*)
 - `lapply()` for lists/vectors/data frames (returns a list)
 - `sapply()` like `lapply()` but it tries to simplify the result
-- `vapply()` like `sapply()` but safer because you pre-specify the output type [web:706]
-- `tapply()` to apply a function by group(s) defined by factor(s) [web:704]
+- `vapply()` like `sapply()` but safer because you pre-specify the output type
+- `tapply()` to apply a function by group(s) defined by factor(s)
 
 # apply()
 
@@ -59,7 +59,7 @@ rowSums(m1)
 
 # lapply()
 
-`lapply()` applies a function to each element of a list/vector (or each column of a data frame) and **always returns a list**. [web:706]
+`lapply()` applies a function to each element of a list/vector (or each column of a data frame) and **always returns a list**.
 
 ```{r, eval=FALSE}
 lapply(X, FUN, ...)
@@ -83,13 +83,13 @@ str(movies_lower_vec)
 
 # sapply() (and vapply())
 
-`sapply()` is a “user-friendly” wrapper around `lapply()` that tries to simplify the result into a vector/matrix/array when possible. [web:706]
+`sapply()` is a “user-friendly” wrapper around `lapply()` that tries to simplify the result into a vector/matrix/array when possible.
 
 ```{r, eval=FALSE}
 sapply(X, FUN, ..., simplify = TRUE, USE.NAMES = TRUE)
 ```
 
-`vapply()` is similar but safer because you specify the expected return type/length. [web:706]
+`vapply()` is similar but safer because you specify the expected return type/length.
 
 ## Example: min/max on the cars dataset
 
@@ -131,7 +131,7 @@ avg_v
 
 # When sapply() does NOT simplify
 
-If the function returns vectors of **different lengths**, `sapply()` cannot build a matrix and will often fall back to a list (or you can force it with `simplify = FALSE`). [web:706]
+If the function returns vectors of **different lengths**, `sapply()` cannot build a matrix and will often fall back to a list (or you can force it with `simplify = FALSE`).
 
 ## Example: keep values above the mean (variable length output)
 
@@ -150,7 +150,7 @@ identical(res_l, res_s2)
 
 # tapply()
 
-`tapply()` splits a vector into groups defined by a factor (or list of factors) and applies a function to each group. [web:704]
+`tapply()` splits a vector into groups defined by a factor (or list of factors) and applies a function to each group.
 
 ```{r, eval=FALSE}
 tapply(X, INDEX, FUN, ...)
