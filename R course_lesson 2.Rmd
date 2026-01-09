@@ -1,6 +1,6 @@
 ---
 pagetitle: "Lesson 2"
-title: "R Data Types, Arithmetic, and Logical Operators (with Examples)"
+title: "Data Types, Arithmetic, and Logical Operators (with Examples)"
 # author: "Dott. Gianluca Sottile"
 editor_options: 
   chunk_output_type: inline
