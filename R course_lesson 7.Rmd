@@ -14,12 +14,12 @@ knitr::opts_chunk$set(
 )
 ```
 
-In data analysis you often need to sort rows by one or more variables. In base R, this is commonly done with `order()`, which returns the indices of the sorted order. [web:796]
+In data analysis you often need to sort rows by one or more variables. In base R, this is commonly done with `order()`, which returns the indices of the sorted order.
 
 # order() vs sort()
 
 - `sort(x)` returns the sorted values.
-- `order(x)` returns the indices that would sort `x`. [web:796]
+- `order(x)` returns the indices that would sort `x`.
 
 ```{r}
 x <- c(5, 1, 10)
@@ -71,7 +71,7 @@ head(df_desc)
 
 # Sort with dplyr (arrange)
 
-`dplyr::arrange()` is often easier to read than `order()` when sorting by multiple columns. [web:803]
+`dplyr::arrange()` is often easier to read than `order()` when sorting by multiple columns.
 
 ```{r}
 library(dplyr)
