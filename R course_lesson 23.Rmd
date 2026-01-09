@@ -174,7 +174,7 @@ R uses the first factor level as the reference group, and the other coefficients
 
 # Stepwise regression (model selection)
 
-Stepwise regression is an automated procedure that adds/removes predictors to optimize a criterion (often AIC). In base R, this is done with `stats::step()` which uses AIC by default. [web:554]
+Stepwise regression is an automated procedure that adds/removes predictors to optimize a criterion (often AIC). In base R, this is done with `stats::step()` which uses AIC by default.
 
 This approach is popular for quick exploration, but it can be unstable and should be used cautiously; it is mainly included here for illustration.
 
@@ -206,7 +206,7 @@ summary(fit_step_aic)
 
 ## Stepwise / all-subsets with olsrr (optional)
 
-The `olsrr` package can fit many subsets and compare them. For example, `ols_step_all_possible()` fits all combinations up to a chosen order. [web:546]
+The `olsrr` package can fit many subsets and compare them. For example, `ols_step_all_possible()` fits all combinations up to a chosen order.
 
 ```{r, eval=FALSE}
 library(olsrr)
