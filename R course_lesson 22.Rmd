@@ -70,8 +70,8 @@ glimpse(df)
 
 ```{r}
 df |>
-  group_by(poison) |>
-  summarize(
+  dplyr::group_by(poison) |>
+  dplyr::summarize(
     n = n(),
     mean_time = mean(time, na.rm = TRUE),
     sd_time = sd(time, na.rm = TRUE),
