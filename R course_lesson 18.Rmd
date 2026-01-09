@@ -2,399 +2,244 @@
 pagetitle: "Lesson 18"
 title: "Scatter Plot in R using ggplot2 (with Example)"
 # author: "Dott. Gianluca Sottile"
-editor_options: 
+editor_options:
   chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, fig.align="center", message=FALSE, warning = FALSE)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
 ```
 
-Graphs are the third part of the process of data analysis. The first part is about __data extraction__, the second part deals with __cleaning and manipulating the data__. At last, the data scientist may need to __communicate his results graphically__.
+Graphs are a key part of data analysis and communication. A typical workflow includes:
 
-The job of the data scientist can be reviewed in the following picture
+- Defining a research question.
+- Collecting, cleaning, and transforming data.
+- Exploring patterns and refining hypotheses.
+- Communicating results clearly to stakeholders.
 
-The first task of a data scientist is to define a research question. This research question depends on the objectives and goals of the project.
-
-- After that, one of the most prominent tasks is the feature engineering. The data scientist needs to collect, manipulate and clean the data
-- When this step is completed, he can start to explore the dataset. Sometimes, it is necessary to refine and change the original hypothesis due to a new discovery
-- When the explanatory analysis is achieved, the data scientist has to consider the capacity of the reader to understand the underlying concepts and models
-- His results should be presented in a format that all stakeholders can understand. One of the best methods to communicate the results is through a graph
-- Graphs are an incredible tool to simplify complex analysis.
+Visualizations are often the fastest way to make complex ideas understandable.
 
 <p align="center">
 ![](imgblock18/img1.png)
 </p>
 
-# ggplot2 package
-This part of the tutorial focuses on how to make graphs/charts with R.
+# The ggplot2 package
 
-In this tutorial, you are going to use ggplot2 package. This package is built upon the consistent underlying of the book Grammar of graphics written by Wilkinson, 2005. ggplot2 is very flexible, incorporates many themes and plot specification at a high level of abstraction. With ggplot2, you can't plot 3-dimensional graphics and create interactive graphics.
+This lesson focuses on creating charts with **ggplot2**, which is based on Wilkinson’s *Grammar of Graphics* (2005). ggplot2 is flexible and supports many geoms, themes, and transformations, but it does not provide true 3D plots or interactive graphics out of the box.
 
-In ggplot2, a graph is composed of the following arguments:
+A ggplot can be built from:
 
-- data
-- aesthetic mapping
-- geometric object
-- statistical transformations
-- scales
-- coordinate system
-- position adjustments
-- faceting
+- Data
+- Aesthetic mappings (`aes()`)
+- Geometric objects (geoms)
+- Statistical transformations (stats)
+- Scales
+- Coordinate systems
+- Faceting
 
-You will learn how to control those arguments in the tutorial.
+The basic syntax is:
 
-The basic syntax of ggplot2 is:
-
-```{r, dont-eval, eval=FALSE}
-ggplot(data, mapping=aes()) + geometric object 
+```{r, eval=FALSE}
+ggplot(data, aes(...)) + geom_*(...)
 ```
 
-__Arguments:__
+# Scatter plot
 
-- data: Dataset used to plot the graph
-- mapping: Control the x and y-axis 
-- geometric object: The type of plot you want to show. The most common object are:
-  - Point: `geom_point()` 
-  - Bar: `geom_bar()`
-  - Line: `geom_line()` 
-  - Histogram: `geom_histogram()`
-  
-# Scatterplot
-Let's see how ggplot works with the mtcars dataset. You start by plotting a scatterplot of the mpg variable and drat variable.
+We will use `mtcars` and start with a simple scatter plot.
 
 ## Basic scatter plot
 
 ```{r}
 library(ggplot2)
-ggplot(mtcars, aes(x = drat, y = mpg)) + geom_point()
+
+ggplot(mtcars, aes(x = drat, y = mpg)) +
+  geom_point() +
+  theme_classic()
 ```
-
-__Code Explanation__
-
-- You first pass the dataset mtcars to ggplot.
-- Inside the aes() argument, you add the x-axis and y-axis.
-- The + sign means you want R to keep reading the code. It makes the code more readable by breaking it.
-- Use geom_point() for the geometric object.
 
 ## Scatter plot with groups
-Sometimes, it can be interesting to distinguish the values by a group of data (i.e. factor level data).
+
+To color points by a categorical variable, map `color` inside `aes()`. Here we treat `gear` as a factor.
 
 ```{r}
-ggplot(mtcars, aes(x = mpg, y = drat)) + geom_point(aes(color = factor(gear)))
+ggplot(mtcars, aes(x = mpg, y = drat, color = factor(gear))) +
+  geom_point() +
+  theme_classic() +
+  labs(color = "Gears")
 ```
 
-__Code Explanation__
+## Transform axes (log scale)
 
-- The aes() inside the geom_point() controls the color of the group. The group should be a factor variable. Thus, you convert the variable gear in a factor.
-- Altogether, you have the code aes(color = factor(gear)) that change the color of the dots.
-
-## Change axis
-Rescale the data is a big part of the data scientist job. In rare occasion data comes in a nice bell shape. One solution to make your data less sensitive to outliers is to rescale them.
+A common strategy to reduce the impact of extreme values is to transform variables. Here we apply a log transform:
 
 ```{r}
-ggplot(mtcars, aes(x = log(mpg), y = log(drat))) + geom_point(aes(color = factor(gear)))
+ggplot(mtcars, aes(x = log(mpg), y = log(drat), color = factor(gear))) +
+  geom_point() +
+  theme_classic() +
+  labs(color = "Gears")
 ```
 
-__Code Explanation__
+# Add a fitted line
 
-- You transform the x and y variables in log() directly inside the aes() mapping.
-
-Note that any other transformation can be applied such as standardization or normalization.
-
-# Scatter plot with fitted values
-You can add another level of information to the graph. You can plot the fitted value of a linear regression.
+You can add a fitted regression line with `stat_smooth(method = "lm")`.
 
 ```{r}
-my_graph <- ggplot(mtcars, aes(x = log(mpg), y = log(drat))) +
-    geom_point(aes(color = factor(gear))) +
-    stat_smooth(method = "lm",
-        col = "#C42126",
-        se = FALSE,
-        size = 1)
+my_graph <- ggplot(mtcars, aes(x = log(mpg), y = log(drat), color = factor(gear))) +
+  geom_point() +
+  stat_smooth(
+    method = "lm",
+    se = FALSE,
+    color = "#C42126",
+    linewidth = 1
+  ) +
+  theme_classic() +
+  labs(color = "Gears")
+
 my_graph
 ```
 
-__Code Explanation__
+# Make the plot informative
 
-- graph: You store your graph into the variable graph. It is helpful for further use or avoid too complex line of codes
-- The argument stat_smooth() controls for the smoothing method
-- method = "lm": Linear regression
-- col = "#C42126": Code for the red color of the line
-- se = FALSE: Don't display the standard error
-- size = 1: the size of the line is 1
-
-Note that other smoothing methods are available
-
-- glm
-- gam
-- loess: default value
-
-## Add information to the graph
-So far, we haven't added information in the graphs. Graphs need to be informative. The reader should see the story behind the data analysis just by looking at the graph without referring additional documentation. Hence, graphs need good labels. You can add labels with labs()function.
-
-The basic syntax for lab() is :
-
-```{r, dont-eval1, eval=FALSE}
-lab(title = "Hello Gianluca")
-```
-
-__Argument:__
-- title: Control the title. It is possible to change or add title with:			
-- subtitle: Add subtitle below title			
-- caption: Add caption below the graph			
-- x: rename x-axis			
-- y: rename y-axis			
-
-Example: `lab(title = "Hello Gianluca", subtitle = "My first plot")`
+Good charts should be readable without extra documentation. Use `labs()` to add titles and axis labels. [web:631]
 
 ## Add a title
-One mandatory information to add is obviously a title.
 
 ```{r}
-my_graph + labs(title = "Plot Mile per hours and drat, in log")
+my_graph +
+  labs(title = "log(drat) vs log(mpg)")
 ```
 
-__Code Explanation__
-
-- my_graph: You use the graph you stored. It avoids rewriting all the codes each time you add new information to the graph.
-- You wrap the title inside the lab().
-- Code for the red color of the line
-- se = FALSE: Don't display the standard error
-- size = 1: the size of the line is 1
-
-## Add a title with a dynamic name
-A dynamic title is helpful to add more precise information in the title.
-
-You can use the paste() function to print static text and dynamic text. The basic syntax of paste() is:
-
-```{r, dont-eval2, eval=FALSE}
-paste("This is a text", A)
-```
-
-__Arguments:__
-- " ": Text inside the quotation marks are the static text
-- A: Display the variable stored in A
-- Note you can add as much static text and variable as you want. You need to separate them with a comma
-
-__Example:__
-
-```{r}
-A <- 2010
-paste("The first year is", A)
-
-B <- 2018
-paste("The first year is", A, "and the last year is", B)
-```
-
-You can add a dynamic name to our graph, namely the average of mpg.
+## Dynamic title (example)
 
 ```{r}
 mean_mpg <- mean(mtcars$mpg)
-my_graph + labs(title = paste("Plot Mile per hours and drat, in log. Average mpg is", mean_mpg))
+
+my_graph +
+  labs(
+    title = paste("log(drat) vs log(mpg) — mean mpg:", round(mean_mpg, 2))
+  )
 ```
 
-__Code Explanation__
-
-- You create the average of mpg with mean(mtcars$mpg) stored in mean_mpg variable
-- You use the paste() with mean_mpg to create a dynamic title returning the mean value of mpg
-
-## Add a subtitle
-Two additional detail can make your graph more explicit. You are talking about the subtitle and the caption. The subtitle goes right below the title. The caption can inform about who did the computation and the source of the data.
+## Add subtitle and caption
 
 ```{r}
 my_graph +
-    labs(
-        title =
-        "Relation between Mile per hours and drat",
-        subtitle =
-        "Relationship break down by gear class",
-        caption = "Authors own computation"
-    )
+  labs(
+    title = "Relationship between log(mpg) and log(drat)",
+    subtitle = "Colored by gear class",
+    caption = "Source: mtcars (datasets package)"
+  )
 ```
 
-__Code Explanation__
-
-- Inside the lab(), you added:
-  - title = "Relation between Mile per hours and drat": Add title
-  - subtitle = "Relationship break down by gear class": Add subtitle
-  - caption = "Authors own computation: Add caption
-  - You separate each new information with a comma, ,
-- Note that you break the lines of code. It is not compulsory, and it only helps to read the code more easily
-
-## Rename x-axis and y-axis
-Variables itself in the dataset might not always be explicit or by convention use the _ when there are multiple words (i.e. GDP_CAP). You don't want such name appear in your graph. It is important to change the name or add more details, like the units.
+## Rename axes and legend title
 
 ```{r}
 my_graph +
-    labs(
-        x = "Drat definition",
-        y = "Mile per hours",
-        color = "Gear",
-        title = "Relation between Mile per hours and drat",
-        subtitle = "Relationship break down by gear class",
-        caption = "Authors own computation"
-    )
+  labs(
+    x = "log(miles per gallon)",
+    y = "log(rear axle ratio: drat)",
+    color = "Gears",
+    title = "Relationship between log(mpg) and log(drat)",
+    subtitle = "Colored by gear class",
+    caption = "Source: mtcars (datasets package)"
+  )
 ```
 
-__Code Explanation__
+# Control scales
 
-- Inside the lab(), you added:
-  - x = "Drat definition": Change the name of x-axis
-  - y = "Mile per hours": Change the name of y-axis
-  
-## Control the scales
-You can control the scale of the axis.
-
-The function seq() is convenient when you need to create a sequence of number. The basic syntax is:
-
-```{r, dont-eval3, eval=FALSE}
-seq(begin, last, by = x)
-```
-
-__Arguments:__
-- begin: First number of the sequence
-- last: Last number of the sequence
-- by = x: The step. For instance, if x is 2, the code adds 2 to `begin-1` until it reaches `last`
-
-For instance, if you want to create a range from 0 to 12 with a step of 3, you will have four numbers, 0 4 8 12
-
-```{r}
-seq(0, 12, 4)
-```
-
-You can control the scale of the x-axis and y-axis as below
+You can control axis breaks with `scale_*_continuous(breaks = ...)`.
 
 ```{r}
 my_graph +
-    scale_x_continuous(breaks = seq(1, 3.6, by = 0.2)) +
-    scale_y_continuous(breaks = seq(1, 1.6, by = 0.1)) +
-    labs(
-        x = "Drat definition",
-        y = "Mile per hours",
-        color = "Gear",
-        title = "Relation between Mile per hours and drat",
-        subtitle = "Relationship break down by gear class",
-        caption = "Authors own computation"
-    )
+  scale_x_continuous(breaks = seq(1, 3.6, by = 0.2)) +
+  scale_y_continuous(breaks = seq(0.6, 1.6, by = 0.1)) +
+  labs(
+    x = "log(miles per gallon)",
+    y = "log(rear axle ratio: drat)",
+    color = "Gears",
+    title = "Relationship between log(mpg) and log(drat)"
+  )
 ```
 
-__Code Explanation__
+# Themes
 
-- The function scale_y_continuous() controls the y-axis
-- The function scale_x_continuous() controls the x-axis.
-- The parameter breaks controls the split of the axis. You can manually add the sequence of number or use the seq()function:
-  - seq(1, 3.6, by = 0.2): Create six numbers from 2.4 to 3.4 with a step of 3
-  - seq(1, 1.6, by = 0.1): Create seven numbers from 1 to 1.6 with a step of 1
-  
-## Theme
-Finally, R allows us to customize out plot with different themes. The library ggplot2 includes eights themes:
-
-- theme_bw()
-- theme_light()
-- theme_classis()
-- theme_linedraw()
-- theme_dark()
-- theme_minimal()
-- theme_gray()
-- theme_void()
+ggplot2 includes multiple themes; switching theme changes the overall style.
 
 ```{r}
 my_graph +
-    theme_dark() +
-    labs(
-        x = "Drat definition, in log",
-        y = "Mile per hours, in log",
-        color = "Gear",
-        title = "Relation between Mile per hours and drat",
-        subtitle = "Relationship break down by gear class",
-        caption = "Authors own computation"
-    )
+  theme_dark() +
+  labs(
+    x = "log(miles per gallon)",
+    y = "log(rear axle ratio: drat)",
+    color = "Gears",
+    title = "Relationship between log(mpg) and log(drat)",
+    subtitle = "Colored by gear class",
+    caption = "Source: mtcars"
+  )
 ```
 
-## Save Plots
-After all these steps, it is time to save and share your graph. You add ggsave('NAME OF THE FILE) right after you plot the graph and it will be stored on the hard drive.
+# Save plots
 
-The graph is saved in the working directory. To check the working directory, you can run this code:
+`ggsave()` saves a plot to disk; by default it saves the last displayed plot, but it is safer to pass the plot explicitly. [web:642]
 
 ```{r}
 directory <- getwd()
-directory		
+directory
 ```
-
-Let's plot your fantastic graph, saves it and check the location
 
 ```{r}
-my_graph +
-    theme_dark() +
-    labs(
-        x = "Drat definition, in log",
-        y = "Mile per hours, in log",
-        color = "Gear",
-        title = "Relation between Mile per hours and drat",
-        subtitle = "Relationship break down by gear class",
-        caption = "Authors own computation"
-    )
-ggsave("my_fantastic_plot.png")
+plot_to_save <- my_graph +
+  theme_dark() +
+  labs(
+    x = "log(miles per gallon)",
+    y = "log(rear axle ratio: drat)",
+    color = "Gears",
+    title = "Relationship between log(mpg) and log(drat)",
+    subtitle = "Colored by gear class",
+    caption = "Source: mtcars"
+  )
+
+ggsave(
+  filename = "my_fantastic_plot.png",
+  plot = plot_to_save,
+  dpi = 300
+)
 ```
 
-__Note:__ For pedagogical purpose only, we created a function called open_folder() to open the directory folder for you. You just need to run the code below and see where the picture is stored. You should see a file names my_fantastic_plot.png.
-
-```{r}
-# Run this code to create the function
-open_folder <- function(dir) {
-    if (.Platform['OS.type'] == "windows") {
-        shell.exec(dir)
-    } else {
-        system(paste(Sys.getenv("R_BROWSER"), dir))
-    }
-}
-
-# Call the function to open the folder open_folder(directory)
-```
+__Note__: opening a folder from R is OS-dependent; in many deployed environments (GitHub Actions, servers) it will not work, so it is usually better to rely on the printed path.
 
 # Summary
-You can summarize the arguments to create a scatter plot in the table below:
 
 ```{r, echo=FALSE}
 library(knitr)
-library(kableExtra)
-dt <- data.frame(
-  "Objective" = c("Basic scatter plot", 
-                  "Scatter plot with color group", 
-                  "Add fitted values", 
-                  "Add title", 
-                  "Add subtitle", 
-                  "Rename x", 
-                  "Rename y", 
-                  "Control the scale", 
-                  "Create logs", 
-                  "Theme", 
-                  "Save"), 
-  "Code" = c("ggplot(df, aes(x = x1, y = y)) + geom_point()", 
-             "ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1)) + stat_smooth(method = \"lm\")", 
-             "ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1))", 
-             "ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(title = paste(\"Hello Gianluca\"))", 
-             "ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(subtitle = paste(\"Hello Gianluca\"))",
-             "ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(x = \"X1\")", 
-             "ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(y = \"Y1\")", 
-             "ggplot(df, aes(x = x1, y = y)) + geom_point() + scale_y_continuous(breaks = seq(10, 35, by = 10)) + scale_x_continuous(breaks = seq(2, 5, by = 1)", 
-             "ggplot(df, aes(x =log(x1), y = log(y))) + geom_point()", 
-             "ggplot(df, aes(x = x1, y = y)) + geom_point() + theme_classic()", 
-             "ggsave(\"my_fantastic_plot.png\")"))
-kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
-```
 
-<!-- | Objective | Code | -->
-<!-- |:----------|:-----| -->
-<!-- | Basic scatter plot | ggplot(df, aes(x = x1, y = y)) + geom_point() | -->
-<!-- | Scatter plot with color group | ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1)) + stat_smooth(method = "lm") | -->
-<!-- | Add fitted values | ggplot(df, aes(x = x1, y = y)) + geom_point(aes(color = factor(x1)) | -->
-<!-- | Add title | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(title = paste("Hello Gianluca")) | -->
-<!-- | Add subtitle | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(subtitle = paste("Hello Guru99")) | -->
-<!-- | Rename x | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(x = "X1") | -->
-<!-- | Rename y | ggplot(df, aes(x = x1, y = y)) + geom_point() + labs(y = "y1") | -->
-<!-- | Control the scale | ggplot(df, aes(x = x1, y = y)) + geom_point() + scale_y_continuous(breaks = seq(10, 35, by = 10)) + scale_x_continuous(breaks = seq(2, 5, by = 1) | -->
-<!-- | Create logs | ggplot(df, aes(x =log(x1), y = log(y))) + geom_point() | -->
-<!-- | Theme | ggplot(df, aes(x = x1, y = y)) + geom_point() + theme_classic() | -->
-<!-- | Save | ggsave("my_fantastic_plot.png") | -->
+dt <- data.frame(
+  Objective = c(
+    "Basic scatter plot",
+    "Color by group",
+    "Transform variables (log)",
+    "Add fitted line",
+    "Add labels (title/subtitle/caption)",
+    "Control axis breaks",
+    "Change theme",
+    "Save plot"
+  ),
+  Example = c(
+    "ggplot(df, aes(x, y)) + geom_point()",
+    "ggplot(df, aes(x, y, color = factor(g))) + geom_point()",
+    "ggplot(df, aes(log(x), log(y))) + geom_point()",
+    "… + stat_smooth(method = 'lm', se = FALSE)",
+    "… + labs(title = ..., subtitle = ..., caption = ...)",
+    "… + scale_x_continuous(breaks = ...)",
+    "… + theme_classic()/theme_dark()/…",
+    "ggsave('plot.png', plot = p)"
+  )
+)
+
+knitr::kable(dt)
+```
