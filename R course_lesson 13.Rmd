@@ -1,157 +1,177 @@
 ---
 pagetitle: "Lesson 13"
-title: "apply(), lapply(), sapply(), tapply() Function in R with Examples"
-# author: "Dott. Gianluca Sottile"
-editor_options: 
+title: "apply(), lapply(), sapply(), tapply() in R (Modern Syntax + Examples)"
+editor_options:
   chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
 ```
 
-# apply() function
-__apply()__ takes Data frame or matrix as an input and gives output in vector, list or array. apply() function is primarily used to avoid explicit uses of loop constructs. It is the most basic of all collections can be used over a matrice.
+# The apply family
 
-This function takes 3 arguments:
-```{r, dont-eval, eval=FALSE}
-apply(X, MARGIN, FUN)
-```
-Here:
+The *apply* family helps you iterate over common data structures without writing explicit `for` loops.
+Use:
+- `apply()` for matrices (or data frames you *treat as matrices*)
+- `lapply()` for lists/vectors/data frames (returns a list)
+- `sapply()` like `lapply()` but it tries to simplify the result
+- `vapply()` like `sapply()` but safer because you pre-specify the output type [web:706]
+- `tapply()` to apply a function by group(s) defined by factor(s) [web:704]
 
-- x: an array or matrix
-- MARGIN:  take a value or range between 1 and 2 to define where to apply the function:
-- MARGIN = 1: the manipulation is performed on rows
-- MARGIN = 2: the manipulation is performed on columns
-- MARGIN = c(1, 2) the manipulation is performed on rows and columns
-- FUN: tells which function to apply. Built functions like mean, median, sum, min, max and even user-defined functions can be applied
+# apply()
 
-The simplest example is to sum a matrice over all the columns. The code apply(m1, 2, sum) will apply the sum function to the matrix `5x6` and return the sum of each column accessible in the dataset.
+`apply()` works on arrays/matrices. It takes three main arguments:
 
 ```{r, eval=FALSE}
-m1 <- matrix(C <- (1:10), nrow=5, ncol=6)
+apply(X, MARGIN, FUN, ...)
+```
+
+- `X`: an array or matrix
+- `MARGIN`: where to apply the function
+  - `1` = rows
+  - `2` = columns
+  - `c(1, 2)` = rows and columns
+- `FUN`: function to apply (e.g., `sum`, `mean`, custom functions)
+
+## Example: sum columns of a matrix
+
+```{r}
+m1 <- matrix(1:30, nrow = 5, ncol = 6)
 m1
-a_m1 <- apply(m1, 2, sum)
-a_m1
+
+col_sums_apply <- apply(m1, 2, sum)
+col_sums_apply
 ```
 
-__Output:__
-
-<p align="center">
-![](imgblock13/img1.png)
-</p>
-
-Best practice: Store the values before printing it to the console.
-
-# lapply() function
-__lapply()__ function is useful for performing operations on list objects and returns a list object of same length of original set. lappy() returns a list of the similar length as input list object, each element of which is the result of applying FUN to the corresponding element of list. lapply() takes list, vector or data frame as input and gives output in list.
-
-```{r, dont-eval1, eval=FALSE}
-lapply(X, FUN)
-```
-
-Arguments:
-- X: A vector or an object
-- FUN: Function applied to each element of x	
-
-l in lapply() stands for list. The difference between lapply() and apply() lies between the output return. The output of lapply() is a list. lapply() can be used for other objects like data frames and lists.
-
-lapply() function does not need MARGIN.
-
-A very easy example can be to change the string value of a matrix to lower case with tolower function. We construct a matrix with the name of the famous movies. The name is in upper case format.
+### Tip: prefer dedicated helpers when available
+For simple row/column sums, `rowSums()` and `colSums()` are clear and fast:
 
 ```{r}
-movies <- c("SPYDERMAN","BATMAN","VERTIGO","CHINATOWN")
-movies_lower <- lapply(movies, tolower)
-str(movies_lower)
+colSums(m1)
+rowSums(m1)
 ```
 
-We can use unlist() to convert the list into a vector.
+# lapply()
+
+`lapply()` applies a function to each element of a list/vector (or each column of a data frame) and **always returns a list**. [web:706]
+
+```{r, eval=FALSE}
+lapply(X, FUN, ...)
+```
+
+## Example: convert movie titles to lower case
 
 ```{r}
-movies_lower <- unlist(lapply(movies, tolower))
-str(movies_lower)
+movies <- c("SPYDERMAN", "BATMAN", "VERTIGO", "CHINATOWN")
+
+movies_lower_list <- lapply(movies, tolower)
+str(movies_lower_list)
 ```
 
-# sapply() function
-__sapply()__ function takes list, vector or data frame as input and gives output in vector or matrix. It is useful for operations on list objects and returns a list object of same length of original set. sapply() function does the same job as lapply() function but returns a vector.
+If you want a character vector instead of a list:
 
-```{r, dont-eval2, eval=FALSE}
-sapply(X, FUN)
+```{r}
+movies_lower_vec <- unlist(movies_lower_list, use.names = FALSE)
+str(movies_lower_vec)
 ```
 
-Arguments:
+# sapply() (and vapply())
 
-- X: A vector or an object
-- FUN: Function applied to each element of x
+`sapply()` is a “user-friendly” wrapper around `lapply()` that tries to simplify the result into a vector/matrix/array when possible. [web:706]
 
-We can measure the minimum speed and stopping distances of cars from the cars dataset.
+```{r, eval=FALSE}
+sapply(X, FUN, ..., simplify = TRUE, USE.NAMES = TRUE)
+```
+
+`vapply()` is similar but safer because you specify the expected return type/length. [web:706]
+
+## Example: min/max on the cars dataset
 
 ```{r}
 dt <- cars
-lmn_cars <- lapply(dt, min)
-smn_cars <- sapply(dt, min)
-lmn_cars
-smn_cars
 
-lmxcars <- lapply(dt, max)
-smxcars <- sapply(dt, max)
-lmxcars
-smxcars
+min_l <- lapply(dt, min)
+min_s <- sapply(dt, min)
+min_v <- vapply(dt, min, numeric(1))  # type-stable
+
+min_l
+min_s
+min_v
 ```
 
-We can use a user built-in function into lapply() or sapply(). We create a function named avg to compute the average of the minimum and maximum of the vector.
-
 ```{r}
-avg <- function(x) {  
-  ( min(x) + max(x) ) / 2}
-fcars <- sapply(dt, avg)
-fcars
+max_l <- lapply(dt, max)
+max_s <- sapply(dt, max)
+max_v <- vapply(dt, max, numeric(1))
+
+max_l
+max_s
+max_v
 ```
 
-sapply() function is more efficient than lapply() in the output returned because sapply() store values direclty into a vector. In the next example, we will see this is not always the case.
-
-We can summarize the difference between apply(), sapply() and lapply() in the following table:
-
-| Function | Arguments | Objective | Input | Output |
-|:---------|:----------|:----------|:------|:-------|
-| apply | apply(x, MARGIN, FUN) | Apply a function to the rows or columns or both | Data frame or matrix | vector, list, array |
-| lapply | lapply(X, FUN) | Apply a function to all the elements of the input | List, vector or data frame | list |
-| sapply | sappy(X FUN) | Apply a function to all the elements of the input | List, vector or data frame | vector or matrix |
-
-# Slice vector
-We can use lapply() or sapply() interchangeable to slice a data frame. We create a function, below_average(), that takes a vector of numerical values and returns a vector that only contains the values that are strictly above the average. We compare both results with the identical() function.
+## Using a custom function
 
 ```{r}
-below_ave <- function(x) {  
-    ave <- mean(x) 
-    return(x[x > ave])
+avg_range <- function(x) {
+  (min(x) + max(x)) / 2
 }
-dt_s <- sapply(dt, below_ave)
-dt_l <- lapply(dt, below_ave)
-identical(dt_s, dt_l)
+
+avg_s <- sapply(dt, avg_range)
+avg_v <- vapply(dt, avg_range, numeric(1))
+
+avg_s
+avg_v
 ```
 
-# tapply() function
-__tapply()__ computes a measure (mean, median, min, max, etc..) or a function for each factor variable in a vector. It is a very useful function that lets you create a subset of a vector and then apply some functions to each of the subset.
+# When sapply() does NOT simplify
 
-```{r, dont-eval3, eval=FALSE}
-tapply(X, INDEX, FUN = NULL)
-```
+If the function returns vectors of **different lengths**, `sapply()` cannot build a matrix and will often fall back to a list (or you can force it with `simplify = FALSE`). [web:706]
 
-Arguments:
-
-- X: An object, usually a vector
-- INDEX: A list containing factor
-- FUN: Function applied to each element of x
-
-Part of the job of a data scientist or researchers is to compute summaries of variables. For instance, measure the average or group data based on a characteristic. Most of the data are grouped by ID, city, countries, and so on. Summarizing over group reveals more interesting patterns.
-
-To understand how it works, let's use the iris dataset. This dataset is very famous in the world of machine learning. The purpose of this dataset is to predict the class of each of the three flower species: Sepal, Versicolor, Virginica. The dataset collects information for each species about their length and width.
-
-As a prior work, we can compute the median of the length for each species. tapply() is a quick way to perform this computation.
+## Example: keep values above the mean (variable length output)
 
 ```{r}
-data(iris)
+above_mean <- function(x) {
+  m <- mean(x)
+  x[x > m]
+}
+
+res_l <- lapply(dt, above_mean)
+res_s1 <- sapply(dt, above_mean)                 # may return a list if lengths differ
+res_s2 <- sapply(dt, above_mean, simplify = FALSE)
+
+identical(res_l, res_s2)
+```
+
+# tapply()
+
+`tapply()` splits a vector into groups defined by a factor (or list of factors) and applies a function to each group. [web:704]
+
+```{r, eval=FALSE}
+tapply(X, INDEX, FUN, ...)
+```
+
+- `X`: typically a vector
+- `INDEX`: factor (or list of factors) defining groups
+- `FUN`: function to apply
+
+## Example: median Sepal.Width by species
+
+```{r}
 tapply(iris$Sepal.Width, iris$Species, median)
+```
+
+## Modern tidy alternative (optional)
+
+```{r, eval=FALSE}
+library(dplyr)
+
+iris |>
+  dplyr::group_by(Species) |>
+  dplyr::summarise(median_sepal_width = median(Sepal.Width), .groups = "drop")
 ```
