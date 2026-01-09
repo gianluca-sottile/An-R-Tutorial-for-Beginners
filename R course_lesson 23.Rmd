@@ -1,291 +1,236 @@
 ---
-title: 'R Simple, Multiple Linear and Stepwise Regression (with Example)'
-pagetitle: Lesson 23
+title: "R Simple, Multiple Linear and Stepwise Regression (with Example)"
+pagetitle: "Lesson 23"
 editor_options:
   chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, fig.align="center", message=FALSE, warning = FALSE)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
 ```
 
-# Simple Linear regression
+# Simple linear regression
 
-Linear regression answers a simple question: Can you measure an exact relationship between one target variables and a set of predictors?
+Linear regression answers a practical question: *is there an approximately linear relationship between a target variable and one (or more) predictors?*
 
-The simplest of probabilistic models is the straight line model:
-$$y=\beta_0+\beta_1x+\epsilon$$
-where
+The simplest linear model is:
 
-- $y$ = dependent variable
-- $x$ = independent variable
-- $\epsilon$ = random error component
-- $\beta_0$ = intercept
-- $\beta_1$ = coefficient of $x$
+\[
+y = \beta_0 + \beta_1 x + \epsilon
+\]
 
+where:
 
-Consider the following plot:
+- \(y\) is the dependent (target) variable,
+- \(x\) is the independent (predictor) variable,
+- \(\epsilon\) is a random error term,
+- \(\beta_0\) is the intercept,
+- \(\beta_1\) is the slope.
 
-<p align="center">
-![](imgblock23/img1.png)
-</p>
+If \(x = 0\), the expected value of \(y\) equals \(\beta_0\). The slope \(\beta_1\) tells how much \(y\) is expected to change for a one-unit increase in \(x\).
 
-The equation is $y=\beta_0+\beta_1x+\epsilon$. $\beta_0$ is the intercept. If $x$ equals to $0$, $y$ will be equal to the intercept, $4.77$. $\beta_1$ is the slope of the line. It tells in which proportion $y$ varies when $x$ varies.
-
-To estimate the optimal values of $\beta_0$ and $\beta_1$, you use a method called __Ordinary Least Squares (OLS)__. This method tries to find the parameters that minimize the sum of the squared errors, that is the vertical distance between the predicted $y$ values and the actual $y$ values. The difference is known as the __error term__.
-
-Before you estimate the model, you can determine whether a linear relationship between $y$ and $x$ is plausible by plotting a scatterplot.
+To estimate \(\beta_0\) and \(\beta_1\), Ordinary Least Squares (OLS) chooses the line that minimizes the sum of squared residuals (vertical distances between observed and fitted values).
 
 ## Scatterplot
 
-We will use a very simple dataset to explain the concept of simple linear regression. We will import the Average Heights and weights for American Women. The dataset contains 15 observations. You want to measure whether Heights are positively correlated with weights.
+We will use a small dataset (Average Heights and Weights for American Women). The dataset has 15 observations, and the goal is to see whether height is positively associated with weight.
 
 ```{r}
 library(ggplot2)
-path <- 'https://raw.githubusercontent.com/guru99-edu/R-Programming/master/women.csv'
-df <-read.csv(path)
-ggplot(df,aes(x=height, y =  weight)) + geom_point()
+library(readr)
+
+path <- "raw_data/women.csv"
+
+women_df <- read_csv(path, show_col_types = FALSE)
+
+ggplot(women_df, aes(x = height, y = weight)) +
+  geom_point() +
+  theme_classic()
 ```
-The scatterplot suggests a general tendency for y to increase as x increases. In the next step, you will measure by how much increases for each additional.
 
-## Least Squares Estimates
+The scatterplot suggests that weight tends to increase as height increases.
 
-In a simple OLS regression, the computation of $\beta_0$ and $\beta_1$ is straightforward. The goal is not to show the derivation in this tutorial. You will only write the formula.
+## Least squares estimates (by hand)
 
-You want to estimate: $y=\beta_0+\beta_1x+\epsilon$
+In simple linear regression, the slope can be written as:
 
-The goal of the OLS regression is to minimize the following equation:
-$$\sum(y_i-\hat{y}_i)^2=\sum e_i^2$$
-where
+\[
+\hat{\beta}_1 = \frac{\text{Cov}(x,y)}{\text{Var}(x)}
+\]
 
-$y_i$ is the actual value and $\hat{y}_i$ is the predicted value.
+and the intercept as:
 
-The solution for $\beta_0$ is $\hat{\beta}_0=\bar{y}-\hat{\beta}_1\bar{x}$
+\[
+\hat{\beta}_0 = \bar{y} - \hat{\beta}_1 \bar{x}
+\]
 
-Note that $\bar{x}$ means the average value of $x$
-
-The solution for $\beta_1$ is $\hat{\beta}_1=\frac{\text{Cov}(x,y)}{\text{Var}(x)}$
-
-In R, you can use the _cov()_ and _var()_ function to estimate $\beta_1$ and you can use the _mean()_ function to estimate $\beta_0$
+You can compute these values in R:
 
 ```{r}
-beta <- cov(df$height, df$weight) / var (df$height)
-beta
+beta_1 <- cov(women_df$height, women_df$weight) / var(women_df$height)
+beta_1
 ```
+
 ```{r}
-alpha <- mean(df$weight) - beta * mean(df$height)
-alpha
+beta_0 <- mean(women_df$weight) - beta_1 * mean(women_df$height)
+beta_0
 ```
-The beta coefficient implies that for each additional height, the weight increases by $3.45$.
 
-Estimating simple linear equation manually is not ideal. R provides a suitable function to estimate these parameters. You will see this function shortly. Before that, we will introduce how to compute by hand a simple linear regression model. In your journey of data scientist, you will barely or never estimate a simple linear model. In most situation, regression tasks are performed on a lot of estimators.
+This manual approach is useful to understand the math, but in practice you should use `lm()`.
 
-# Multiple Linear regression
+## Simple regression with lm()
 
-More practical applications of regression analysis employ models that are more complex than the simple straight-line model. The probabilistic model that includes more than one independent variable is called multiple regression models. The general form of this model is:
-$$y=\beta_0+\beta_1x_1+\beta_2x_2+\cdots+\beta_kx_k+\epsilon$$
-In matrix notation, you can rewrite the model:
-$$Y=X\beta+\epsilon$$
-The dependent variable y is now a function of $k$ independent variables. The value of the coefficient $\beta_i$ determines the contribution of the independent variable $x_i$ and $\beta_0$.
+```{r}
+fit_simple <- lm(weight ~ height, data = women_df)
+summary(fit_simple)
+```
 
-We briefly introduce the assumption we made about the random error $\epsilon$ of the OLS:
+```{r}
+coef(fit_simple)
+```
 
-- Mean equal to $0$
-- Variance equal to $\sigma^2$ 
-- Normal distribution
-- Random errors are independent (in a probabilistic sense)
+# Multiple linear regression
 
-You need to solve for $\beta$, the vector of regression coefficients that minimise the sum of the squared errors between the predicted and actual y values.
+Most real problems involve more than one predictor. A multiple linear regression model is:
 
-The closed-form solution is:
-$$\hat{\beta}=(X^TX)^{-1}X^Ty$$
+\[
+y = \beta_0 + \beta_1 x_1 + \cdots + \beta_k x_k + \epsilon
+\]
 
-with:
+In matrix form:
 
-- $X^T$ indicates the __transpose__ of the matrix $X$
-- $(X^TX)^{-1}$ indicates the __invertible matrix__
+\[
+Y = X\beta + \epsilon
+\]
 
-We use the mtcars dataset. You are already familiar with the dataset. Our goal is to predict the mile per gallon over a set of features.
+OLS estimates \(\beta\) by minimizing the sum of squared residuals; the closed-form solution is:
 
-## Continuous variables
+\[
+\hat{\beta}=(X^TX)^{-1}X^Ty
+\]
 
-For now, you will only use the continuous variables and put aside categorical features. The variable _am_ is a binary variable taking the value of 1 if the transmission is manual and 0 for automatic cars; _vs_ is also a binary variable.
+We will use the `mtcars` dataset and predict fuel efficiency (`mpg`) using continuous predictors.
+
+## Continuous variables only
+
+We start by dropping categorical/binary variables (`am`, `vs`, `cyl`, `gear`, `carb`) and keep only continuous predictors.
 
 ```{r}
 library(dplyr)
-df <- mtcars %>% select(-c(am, vs, cyl, gear, carb))
-glimpse(df)
+
+cars_cont <- mtcars |>
+  select(-am, -vs, -cyl, -gear, -carb)
+
+glimpse(cars_cont)
 ```
-You can use the lm() function to compute the parameters. The basic syntax of this function is:
-```{r, dont-eval, eval = FALSE}
-lm(formula, data, subset)
-```
 
-__Arguments:__
-
-- __formula__: The equation you want to estimate	
-- __data__: The dataset used
-- __subset__: Estimate the model on a subset of the dataset
-
-Remember an equation is of the following form
-$$y=\beta_0+\beta_1x_1+\beta_2x_2+\cdots+\beta_kx_k+\epsilon$$
-in R
-
-- The symbol = is replaced by ~
-- Each $x$ is replaced by the variable name
-- If you want to drop the constant, add -1 at the end of the formula
-
-__Example:__
-
-You want to estimate the weight of individuals based on their height and revenue. The equation is
-$$weigh = \beta_0+\beta_1height+\beta_2revenue+\epsilon$$
-The equation in R for our example is written as: $weigh$ ~ $height + revenue$
-
-Your objective is to estimate the mile per gallon based on a set of variables. The equation to estimate is:
-$$mpg=\beta_0+\beta_1disp+\beta_2hp+\beta_3drat+\beta_4wt+\epsilon$$
-You will estimate your first linear regression and store the result in the fit object.
+Fit a multiple regression model:
 
 ```{r}
-model <- mpg ~ disp + hp + drat + wt
-fit <- lm(model, data = df)
-fit
+fit_multi <- lm(mpg ~ disp + hp + drat + wt, data = cars_cont)
+summary(fit_multi)
 ```
-__Code Explanation__
 
-- model <- mpg ~ disp + hp + drat+ wt: Store the model to estimate
-- lm(model, data = df): Estimate the model with the data frame df
-
-The output does not provide enough information about the quality of the fit. You can access more details such as the significance of the coefficients, the degree of freedom and the shape of the residuals with the _summary()_ function.
+You can also run an ANOVA table for the fitted model:
 
 ```{r}
-summary(fit)
+anova(fit_multi)
 ```
-Inference from the above table output
 
-- The above table proves that there is a strong negative relationship between _wt_ and mileage, a small negative relationship with _hp_ and a positive relationship with _drat_. However only the variable _wt_ and _hp_ has a statistical impact on _mpg_. Remember, to test a hypothesis in statistic, we use:
-    - H0: The predictor has a meaningful impact on $y$
-    - H1: No statistical impact
-    - If the $p$-value is lower than 0.05, it indicates the variable is statistically significant
-- Adjusted R-squared: Variance explained by the model. In your model, the model explained 81 percent of the variance of 4y$. R squared is always between 0 and 1. The higher the better.
-
-You can run the ANOVA test to estimate the effect of each feature on the variances with the anova() function.
-```{r}
-anova(fit)
-```
-A more conventional way to estimate the model performance is to display the residual against different measures.
-
-You can use the _plot()_ function to show four graphs:
-
-- Residuals vs Fitted values
-- Normal Q-Q plot: Theoretical Quartile vs Standardized residuals
-- Scale-Location: Fitted values vs Square roots of the standardised residuals
-- Residuals vs Leverage: Leverage vs Standardized residuals
-
-You add the code _par(mfrow = c(2, 2))_ before _plot(fit)_. If you don't add this line of code, R prompts you to hit the enter command to display the next graph.
+## Diagnostic plots
 
 ```{r}
 par(mfrow = c(2, 2))
-plot(fit)
+plot(fit_multi)
+par(mfrow = c(1, 1))
 ```
-The _lm()_ formula returns a list containing a lot of useful information. You can access them with the fit object you have created, followed by the _$_ sign and the information you want to extract.
 
-- coefficients: `fit$coefficients'
-- residuals: `fit$residuals'
-- fitted value: `fit$fitted.values'
+The `lm()` object also stores useful components:
 
-# Factors regression
+- `fit_multi$coefficients`
+- `fit_multi$residuals`
+- `fit_multi$fitted.values`
 
-In the last model estimation, you regress mpg on continuous variables only. It is straightforward to add factor variables to the model. You add the variable _am_ to your model. It is important to be sure the variable is a factor level and not continuous.
+# Regression with factors
+
+Adding categorical predictors is straightforward, but it is important to ensure they are stored as factors.
 
 ```{r}
-df <- mtcars %>% 
-  mutate(cyl = factor(cyl), 
-         vs = factor(vs),
-         am = factor(am),
-         gear = factor(gear),
-         carb = factor(carb))
-model <- mpg ~ .
-summary(lm(model, data = df))
-```
-R uses the first factor level as a base group. You need to compare the coefficients of the other group against the base group.
+cars_all <- mtcars |>
+  mutate(
+    across(c(cyl, vs, am, gear, carb), as.factor)
+  )
 
-# Stepwise regression
-
-The last part of this tutorial deals with the stepwise regression algorithm. The purpose of this algorithm is to add and remove potential candidates in the models and keep those who have a significant impact on the dependent variable. This algorithm is meaningful when the dataset contains a large list of predictors. You don't need to manually add and remove the independent variables. The stepwise regression is built to select the best candidates to fit the model.
-
-Let's see in action how it works. You use the _mtcars_ dataset with the continuous variables only for pedagogical illustration. Before you begin analysis, its good to establish variations between the data with a correlation matrix. The _GGally_ library is an extension of ggplot2.
-
-The library includes different functions to show summary statistics such as correlation and distribution of all the variables in a matrix. We will use the ggscatmat function, but you can refer to the vignette for more information about the _GGally_ library.
-
-The basic syntax for _ggscatmat()_ is:
-
-```{r, dont-eval1, eval=FALSE}
-ggscatmat(df, columns = 1:ncol(df), corMethod = "pearson")
+fit_factors <- lm(mpg ~ ., data = cars_all)
+summary(fit_factors)
 ```
 
-__arguments:__
+R uses the first factor level as the reference group, and the other coefficients represent differences relative to that baseline.
 
-- df: A matrix of continuous variables
-- columns: Pick up the columns to use in the function. By default, all columns are used
-- corMethod: Define the function to compute the correlation between variable. By default, the algorithm uses the Pearson formula
+# Stepwise regression (model selection)
 
-You display the correlation for all your variables and decides which one will be the best candidates for the first step of the stepwise regression. There are some strong correlations between your variables and the dependent variable, _mpg_.
+Stepwise regression is an automated procedure that adds/removes predictors to optimize a criterion (often AIC). In base R, this is done with `stats::step()` which uses AIC by default. [web:554]
+
+This approach is popular for quick exploration, but it can be unstable and should be used cautiously; it is mainly included here for illustration.
+
+## Correlation overview (optional)
 
 ```{r}
 library(GGally)
-df <- mtcars %>% select(-c(am, vs, cyl, gear, carb))
-ggscatmat(df, columns = 1:ncol(df))
-```
-Variables selection is an important part to fit a model. The stepwise regression will perform the searching process automatically. To estimate how many possible choices there are in the dataset, you compute with $k$ is the number of predictors. The amount of possibilities grows bigger with the number of independent variables. That's why you need to have an automatic search.
 
-You need to install the _olsrr_ package from CRAN. You can install it directly from the command line:
-```{r, dont-eval2, eval = FALSE}
-install.packages("olsrr")
+ggscatmat(cars_cont, columns = 1:ncol(cars_cont))
 ```
 
-You can plot all the subsets of possibilities with the fit criteria (i.e. R-square, Adjusted R-square, Bayesian criteria). The model with the lowest AIC criteria will be the final model.
+## Stepwise selection with base R (AIC)
+
+We define a “full” model and a “null” (intercept-only) model, then run stepwise search.
 
 ```{r}
+fit_full <- lm(mpg ~ ., data = cars_cont)
+fit_null <- lm(mpg ~ 1, data = cars_cont)
+
+fit_step_aic <- step(
+  fit_null,
+  scope = list(lower = formula(fit_null), upper = formula(fit_full)),
+  direction = "both",
+  trace = 0
+)
+
+summary(fit_step_aic)
+```
+
+## Stepwise / all-subsets with olsrr (optional)
+
+The `olsrr` package can fit many subsets and compare them. For example, `ols_step_all_possible()` fits all combinations up to a chosen order. [web:546]
+
+```{r, eval=FALSE}
 library(olsrr)
-model <- mpg ~ .
-fit <- lm(model, data = df)
-test <- ols_step_all_possible(fit)
-plot(test)
+
+test_all <- ols_step_all_possible(fit_full)
+plot(test_all)
+
+# Example (both-direction stepwise based on p-values)
+ols_step_both_p(fit_full, pent = 0.1, prem = 0.3, details = FALSE)
 ```
-__Code Explanation__
 
-- mpg ~ .: Construct the model to estimate
-- lm(model, data = df): Run the OLS model
-- ols_step_all_possible(fit): Construct the graphs with the relevant statistical information
-- plot(test): Plot the graphs
-
-Linear regression models use the t-test to estimate the statistical impact of an independent variable on the dependent variable. Researchers set the maximum threshold at 10 percent, with lower values indicates a stronger statistical link. The strategy of the stepwise regression is constructed around this test to add and remove potential candidates. The algorithm works as follow:
-
-<p align="center">
-![](imgblock23/img2.jpg)
-</p>
-
-- __Step 1:__ Regress each predictor on $y$ separately. Namely, regress $x_1$ on $y$, $x_2$ on $y$ to $x_n$. Store the $p$-value and keep the regressor with a $p$-value lower than a defined threshold (0.1 by default). The predictors with a significance lower than the threshold will be added to the final model. If no variable has a $p$-value lower than the entering threshold, then the algorithm stops, and you have your final model with a constant only.
-- __Step 2:__ Use the predictor with the lowest $p$-value and adds separately one variable. You regress a constant, the best predictor of step one and a third variable. You add to the stepwise model, the new predictors with a value lower than the entering threshold. If no variable has a p-value lower than 0.1, then the algorithm stops, and you have your final model with one predictor only. You regress the stepwise model to check the significance of the step 1 best predictors. If it is higher than the removing threshold, you keep it in the stepwise model. Otherwise, you exclude it.
-- __Step 3:__ You replicate step 2 on the new best stepwise model. The algorithm adds predictors to the stepwise model based on the entering values and excludes predictor from the stepwise model if it does not satisfy the excluding threshold.
-- The algorithm keeps on going until no variable can be added or excluded.
-
-You can perform the algorithm with the function _ols_step_both_p()_ from the _olsrr_ package.
-
-```{r, eval = FALSE}
-ols_step_both_p(fit, pent = 0.1, prem = 0.3, details = FALSE)
-```
 # Summary
 
-Ordinary least squared regression can be summarized in the table below:
-
 ```{r, echo=FALSE}
-library(knitr)
-library(kableExtra)
-dt <- data.frame(
-  "Library" = c("base", "base", "olsrr"), 
-  "Objective" = c("Compute a linear regression", "Summarize model", "Run stepwise regression"),
-  "Function" = c("lm()", "summary()", "ols_step_both_p"),
-  "Arguments" = c("formula, data", "fit", "fit, pent = 0.1, prem = 0.3, details = FALSE"))
-kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+knitr::kable(
+  data.frame(
+    Topic = c("Simple linear regression", "Multiple regression", "Factors in regression", "Stepwise (AIC)"),
+    Main_function = c("lm()", "lm()", "lm()", "stats::step()"),
+    Notes = c(
+      "Understand slope/intercept; use lm() in practice",
+      "Multiple predictors; check diagnostics",
+      "Convert categorical variables with as.factor()",
+      "Automated model selection using AIC"
+    )
+  )
+)
 ```
