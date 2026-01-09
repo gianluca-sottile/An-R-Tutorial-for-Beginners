@@ -105,7 +105,7 @@ my_graph
 
 # Make the plot informative
 
-Good charts should be readable without extra documentation. Use `labs()` to add titles and axis labels. [web:631]
+Good charts should be readable without extra documentation. Use `labs()` to add titles and axis labels.
 
 ## Add a title
 
@@ -185,7 +185,7 @@ my_graph +
 
 # Save plots
 
-`ggsave()` saves a plot to disk; by default it saves the last displayed plot, but it is safer to pass the plot explicitly. [web:642]
+`ggsave()` saves a plot to disk; by default it saves the last displayed plot, but it is safer to pass the plot explicitly.
 
 ```{r}
 directory <- getwd()
