@@ -1,20 +1,26 @@
 ---
 pagetitle: "Lesson 12"
-title: "While Loop in R with Example"
-# author: "Dott. Gianluca Sottile"
-editor_options: 
+title: "While Loop in R (with Examples)"
+editor_options:
   chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
 ```
 
-# While Loop in R with Example {#buttons .tabset .tabset-fade .tabset-pills}
-A loop is a statement that keeps running until a condition is satisfied. The syntax for a while loop is the following:
-```{r, dont-eval, eval=FALSE}
+# While loop {#buttons .tabset .tabset-fade .tabset-pills}
+
+A loop repeats a block of code until a stopping condition is met. A `while` loop keeps running **as long as** its condition evaluates to `TRUE`. [web:726]
+
+```{r, eval=FALSE}
 while (condition) {
-     Exp	
+  # expressions
 }
 ```
 
@@ -22,54 +28,44 @@ while (condition) {
 ![While Loop Flow Chart](imgblock12/img1.png)
 </p>
 
-__Note:__ Remember to write a closing condition at some point otherwise the loop will go on indefinitely.
+**Important:** Always ensure the loop has a clear stopping condition; otherwise it may run forever.
 
-## Example 1:
-Let's go through a very simple example to understand the concept of while loop. You will create a loop and after each run add 1 to the stored variable. You need to close the loop, therefore we explicitely tells R to stop looping when the variable reached 10.
+## Example 1: Count from 1 to 10
 
-__Note:__ If you want to see current loop value, you need to wrap the variable inside the function print().
+This example increments a counter by 1 at each iteration and stops when it reaches 10.
 
 ```{r}
-#Create a variable with value 1
-begin <- 1
+i <- 1
 
-#Create the loop
-while (begin <= 10){
-
-#See which we are  
-cat('This is loop number',begin)
-
-#add 1 to the variable begin after each loop
-begin <- begin+1
-print(begin)
+while (i <= 10) {
+  cat("This is loop number", i, "\n")
+  i <- i + 1
 }
 ```
 
-## Example 2:
-You bought a stock at price of 50 dollars. If the price goes below 45, we want to short it. Otherwise, we keep it in our portfolio. The price can fluctuate between -10 to +10 around 50 after each loop. You can write the code as follow:
+Notes:
+- `cat()` is convenient for printing multiple values in one line and controlling newlines with `"\n"`. [web:727]
+- Avoid mixing `cat()` and `print()` unless there is a specific reason; it usually makes the output noisier.
+
+## Example 2: Simulate a stock price until it triggers a rule
+
+Suppose a stock starts at 50. At each step, the price changes by an integer amount between -10 and +10. If the price drops below (or equal to) 45, we “short” it and stop the loop.
 
 ```{r}
-set.seed(123)
-# Set variable stock and price
+set.seed(123)  # makes random draws reproducible [2]
+
 stock <- 50
-price <- 50
+price <- stock
+n_iter <- 0
 
-# Loop variable counts the number of loops 
-loop <- 1
-
-# Set the while statement
-while (price > 45){
-
-# Create a random price between 40 and 60
-price <- stock + sample(-10:10, 1)
-
-# Count the number of loop
-loop = loop +1 
-
-# Print the number of loop
-print(loop)
+while (price > 45) {
+  price <- stock + sample(-10:10, size = 1)
+  n_iter <- n_iter + 1
+  cat("Iteration:", n_iter, "- price:", price, "\n")
 }
 
-cat('it took',loop,'loop before we short the price. The lowest price is',price)
+cat(
+  "It took", n_iter, "iterations before we shorted.",
+  "Final price:", price, "\n"
+)
 ```
-
