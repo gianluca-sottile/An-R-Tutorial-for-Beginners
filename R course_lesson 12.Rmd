@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 
 # While loop {#buttons .tabset .tabset-fade .tabset-pills}
 
-A loop repeats a block of code until a stopping condition is met. A `while` loop keeps running **as long as** its condition evaluates to `TRUE`. [web:726]
+A loop repeats a block of code until a stopping condition is met. A `while` loop keeps running **as long as** its condition evaluates to `TRUE`.
 
 ```{r, eval=FALSE}
 while (condition) {
@@ -44,7 +44,7 @@ while (i <= 10) {
 ```
 
 Notes:
-- `cat()` is convenient for printing multiple values in one line and controlling newlines with `"\n"`. [web:727]
+- `cat()` is convenient for printing multiple values in one line and controlling newlines with `"\n"`.
 - Avoid mixing `cat()` and `print()` unless there is a specific reason; it usually makes the output noisier.
 
 ## Example 2: Simulate a stock price until it triggers a rule
