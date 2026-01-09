@@ -46,7 +46,7 @@ t = r \sqrt{\frac{n-2}{1-r^2}}
 
 Spearman correlation computes Pearson correlation on the **ranks** of the data. It is more robust to outliers and does not require a linear relationship; it is suitable when the relationship is monotonic and/or variables are ordinal.
 
-In R, both Pearson and Spearman correlations can be computed with `cor()` by setting `method`. [web:645]
+In R, both Pearson and Spearman correlations can be computed with `cor()` by setting `method`.
 
 ```{r, eval=FALSE}
 cor(x, y, method = c("pearson", "spearman", "kendall"), use = "complete.obs")
@@ -54,7 +54,7 @@ cor(x, y, method = c("pearson", "spearman", "kendall"), use = "complete.obs")
 
 Important option for missing values:
 - `use = "complete.obs"` removes rows with any missing values (listwise deletion),
-- `use = "pairwise.complete.obs"` computes each pairwise correlation using available pairs. [web:645]
+- `use = "pairwise.complete.obs"` computes each pairwise correlation using available pairs.
 
 # Data: British household budget
 
@@ -113,7 +113,7 @@ corr_lower
 # Significance levels (p-values)
 
 If you want p-values for each entry in the correlation matrix, you can use `rcorr()` from **Hmisc**.
-To avoid masking conflicts with dplyr (`summarise/summarize`), do NOT attach Hmisc with `library(Hmisc)`; call it explicitly with `Hmisc::rcorr()`. [web:656]
+To avoid masking conflicts with dplyr (`summarise/summarize`), do NOT attach Hmisc with `library(Hmisc)`; call it explicitly with `Hmisc::rcorr()`.
 
 ```{r}
 mat_rcorr <- Hmisc::rcorr(as.matrix(data_num), type = "pearson")
@@ -167,7 +167,7 @@ GGally::ggcorr(
 
 # ggpairs: multivariate bivariate plots
 
-`GGally::ggpairs()` creates a matrix of plots (distributions on the diagonal, bivariate plots below, and optional correlations above). [web:651]
+`GGally::ggpairs()` creates a matrix of plots (distributions on the diagonal, bivariate plots below, and optional correlations above).
 
 ```{r}
 library(ggplot2)
