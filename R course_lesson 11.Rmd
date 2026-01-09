@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 
 # For loop syntax and examples {#buttons .tabset .tabset-fade .tabset-pills}
 
-A `for` loop runs a block of code once for each element in a sequence. [web:735]
+A `for` loop runs a block of code once for each element in a sequence.
 
 ```{r, eval=FALSE}
 for (i in vector) {
@@ -43,7 +43,7 @@ for (x in fruit) {
 ## Example 2: Build a list (pre-allocate)
 
 Avoid using `list` as a variable name because it masks the base `list()` function.
-Also, it’s good practice to pre-allocate containers in loops. [web:742]
+Also, it’s good practice to pre-allocate containers in loops.
 
 ```{r}
 out <- vector("list", length = 4)
@@ -56,7 +56,7 @@ out
 ```
 
 Notes:
-- `seq_along(x)` is safer than `1:length(x)` because it behaves correctly when `x` is empty. [web:742]
+- `seq_along(x)` is safer than `1:length(x)` because it behaves correctly when `x` is empty.
 - `i^2` is clearer than `i*i`.
 
 # For loop over a list
@@ -86,7 +86,7 @@ for (nm in names(basket)) {
 
 # For loop over a matrix
 
-A matrix has rows and columns, so nested loops are common. [web:735]
+A matrix has rows and columns, so nested loops are common.
 
 ```{r}
 mat <- matrix(seq(10, 21, by = 1), nrow = 6, ncol = 2)
