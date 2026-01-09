@@ -21,7 +21,7 @@ Statistical inference is about drawing conclusions from data under uncertainty. 
 A common tool is the **t-test** (also called **Student’s t-test**), which can be used to test hypotheses about means:
 
 - One-sample t-test: compare the mean of one sample to a reference value.
-- Paired t-test: compare two measurements taken on the same units (before/after, matched pairs). [web:571]
+- Paired t-test: compare two measurements taken on the same units (before/after, matched pairs).
 
 # What is a t-test?
 
@@ -41,8 +41,8 @@ Key arguments:
 - `x`: numeric vector.
 - `y`: second numeric vector (for two-sample tests).
 - `mu`: reference mean (or reference mean difference for paired tests).
-- `paired`: set to `TRUE` for paired data. [web:570]
-- `var.equal`: relevant for **two-sample unpaired** tests; it uses a pooled variance estimate when `TRUE`. [web:570]
+- `paired`: set to `TRUE` for paired data.
+- `var.equal`: relevant for **two-sample unpaired** tests; it uses a pooled variance estimate when `TRUE`.
 
 # One-sample t-test
 
@@ -82,7 +82,7 @@ If the p-value is above 0.05, you do not have enough evidence that the mean suga
 
 # Paired t-test
 
-A paired t-test is used when the two samples are **dependent** (same units measured twice, or matched pairs). The test is equivalent to a one-sample t-test on the differences \(d = x - y\). [web:572][web:570]
+A paired t-test is used when the two samples are **dependent** (same units measured twice, or matched pairs). The test is equivalent to a one-sample t-test on the differences \(d = x - y\).
 
 ## Example: sales before vs after a discount program
 
@@ -99,8 +99,8 @@ t.test(sales_before, sales_after, paired = TRUE)
 
 Notes:
 
-- Use `paired = TRUE` for paired data. [web:571]
-- In a paired test, `var.equal` is not meaningful in the same way as in an unpaired two-sample test, because the test works on a single vector of differences. [web:572]
+- Use `paired = TRUE` for paired data.
+- In a paired test, `var.equal` is not meaningful in the same way as in an unpaired two-sample test, because the test works on a single vector of differences.
 
 # Summary
 
