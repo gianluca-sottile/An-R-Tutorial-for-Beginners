@@ -95,7 +95,7 @@ box_plot +
 
 # Add a summary statistic (mean)
 
-You can add the mean as an overlay point. Note: in recent ggplot2 versions, use `fun =` (the old `fun.y` is deprecated). [web:600]
+You can add the mean as an overlay point. Note: in recent ggplot2 versions, use `fun =` (the old `fun.y` is deprecated).
 
 ```{r}
 box_plot +
