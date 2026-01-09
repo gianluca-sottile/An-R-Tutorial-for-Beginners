@@ -2,100 +2,83 @@
 [![License](https://img.shields.io/github/license/gianluca-sottile/An-R-Tutorial-for-Beginners?color=blue)](LICENSE)
 [![GitHub last commit](https://img.shields.io/github/last-commit/gianluca-sottile/An-R-Tutorial-for-Beginners)](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners)
 
-# An R Tutorial for Beginners 🚀
+# An R Tutorial for Beginners
 
-**Tutorial pratico R per principianti assoluti**: da zero a data analysis e visualizzazioni in **25 lezioni R Markdown interattive**.
+A practical, beginner-friendly R course: from zero to data analysis and visualization in **25 interactive R Markdown lessons**.
 
-[![Sito Live](https://img.shields.io/badge/Sito-Live-brightgreen)](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/)
+Live website: https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/
 
-## 🎯 Cosa impari
+## What you will learn
 
-- **Syntax R base**: vettori, matrici, data frame, funzioni
-- **Data manipulation**: dplyr, tidyr, import/export dati
-- **Visualizzazioni**: ggplot2, grafici base/avanzati
-- **Tabelle**: knitr::kable(), kableExtra
-- **R Markdown**: report automatici, siti web
+- **Core R fundamentals**: objects, data types, matrices, factors
+- **Data preparation**: data frames, lists, sorting, merging, user-defined functions
+- **R programming basics**: if/else, loops, apply-family
+- **Data I/O**: import/export, missing values
+- **Exploratory analysis & visualization**: correlation, scatter plots, boxplots, histograms, tests
+- **Machine learning foundations**: regression (linear/stepwise, GLM) and k-means
 
-**Per**: Studenti, data analyst, principianti italiani (testi bilingue)
+## Lesson index (25 lessons)
 
-## 📋 Indice lezioni (25 totali)
+### Fundamentals
+| # | Lesson | Source (.Rmd) | Rendered (HTML) |
+|---|--------|---------------|-----------------|
+| 1 | What is R? | [Rmd](R%20course_lesson%201.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-1.html) |
+| 2 | Data Types | [Rmd](R%20course_lesson%202.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-2.html) |
+| 3 | Matrix | [Rmd](R%20course_lesson%203.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-3.html) |
+| 4 | Factors | [Rmd](R%20course_lesson%204.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-4.html) |
 
-| # | Lezione | Argomento | [Rmd](R%20course_lesson%20#.Rmd) |
-|---|---------|-----------|---------------------------------|
-| 1 | Lezione 1 | Introduzione R/RStudio | [Apri](R%20course_lesson%201.Rmd) |
-| 2 | Lezione 2 | Vettori e operazioni base | [Apri](R%20course_lesson%202.Rmd) |
-| 3 | Lezione 3 | Data frame e subsetting | [Apri](R%20course_lesson%203.Rmd) |
-| 4 | Lezione 4 | Matrici e array | [Apri](R%20course_lesson%204.Rmd) |
-| 5 | Lezione 5 | Funzioni e controllo flusso | [Apri](R%20course_lesson%205.Rmd) |
-| 6 | Lezione 6 | Grafici base (base R) | [Apri](R%20course_lesson%206.Rmd) |
-| 7 | Lezione 7 | Import/export dati (CSV, Excel) | [Apri](R%20course_lesson%207.Rmd) |
-| 8 | Lezione 8 | dplyr: select, filter, mutate | [Apri](R%20course_lesson%208.Rmd) |
-| 9 | Lezione 9 | dplyr: summarise, group_by | [Apri](R%20course_lesson%209.Rmd) |
-| **10** | **Lezione 10** | **Tabelle con kableExtra** | **[Apri](R%20course_lesson%2010.Rmd)** |
-| 11 | Lezione 11 | tidyr: pivot_longer/wider | [Apri](R%20course_lesson%2011.Rmd) |
-| 12 | Lezione 12 | ggplot2: introduzione | [Apri](R%20course_lesson%2012.Rmd) |
-| 13 | Lezione 13 | ggplot2: layer avanzati | [Apri](R%20course_lesson%2013.Rmd) |
-| 14 | Lezione 14 | ggplot2: facets e scales | [Apri](R%20course_lesson%2014.Rmd) |
-| 15 | Lezione 15 | Gestione NA e missing values | [Apri](R%20course_lesson%2015.Rmd) |
-| 16 | Lezione 16 | Stringhe e regular expressions | [Apri](R%20course_lesson%2016.Rmd) |
-| 17 | Lezione 17 | Fattori e variabili categoriche | [Apri](R%20course_lesson%2017.Rmd) |
-| 18 | Lezione 18 | Data e datetime (lubridate) | [Apri](R%20course_lesson%2018.Rmd) |
-| 19 | Lezione 19 | Apply family (lapply, sapply) | [Apri](R%20course_lesson%2019.Rmd) |
-| 20 | Lezione 20 | purrr: map functions | [Apri](R%20course_lesson%2020.Rmd) |
-| 21 | Lezione 21 | Modelli lineari base (lm) | [Apri](R%20course_lesson%2021.Rmd) |
-| 22 | Lezione 22 | Statistiche descrittive | [Apri](R%20course_lesson%2022.Rmd) |
-| 23 | Lezione 23 | R Markdown avanzato | [Apri](R%20course_lesson%2023.Rmd) |
-| 24 | Lezione 24 | Progetti pratici | [Apri](R%20course_lesson%2024.Rmd) |
-| **25** | **Lezione 25** | **Portfolio + deploy GitHub** | **[Apri](R%20course_lesson%2025.Rmd)** |
+### Data Preparation
+| # | Lesson | Source (.Rmd) | Rendered (HTML) |
+|---|--------|---------------|-----------------|
+| 5 | Data Frames | [Rmd](R%20course_lesson%205.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-5.html) |
+| 6 | Lists | [Rmd](R%20course_lesson%206.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-6.html) |
+| 7 | Sort a Data Frame | [Rmd](R%20course_lesson%207.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-7.html) |
+| 8 | Merge Data Frames | [Rmd](R%20course_lesson%208.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-8.html) |
+| 9 | Functions | [Rmd](R%20course_lesson%209.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-9.html) |
 
-**⭐ [Vedi tutte le lezioni renderizzate sul sito live!](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/)**
+### R Programming
+| # | Lesson | Source (.Rmd) | Rendered (HTML) |
+|---|--------|---------------|-----------------|
+| 10 | IF, ELSE, and ELSE IF Statements | [Rmd](R%20course_lesson%2010.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-10.html) |
+| 11 | For Loops | [Rmd](R%20course_lesson%2011.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-11.html) |
+| 12 | While Loop | [Rmd](R%20course_lesson%2012.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-12.html) |
+| 13 | apply(), lapply(), sapply(), tapply() | [Rmd](R%20course_lesson%2013.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-13.html) |
+| 14 | Import Data | [Rmd](R%20course_lesson%2014.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-14.html) |
+| 15 | How to Replace Missing Values | [Rmd](R%20course_lesson%2015.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-15.html) |
+| 16 | Exporting Data | [Rmd](R%20course_lesson%2016.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-16.html) |
+| 17 | Correlation | [Rmd](R%20course_lesson%2017.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-17.html) |
 
-## 🚀 Install & Avvia (1 minuto)
+### Data Analysis with R
+| # | Lesson | Source (.Rmd) | Rendered (HTML) |
+|---|--------|---------------|-----------------|
+| 18 | Scatter Plot | [Rmd](R%20course_lesson%2018.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-18.html) |
+| 19 | How to Make a Boxplot | [Rmd](R%20course_lesson%2019.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-19.html) |
+| 20 | Bar Chart & Histogram | [Rmd](R%20course_lesson%2020.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-20.html) |
+| 21 | T Test | [Rmd](R%20course_lesson%2021.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-21.html) |
+| 22 | ANOVA: One-way & Two-way | [Rmd](R%20course_lesson%2022.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-22.html) |
+
+### Machine Learning
+| # | Lesson | Source (.Rmd) | Rendered (HTML) |
+|---|--------|---------------|-----------------|
+| 23 | Simple, Multiple Linear and Stepwise Regression | [Rmd](R%20course_lesson%2023.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-23.html) |
+| 24 | Generalized Linear Model | [Rmd](R%20course_lesson%2024.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-24.html) |
+| 25 | K-means Clustering | [Rmd](R%20course_lesson%2025.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-25.html) |
+
+## Quick start
 
 ```r
-# Opzione 1: Clona con usethis (RStudio)
+# Option 1: clone with usethis (RStudio)
 usethis::create_from_github("gianluca-sottile/An-R-Tutorial-for-Beginners")
+```
 
-# Opzione 2: Git classico
+```bash
+# Option 2: classic git
 git clone https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners.git
 cd An-R-Tutorial-for-Beginners
 ```
 
-**Apri**: `An-R-Tutorial-for-Beginners.Rproj` in RStudio
-**Inizia**: Knit `index.Rmd` → [Sito locale](http://127.0.0.1:XXXXX)
+Open `An-R-Tutorial-for-Beginners.Rproj` in RStudio, then knit `index.Rmd` (or build the site).
 
-### Prerequisiti
+## License
 
-- R ≥ 4.3 [Installa](https://posit.co/download/r)
-- RStudio [Installa](https://posit.co/download/rstudio-desktop/)
-
-## ✨ Caratteristiche
-
-✅ **25 lezioni progressive R Markdown** (codice + output)  
-✅ **Grafici ggplot2 + tabelle kableExtra**  
-✅ **Sito auto-deploy** GitHub Actions + Pages  
-✅ **Responsive design** CSS custom (mobile/tablet)  
-✅ **Italiano/Inglese** bilingue  
-✅ **CI/CD completo** (license, gitignore, Actions)
-
-## 🤝 Contribuisci
-
-1. 🍴 **Fork** il repository
-2. 🔀 **Branch** `feature/nome-feature`
-3. 💾 **Commit** + **Push**
-4. 📤 **Pull Request** con descrizione chiara
-5. 🌟 **Star** per supporto!
-
-[![Issues](https://img.shields.io/github/issues/gianluca-sottile/An-R-Tutorial-for-Beginners)](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners/issues)
-
-## 📚 Risorse extra
-
-- [Sito completo](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/)
-- [R per tutti](https://www.r4datasciencebook.com/)
-- [ggplot2 guida](https://ggplot2.tidyverse.org/)
-
----
-
-**👨‍💻 Autore**: [Gianluca Sottile](https://github.com/gianluca-sottile)  
-**📄 License**: [CC-BY-SA-4.0](LICENSE)  
-**🌟 Dai una ⭐ se ti è utile!**
+CC-BY-SA-4.0 (see [LICENSE](LICENSE)).
