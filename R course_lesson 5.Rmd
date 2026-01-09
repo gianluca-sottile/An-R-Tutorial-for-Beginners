@@ -33,7 +33,7 @@ You can create a data frame with `data.frame()` or (recommended for modern workf
 data.frame(..., stringsAsFactors = FALSE)
 ```
 
-Note: In R ≥ 4.0 the default is effectively `stringsAsFactors = FALSE`, but it can be set explicitly for compatibility or teaching. [web:691]
+Note: In R ≥ 4.0 the default is effectively `stringsAsFactors = FALSE`, but it can be set explicitly for compatibility or teaching.
 
 ## Example
 
@@ -69,7 +69,7 @@ str(df_tbl)
 
 Indexing uses `df[rows, cols]`:
 - leaving `rows` blank means “all rows”
-- leaving `cols` blank means “all columns” [web:823]
+- leaving `cols` blank means “all columns”
 
 ```{r}
 # One cell: row 1, column 2
@@ -128,7 +128,7 @@ df2
 
 ## Base R (recommended for clarity)
 
-Use a logical condition inside the row index. This style is explicit and robust. [web:823]
+Use a logical condition inside the row index. This style is explicit and robust.
 
 ```{r}
 df[df$price > 5, ]
@@ -136,7 +136,7 @@ df[df$price > 5, ]
 
 ## subset()
 
-`subset()` can be convenient for quick exploration, but many workflows prefer bracket indexing for explicitness. [web:823]
+`subset()` can be convenient for quick exploration, but many workflows prefer bracket indexing for explicitness.
 
 ```{r}
 subset(df, price > 5)
