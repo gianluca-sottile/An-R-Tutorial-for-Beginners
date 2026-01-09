@@ -35,8 +35,8 @@ ggplot(data, aes(...)) + geom_*
 
 In this tutorial we will mainly use:
 
-- `geom_bar()` for counts (default behavior: `stat = "count"`) [web:592]
-- `geom_col()` for precomputed values (equivalent to `geom_bar(stat = "identity")`) [web:592][web:585]
+- `geom_bar()` for counts (default behavior: `stat = "count"`)
+- `geom_col()` for precomputed values (equivalent to `geom_bar(stat = "identity")`)
 
 # Bar chart (counts)
 
@@ -105,7 +105,7 @@ ggplot(cars, aes(x = cyl, fill = am)) +
 
 ## Percent stacked bars
 
-Use `position = "fill"` to show proportions instead of raw counts. [web:596]
+Use `position = "fill"` to show proportions instead of raw counts.
 
 ```{r}
 ggplot(cars, aes(x = cyl, fill = am)) +
@@ -125,7 +125,7 @@ ggplot(cars, aes(x = cyl, fill = am)) +
 
 # Bar chart (values)
 
-Sometimes you want bars to represent a numeric value (e.g., mean `mpg`) rather than counts. In this case, compute the summary first and then use `geom_col()`. [web:592]
+Sometimes you want bars to represent a numeric value (e.g., mean `mpg`) rather than counts. In this case, compute the summary first and then use `geom_col()`.
 
 ## Step 1) Compute mean mpg by cylinders
 
