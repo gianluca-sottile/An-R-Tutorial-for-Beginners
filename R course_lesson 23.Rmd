@@ -1,5 +1,5 @@
 ---
-title: "R Simple, Multiple Linear and Stepwise Regression (with Example)"
+title: "Simple, Multiple Linear and Stepwise Regression (with Example)"
 pagetitle: "Lesson 23"
 editor_options:
   chunk_output_type: inline
