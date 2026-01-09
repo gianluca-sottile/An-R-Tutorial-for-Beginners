@@ -57,7 +57,7 @@ na_counts
 
 # Exclude missing values (na.omit)
 
-A simple way to remove rows with missing values is `na.omit()`. Note: `na.omit()` is a base R function (from `stats`) that removes observations containing missing values. [web:677]
+A simple way to remove rows with missing values is `na.omit()`. Note: `na.omit()` is a base R function (from `stats`) that removes observations containing missing values.
 
 ```{r}
 df_titanic_drop <- stats::na.omit(df_titanic)
@@ -95,8 +95,8 @@ median_by_col
 
 ## Step 3: Create new variables with imputed values
 
-Using `tidyr::replace_na()` is a clean way to replace NA values with a constant. [web:680]  
-Combined with `dplyr::across()`, it scales to many columns easily. [web:681]
+Using `tidyr::replace_na()` is a clean way to replace NA values with a constant.
+Combined with `dplyr::across()`, it scales to many columns easily.
 
 ```{r}
 library(tidyr)
