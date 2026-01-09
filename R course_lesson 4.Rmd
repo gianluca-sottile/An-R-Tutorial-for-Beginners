@@ -16,13 +16,13 @@ knitr::opts_chunk$set(
 
 # What is a factor in R?
 
-A **factor** is R’s data type for **categorical variables** (variables that take a limited set of values, called *levels*). [web:833]  
+A **factor** is R’s data type for **categorical variables** (variables that take a limited set of values, called *levels*).
 In most datasets you will see two broad types of variables:
 
 - **Categorical**: a finite set of categories (e.g., country, gender, job title).
 - **Continuous**: numeric measurements on a scale (e.g., income, temperature, price).
 
-R models and plotting functions often treat factors differently from numeric variables, which is why it matters to store categorical data as factors. [web:837]
+R models and plotting functions often treat factors differently from numeric variables, which is why it matters to store categorical data as factors.
 
 # Categorical variables
 
@@ -32,7 +32,7 @@ You create factors with `factor()`:
 factor(x, levels = NULL, labels = levels, ordered = FALSE)
 ```
 
-Key arguments: [web:833]
+Key arguments:
 - `x`: a vector (typically character, integer, or numeric codes).
 - `levels`: the set of possible values (and their order, if provided).
 - `labels`: the human-readable labels for the levels.
@@ -78,12 +78,12 @@ color_f
 levels(color_f)
 ```
 
-The level order is just how R stores it (often alphabetical unless you specify levels explicitly). [web:837]
+The level order is just how R stores it (often alphabetical unless you specify levels explicitly).
 
 ## Ordinal factors {#buttons .tabset .tabset-fade .tabset-pills}
 
 Ordinal categories have a **natural order** (e.g., low < medium < high).  
-In R, you can encode that by setting `ordered = TRUE` and supplying levels in the correct order. [web:833][web:844]
+In R, you can encode that by setting `ordered = TRUE` and supplying levels in the correct order.
 
 ### Example 1: create an ordered factor
 
@@ -105,7 +105,7 @@ day_ord
 summary(day_ord)
 ```
 
-Because the factor is ordered, printing shows the order of levels using `<`. [web:837]
+Because the factor is ordered, printing shows the order of levels using `<`.
 
 # Continuous variables
 
@@ -118,4 +118,4 @@ class(dataset$mpg)
 
 # Practical tip (modeling)
 
-In many modeling functions, factors are automatically expanded into indicator (dummy) variables in the design matrix. This is one reason factors are important for regression and other ML methods. [web:839]
+In many modeling functions, factors are automatically expanded into indicator (dummy) variables in the design matrix. This is one reason factors are important for regression and other ML methods.
