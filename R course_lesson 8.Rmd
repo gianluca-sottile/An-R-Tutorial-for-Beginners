@@ -1,126 +1,122 @@
 ---
 pagetitle: "Lesson 8"
-title: "Merge Data Frames in R: Full and Partial Match"
-# author: "Dott. Gianluca Sottile"
-editor_options: 
+title: "Merge Data Frames in R: Inner, Left, and Full Joins"
+editor_options:
   chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
 ```
 
-<br>
+Very often, data comes from multiple sources. To analyze it, you typically need to **join** (merge) two data frames using one or more **key columns**.
 
-Very often, we have data from multiple sources. To perform an analysis, we need to __merge__ two dataframes together with one or more __common key variables__.
+# Join types (concepts)
 
-# Full match
-***
-A full match returns values that have a counterpart in the destination table. The values that are not match won't be return in the new data frame. The partial match, however, return the missing values as NA.
+In base R, the main tool is `merge()`. By default, `merge(x, y)` performs an **inner join** (keeps only matching keys). [web:778]  
+You can control outer joins with:
+- `all.x = TRUE` → **left join** (keep all rows from `x`) [web:778]
+- `all.y = TRUE` → **right join** (keep all rows from `y`) [web:778]
+- `all = TRUE` (or both `all.x` and `all.y`) → **full join** (keep all rows from both) [web:778]
 
-We will see a simple __inner join__. The inner join keyword selects records that have matching values in both tables. To join two datasets, we can use `merge()` function. We will use three arguments :
-
-```{r, dont-eval, eval=FALSE}
-merge(x, y, by.x = x, by.y = y)
-```
-
-__Arguments:__
-
-+ x: The origin data frame
-+ y: The data frame to merge
-+ by.x: The column used for merging in x data frame. Column x to merge on
-+ by.y: The column used for merging in y data frame. Column y to merge on
-
-__Example:__
-
-Create First Dataset with variables
-+ surname
-+ nationality
-
-Create Second Dataset with variables
-+ surname
-+ movies
-
-The common key variable is surname. We can merge both data and check if the dimensionality is 7x3.
-
-We add `stringsAsFactors = FALSE` in the data frame because we don't want R to convert string as factor, we want the variable to be treated as character.
+# Example data
 
 ```{r}
-# Create origin dataframe(
+library(tibble)
 
-producers <- data.frame(   
-    surname =  c("Spielberg","Scorsese","Hitchcock","Tarantino","Polanski"),    
-    nationality = c("US","US","UK","US","Poland"),    
-    stringsAsFactors=FALSE)
+producers <- tibble(
+  surname = c("Spielberg", "Scorsese", "Hitchcock", "Tarantino", "Polanski"),
+  nationality = c("US", "US", "UK", "US", "Poland")
+)
 
-# Create destination dataframe
-movies <- data.frame(    
-    surname = c("Spielberg",
-		"Scorsese",
-                "Hitchcock",
-              	"Hitchcock",
-                "Spielberg",
-                "Tarantino",
-                "Polanski"),    
-    title = c("Super 8",
-    		"Taxi Driver",
-    		"Psycho",
-    		"North by Northwest",
-    		"Catch Me If You Can",
-    		"Reservoir Dogs","Chinatown"),                
-     		stringsAsFactors=FALSE)
+movies <- tibble(
+  surname = c("Spielberg", "Scorsese", "Hitchcock", "Hitchcock", "Spielberg", "Tarantino", "Polanski"),
+  title = c(
+    "Super 8",
+    "Taxi Driver",
+    "Psycho",
+    "North by Northwest",
+    "Catch Me If You Can",
+    "Reservoir Dogs",
+    "Chinatown"
+  )
+)
 
-# Merge two datasets
-m1 <- merge(producers, movies, by.x = "surname")
-m1
-dim(m1)
+producers
+movies
 ```
 
-Let's merge data frames when the common key variables have different names.
+# Inner join (matches only)
 
-We change surname to name in the movies data frame. We use the function `identical(x1, x2)` to check if both dataframes are identical.
+## Base R: merge()
 
 ```{r}
-# Change name of ` movies ` dataframe
-colnames(movies)[colnames(movies) == 'surname'] <- 'name'
-# Merge with different key value
-m2 <- merge(producers, movies, by.x = "surname", by.y = "name")
-# Print head of the data
-head(m2)
-# Check if data are identical
-identical(m1, m2)
+m_inner <- merge(producers, movies, by = "surname")
+m_inner
+dim(m_inner)
 ```
 
-This shows that merge operation is performed even if the column names are different.
+This returns only producers that appear in both tables (matching `surname`). [web:778]
 
-# Partial match
-***
-It is not surprising that two dataframes do not have the same common key variables. In the __full matching__, the dataframe returns __only__ rows found in both x and y data frame. With __partial merging__, it is possible to keep the rows with no matching rows in the other data frame. These rows will have NA in those columns that are usually filled with values from y. We can do that by setting `all.x = TRUE`.
+## dplyr alternative (optional)
 
-For instance, we can add a new producer, Lucas, in the producer data frame without the movie references in movies data frame. If we set `all.x = FALSE`, R will join only the matching values in both data set. In our case, the producer Lucas will not be join to the merge because it is missing from one dataset.
+```{r, eval=FALSE}
+library(dplyr)
 
-Let's see the dimension of each output when we specify all.x= TRUE and when we don't.
-
-```{r, results='hide'}
-# Create a new producer
-add_producer <-  c('Lucas', 'US')
-#  Append it to the ` producer` dataframe
-producers <- rbind(producers, add_producer)
-# Use a partial merge 
-m3 <- merge(producers, movies, by.x = "surname", by.y = "name", all.x = TRUE)
-m3
+m_inner2 <- producers |>
+  inner_join(movies, by = "surname")
 ```
 
-<p align="center">
-![](imgblock8/img1.png)
-</p>
+`inner_join()` keeps rows with keys present in both tables and adds columns from `y` to `x`. [web:786]
+
+# Join with different key names
+
+Sometimes the key columns don’t have the same name.
 
 ```{r}
-# Compare the dimension of each data frame
-dim(m1)
-dim(m2)
-dim(m3)
+movies2 <- movies |>
+  dplyr::rename(name = surname)
+
+m_inner_diffkey <- merge(producers, movies2, by.x = "surname", by.y = "name")
+head(m_inner_diffkey)
 ```
 
-As we can see, the dimension of the new data frame 8x3 compared with 7x3 for m1 and m2. R includes NA for the missing author in the books data frame.
+# Left join (keep all from x)
 
+A left join keeps all rows from the left table (`x`) and fills missing matches from the right table (`y`) with `NA`. [web:778]
+
+```{r}
+library(dplyr)
+
+producers_plus <- producers |>
+  add_row(surname = "Lucas", nationality = "US")
+
+# Left join with base R:
+m_left <- merge(producers_plus, movies2, by.x = "surname", by.y = "name", all.x = TRUE)
+m_left
+dim(m_left)
+```
+
+Because “Lucas” has no match in `movies2`, the `title` column becomes `NA` for that row. [web:778]
+
+## dplyr equivalent (optional)
+
+```{r, eval=FALSE}
+m_left2 <- producers_plus |>
+  left_join(movies2, by = c("surname" = "name"))
+```
+
+# Full join (keep all rows)
+
+A full join keeps all rows from both tables and uses `NA` where there is no match. [web:778]
+
+```{r}
+m_full <- merge(producers_plus, movies2, by.x = "surname", by.y = "name", all = TRUE)
+m_full
+dim(m_full)
+```
