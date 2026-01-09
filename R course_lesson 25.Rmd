@@ -64,7 +64,7 @@ We will use the “Prices of Personal Computers” dataset (1993–1995). K-mean
 library(dplyr)
 library(readr)
 
-path <- "https://raw.githubusercontent.com/guru99-edu/R-Programming/master/computers.csv"
+path <- "raw_data/computers.csv"
 
 df <- read_csv(path, show_col_types = FALSE) |>
   select(-cd, -multi, -premium)
