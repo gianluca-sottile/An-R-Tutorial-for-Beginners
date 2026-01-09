@@ -12,65 +12,65 @@ navbar:
     - text: "Lessons"
       icon: fa-bars
       menu:
-        - text: "Introduction"
+        - text: "Fundamentals"
           menu:
-          - text: "Lesson 1"
+          - text: "What is R?"
             href: R-course_lesson-1.html
-          - text: "Lesson 2"
+          - text: "Data Types"
             href: R-course_lesson-2.html
-          - text: "Lesson 3"
+          - text: "Matrix"
             href: R-course_lesson-3.html
-          - text: "Lesson 4"
+          - text: "Factors"
             href: R-course_lesson-4.html
         - text: "Data Preparation"
           menu:
-          - text: "Lesson 5"
+          - text: "Data Frames"
             href: R-course_lesson-5.html
-          - text: "Lesson 6"
+          - text: "Lists"
             href: R-course_lesson-6.html
-          - text: "Lesson 7"
+          - text: "Sort a Data Frame"
             href: R-course_lesson-7.html
-          - text: "Lesson 8"
+          - text: "Merge Data Frames"
             href: R-course_lesson-8.html
-          - text: "Lesson 9"
+          - text: "Functions"
             href: R-course_lesson-9.html
-        - text: "Programming"
+        - text: "R Programming"
           menu:
-          - text: "Lesson 10"
+          - text: "IF, ELSE, and ELSE IF Statements"
             href: R-course_lesson-10.html
-          - text: "Lesson 11"
+          - text: "For Loops"
             href: R-course_lesson-11.html
-          - text: "Lesson 12"
+          - text: "While Loop"
             href: R-course_lesson-12.html
-          - text: "Lesson 13"
+          - text: "apply(), lapply(), sapply(), tapply()"
             href: R-course_lesson-13.html
-          - text: "Lesson 14"
+          - text: "Import Data"
             href: R-course_lesson-14.html
-          - text: "Lesson 15"
+          - text: "How to Replace Missing Values"
             href: R-course_lesson-15.html
-          - text: "Lesson 16"
+          - text: "Exporting Data"
             href: R-course_lesson-16.html
-          - text: "Lesson 17"
+          - text: "Correlation"
             href: R-course_lesson-17.html
-        - text: "Data Analysis"
+        - text: "Data Analysis with R"
           menu:
-          - text: "Lesson 18"
+          - text: "Scatter Plot"
             href: R-course_lesson-18.html
-          - text: "Lesson 19"
+          - text: "How to Make a Boxplot"
             href: R-course_lesson-19.html
-          - text: "Lesson 20"
+          - text: "Bar Chart & Histogram"
             href: R-course_lesson-20.html
-          - text: "Lesson 21"
+          - text: "T Test"
             href: R-course_lesson-21.html
-          - text: "Lesson 22"
+          - text: "ANOVA: One-way & Two-way"
             href: R-course_lesson-22.html
-        - text: "Data Analysis 2"
+        - text: "Machine Learning"
           menu:
-          - text: "Lesson 23"
+          - text: "Simple, Multiple Linear and Stepwise Regression"
             href: R-course_lesson-23.html
-          - text: "Lesson 24"
+          - text: "Generalized Linear Model"
             href: R-course_lesson-24.html
-          - text: "Lesson 25"
+          - text: "K-means Clustering"
             href: R-course_lesson-25.html
 
           
