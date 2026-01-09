@@ -1,72 +1,68 @@
 ---
 pagetitle: "Lesson 15"
-title: "How to Replace Missing Values(NA) in R: na.omit & na.rm"
-# author: "Dott. Gianluca Sottile"
-editor_options: 
+title: "How to Replace Missing Values (NA) in R: na.omit & na.rm"
+editor_options:
   chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, fig.align="center")
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
 ```
 
-Missing values in data science arise when an observation is missing in a column of a data frame or contains a character value instead of numeric value. Missing values must be dropped or replaced in order to draw correct conclusion from the data.
+Missing values (NA) occur when observations are not recorded or when values cannot be parsed correctly. Before modeling or summarizing data, you should decide whether to **remove** missing rows or **impute** missing values.
 
-In this tutorial, we will learn how to deal with missing values with the dplyr library. dplyr library is part of an ecosystem to realize a data analysis.
+In this lesson you will learn how to:
+- Identify which columns contain missing values
+- Remove rows containing missing values
+- Impute missing values using the mean or the median
 
 <p align="center">
 ![](imgblock15/img1.png)
 </p>
 
 # mutate()
-The fourth verb in the dplyr library is helpful to create new variable or change the values of an existing variable.
 
-We will proceed in two parts. We will learn how to:
+`mutate()` is one of the core verbs in dplyr. It is useful to create new variables or modify existing ones.
 
-- exclude missing values from a data frame
-- impute missing values with the mean and median
+Basic syntax:
 
-The verb mutate() is very easy to use. We can create a new variable following this syntax:
-
-```{r, dont-eval, eval=FALSE}
-mutate(df, name_variable_1 = condition, ...)
+```{r, eval=FALSE}
+dplyr::mutate(df, new_var = expression, ...)
 ```
 
-__Arguments:__
+# Identify missing values
 
-- df: Data frame used to create a new variable
-- name_variable_1: Name and the formula to create the new variable
-- ...: No limit constraint. Possibility to create more than one variable inside mutate()
-
-# Exclude Missing Values (NA)
-The na.omit() method from the dplyr library is a simple way to exclude missing observation. Dropping all the NA from the data is easy but it does not mean it is the most elegant solution. During analysis, it is wise to use variety of methods to deal with missing values
-
-To tackle the problem of missing observations, we will use the titanic dataset. In this dataset, we have access to the information of the passengers on board during the tragedy. This dataset has many NA that need to be taken care of.
-
-We will upload the csv file from the internet and then check which columns have NA. To return the columns with missing data, we can use the following code:
-
-Let's upload the data and verify the missing data.
-
-```{r}
-PATH <- "https://raw.githubusercontent.com/guru99-edu/R-Programming/master/test.csv"
-df_titanic <- read.csv(PATH, sep = ",")
-# Return the column names containing missing observations
-list_na <- colnames(df_titanic)[apply(df_titanic, 2, anyNA)]
-list_na
-```
-
-Here,
-
-```{r, dont-eval1, eval=FALSE}
-colnames(df_titanic)[apply(df_titanic, 2, anyNA)]
-```
-
-Gives the name of columns that do not have data. The columns age and fare have missing values. We can drop them with the na.omit().
+We will use a Titanic dataset with missing values.
 
 ```{r}
 library(dplyr)
-# Exclude the missing observations
-df_titanic_drop <- df_titanic %>% na.omit()		
+library(readr)
+
+path <- "raw_data/test.csv"
+df_titanic <- readr::read_csv(path, show_col_types = FALSE)
+
+# Column names containing at least one NA
+cols_with_na <- names(df_titanic)[colSums(is.na(df_titanic)) > 0]
+cols_with_na
+
+# Count missing values by column (only those with NA)
+na_counts <- sort(colSums(is.na(df_titanic))[cols_with_na], decreasing = TRUE)
+na_counts
+```
+
+# Exclude missing values (na.omit)
+
+A simple way to remove rows with missing values is `na.omit()`. Note: `na.omit()` is a base R function (from `stats`) that removes observations containing missing values. [web:677]
+
+```{r}
+df_titanic_drop <- stats::na.omit(df_titanic)
+
+dim(df_titanic)
 dim(df_titanic_drop)
 ```
 
@@ -74,132 +70,95 @@ dim(df_titanic_drop)
 ![](imgblock15/img2.png)
 </p>
 
-# Impute Missing data with the Mean and Median
-We could also impute(populate) missing values with the median or the mean. A good practice is to create two separate variables for the mean and the median. Once created, we can replace the missing values with the newly formed variables.
+# Impute missing values (mean / median)
 
-We will use the apply method to compute the mean of the column with NA. Let's see an example
+Removing rows is easy, but it may discard a lot of information. A common alternative is to impute missing values. Here we show mean and median imputation for numeric columns only.
 
-__Step 1)__ Earlier in the tutorial, we stored the columns name with the missing values in the list called list_na. We will use this list
-
-__Step 2)__ Now we need to compute of the mean with the argument na.rm = TRUE. This argument is compulsory because the columns have missing data, and this tells R to ignore them.
+## Step 1: Select numeric columns that contain NA
 
 ```{r}
-# Create mean
-average_missing <- apply(df_titanic[, colnames(df_titanic) %in% list_na],
-      2,
-      mean,
-      na.rm =  TRUE)
-average_missing
+numeric_cols <- names(dplyr::select(df_titanic, where(is.numeric)))
+na_numeric_cols <- intersect(cols_with_na, numeric_cols)
+
+na_numeric_cols
 ```
 
-__Code Explanation:__
-
-We pass 4 arguments in the apply method.
-
-- df: df_titanic[, colnames(df_titanic) %in% list_na]. This code will return the columns name from the list_na object (i.e. "age" and "fare")
-- 2: Compute the function on the columns
-- mean: Compute the mean
-- na.rm = TRUE: Ignore the missing values
-
-We successfully created the mean of the columns containing missing observations. These two values will be used to replace the missing observations.
-
-__Step 3)__ Replace the NA Values
-
-The verb mutate from the dplyr library is useful in creating a new variable. We don't necessarily want to change the original column so we can create a new variable without the NA. mutate is easy to use, we just choose a variable name and define how to create this variable. Here is the complete code
+## Step 2: Compute mean/median for those columns
 
 ```{r}
-# Create a new variable with the mean and median
-df_titanic_replace <- df_titanic %>%
-   mutate(replace_mean_age  = ifelse(is.na(Age), average_missing[1], Age),
-   replace_mean_fare = ifelse(is.na(Fare), average_missing[2], Fare))
+mean_by_col <- sapply(df_titanic[na_numeric_cols], mean, na.rm = TRUE)
+median_by_col <- sapply(df_titanic[na_numeric_cols], median, na.rm = TRUE)
+
+mean_by_col
+median_by_col
 ```
 
-__Code Explanation:__
+## Step 3: Create new variables with imputed values
 
-We create two variables, replace_mean_age and replace_mean_fare as follow:
-
-- replace_mean_age = ifelse(is.na(Age), average_missing[1], Age)
-- replace_mean_fare = ifelse(is.na(Fare), average_missing[2], Fare)
-
-If the column age has missing values, then replace with the first element of average_missing (mean of age), else keep the original values. Same logic for fare
+Using `tidyr::replace_na()` is a clean way to replace NA values with a constant. [web:680]  
+Combined with `dplyr::across()`, it scales to many columns easily. [web:681]
 
 ```{r}
-sum(is.na(df_titanic_replace$Age))
+library(tidyr)
+
+df_titanic_imputed <- df_titanic |>
+  dplyr::mutate(
+    # Mean imputation: create new columns
+    dplyr::across(
+      dplyr::all_of(na_numeric_cols),
+      ~ tidyr::replace_na(.x, mean(.x, na.rm = TRUE)),
+      .names = "impute_mean_{.col}"
+    ),
+    # Median imputation: create new columns
+    dplyr::across(
+      dplyr::all_of(na_numeric_cols),
+      ~ tidyr::replace_na(.x, median(.x, na.rm = TRUE)),
+      .names = "impute_median_{.col}"
+    )
+  )
+
+df_titanic_imputed |>
+  dplyr::select(dplyr::all_of(na_numeric_cols), starts_with("impute_")) |>
+  dplyr::slice(1:10)
 ```
 
-Perform the replacement
+## Check that imputation worked
 
 ```{r}
-sum(is.na(df_titanic_replace$replace_mean_age))
+# Example check: if Age exists in the data
+if ("Age" %in% names(df_titanic_imputed)) {
+  c(
+    missing_original = sum(is.na(df_titanic_imputed$Age)),
+    missing_mean_imp = sum(is.na(df_titanic_imputed$impute_mean_Age)),
+    missing_med_imp  = sum(is.na(df_titanic_imputed$impute_median_Age))
+  )
+}
 ```
 
-The original column age has 263 missing values while the newly created variable have replaced them with the mean of the variable age.
+# na.rm
 
-__Step 4)__ We can replace the missing observations with the median as well.
-
-```{r}
-median_missing <- apply(df_titanic[, colnames(df_titanic) %in% list_na],
-      2,
-      median,
-      na.rm =  TRUE)
-df_titanic_replace <- df_titanic %>%
-            mutate(replace_median_age  = ifelse(is.na(Age), median_missing[1], Age), 
-            replace_median_fare = ifelse(is.na(Fare), median_missing[2], Fare))
-head(df_titanic_replace)
-```
-
-__Step 5)__ A big data set could have lots of missing values and the above method could be cumbersome. We can execute all the above steps above in one line of code using sapply() method. Though we would not know the vales of mean and median.
-
-sapply does not create a data frame, so we can wrap the sapply() function within data.frame() to create a data frame object.
-
-```{r}
-# Quick code to replace missing values with the mean
-df_titanic_impute_mean <- data.frame(
-    sapply(df_titanic, function(x) ifelse(is.na(x), mean(x, na.rm = TRUE), x)))
-```
+When computing statistics on vectors with missing values, you often need `na.rm = TRUE` (e.g., `mean(x, na.rm = TRUE)`) so that missing values are ignored.
 
 # Summary
-We have three methods to deal with missing values:
-
-- Exclude all of the missing observations
-- Impute with the mean
-- Impute with the median
-
-The following table summarizes how to remove all the missing observations
 
 ```{r, echo=FALSE}
 library(knitr)
-library(kableExtra)
+
 dt <- data.frame(
-  "Library" = c("Base", "dplyr"), 
-  "Objective" = c("List missing observations", "Remove all missing values"),
-  "Code" = c("colnames(df)[apply(df, 2, anyNA)]", "na.omit(df)"))
-kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+  Library = c("Base (stats)", "Base", "dplyr + tidyr"),
+  Objective = c("Remove rows with NA", "List columns with NA", "Impute NA (mean/median)"),
+  Code = c(
+    "stats::na.omit(df)",
+    "names(df)[colSums(is.na(df)) > 0]",
+    "df |> mutate(across(cols, ~replace_na(.x, mean(.x, na.rm=TRUE))))"
+  )
+)
+
+k <- knitr::kable(dt)
+
+if (requireNamespace("kableExtra", quietly = TRUE)) {
+  k <- kableExtra::kable_styling(k, bootstrap_options = c("striped", "hover"))
+}
+
+k
 ```
-
-<!-- | Library |	Objective |	Code | -->
-<!-- |:--------|:----------|:-----| -->
-<!-- | base | List missing observations | colnames(df)[apply(df, 2, anyNA)] | -->
-<!-- | dplyr |	Remove all missing values	| na.omit(df) | -->
-
-Imputation with mean or median can be done in two ways
-
-- Using apply
-- Using sapply
-
-```{r, echo=FALSE}
-library(knitr)
-library(kableExtra)
-dt <- data.frame(
-  "Method" = c("Step by step with apply", "Quick way with sapply"), 
-  "Details" = c("Check columns with missing, compute mean/median, store the value, replace with mutate()", 
-             "Use sapply() and data.frame() to automatically search and replace missing values with mean/median"),
-  "Advantages" = c("You know the value of means/median", "Short code and fast"),
-  "Disadvantages" = c("More execution time. Can be slow with big dataset", "Don't know the imputation values"))
-kable(dt) %>% kable_styling(bootstrap_options = c("striped", "hover"))
-```
-
-<!-- | Method | Details | Advantages | Disadvantages | -->
-<!-- |:-------|:--------|:-----------|:--------------| -->
-<!-- | Step by step with apply |	Check columns with missing, compute mean/median, store the value, replace with mutate() | You know the value of means/median |	More execution time. Can be slow with big dataset | -->
-<!-- | Quick way with sapply |	Use sapply() and data.frame() to automatically search and replace missing values with mean/median | Short code and fast | Don't know the imputation values | -->
