@@ -1,6 +1,6 @@
 ---
 pagetitle: "Lesson 3"
-title: "R Matrix Tutorial: Create, Print, Add Columns/Rows, Slice"
+title: "Matrix Tutorial: Create, Print, Add Columns/Rows, Slice"
 editor_options:
   chunk_output_type: inline
 ---
