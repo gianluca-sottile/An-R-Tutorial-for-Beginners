@@ -64,6 +64,7 @@ Live website: https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/
 | 24 | Generalized Linear Model | [Rmd](R%20course_lesson%2024.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-24.html) |
 | 25 | K-means Clustering | [Rmd](R%20course_lesson%2025.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-25.html) |
 | 25 | Decision Trees | [Rmd](R%20course_lesson%2026.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-26.html) |
+| 25 | Random Forest | [Rmd](R%20course_lesson%2027.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-27.html) |
 
 ## Quick start 🚀
 
