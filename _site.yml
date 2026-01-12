@@ -72,6 +72,8 @@ navbar:
             href: R-course_lesson-24.html
           - text: "K-means Clustering"
             href: R-course_lesson-25.html
+          - text: "Decision Trees"
+            href: R-course_lesson-26.html
 
           
 output:
