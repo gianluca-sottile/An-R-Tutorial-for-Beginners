@@ -31,7 +31,7 @@ jobs:
     - name: Install packages
       uses: r-lib/actions/setup-r-dependencies@v2  # Magico: cache + binaries veloci
       with:
-        packages: any::rmarkdown, any::knitr, any::png, any::ggplot2, any::dplyr, any::kableExtra, any::readxl, any::haven, any::xlsx, any::Hmisc, any::GGally, any::olsrr, any::ROCR, any::animation, any::tidyr, any::RColorBrewer, any::readr, any::cluster, any::factoextra, any::openxlsx, any::writexl, any::rpart, any::rpart.plot
+        packages: any::rmarkdown, any::knitr, any::png, any::ggplot2, any::dplyr, any::kableExtra, any::readxl, any::haven, any::xlsx, any::Hmisc, any::GGally, any::olsrr, any::ROCR, any::animation, any::tidyr, any::RColorBrewer, any::readr, any::cluster, any::factoextra, any::openxlsx, any::writexl, any::rpart, any::rpart.plot, any::caret, any::randomForest, any::e1071
     - name: Render site
       shell: Rscript {0}
       run: rmarkdown::render_site()
