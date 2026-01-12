@@ -74,6 +74,8 @@ navbar:
             href: R-course_lesson-25.html
           - text: "Decision Trees"
             href: R-course_lesson-26.html
+          - text: "Random Forest"
+            href: R-course_lesson-27.html
 
           
 output:
