@@ -1,0 +1,205 @@
+---
+pagetitle: "Lesson 27"
+title: "Random Forest in R (caret + randomForest): Classification Walkthrough"
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+# Random Forest (classification)
+
+A Random Forest is an ensemble of decision trees trained on random subsets of the data and features, with predictions aggregated (e.g., majority vote for classification). [page:1]
+
+In this lesson we:
+- load a pre-split Titanic dataset (train + test) from the web [page:1]
+- train a Random Forest using cross-validation
+- tune key hyperparameters
+- evaluate the model on the test set
+- inspect feature importance
+
+# Step 1: Import the data
+
+```{r}
+library(dplyr)
+
+train_path <- "raw_data/train.csv"
+test_path  <- "raw_data/test.csv"
+
+data_train <- read.csv(train_path, stringsAsFactors = FALSE)
+data_test  <- read.csv(test_path, stringsAsFactors = FALSE)
+
+glimpse(data_train)
+glimpse(data_test)
+```
+
+Make sure the target is a factor (classification):
+
+```{r}
+data_train <- data_train |> 
+  select(-PassengerId, -Name, -Cabin, -Ticket) |> 
+  filter(!is.na(Age), !is.na(Fare), Embarked != "") |>
+  mutate(Sex = factor(Sex), 
+         Embarked = factor(Embarked), 
+         Survived = factor(Survived))
+
+levels(data_train$Survived)
+
+data_test <- data_test |> 
+  select(-PassengerId, -Name, -Cabin, -Ticket) |> 
+  filter(!is.na(Age), !is.na(Fare), Embarked != "") |>
+  mutate(Sex = factor(Sex), 
+         Embarked = factor(Embarked))
+```
+
+# Step 2: Train a baseline model (cross-validation)
+
+We will use `caret` to run k-fold cross-validation and select the best model using accuracy. [page:1]
+
+```{r}
+# install.packages(c("caret", "randomForest", "e1071"))
+library(caret)
+library(randomForest)
+library(e1071)
+
+set.seed(1234)
+
+tr_ctrl <- trainControl(
+  method = "cv",
+  number = 10,
+  search = "grid"
+)
+
+rf_default <- train(
+  Survived ~ .,
+  data = data_train,
+  method = "rf",
+  metric = "Accuracy",
+  trControl = tr_ctrl
+)
+
+rf_default
+```
+
+# Step 3: Tune mtry (number of candidate features at each split)
+
+```{r}
+set.seed(1234)
+
+grid_mtry <- expand.grid(mtry = 1:10)
+
+rf_mtry <- train(
+  Survived ~ .,
+  data = data_train,
+  method = "rf",
+  metric = "Accuracy",
+  trControl = tr_ctrl,
+  tuneGrid = grid_mtry,
+  ntree = 300,
+  importance = TRUE
+)
+
+rf_mtry
+best_mtry <- rf_mtry$bestTune$mtry
+best_mtry
+```
+
+# Step 4: Tune maxnodes (via a small loop)
+
+`caret::train(method="rf")` does not expose every `randomForest()` argument via `tuneGrid`, but you can still pass extra arguments (like `maxnodes`) directly.
+
+```{r}
+set.seed(1234)
+
+store_maxnodes <- list()
+
+for (maxnodes in 5:30) {
+  fit <- train(
+    Survived ~ .,
+    data = data_train,
+    method = "rf",
+    metric = "Accuracy",
+    trControl = tr_ctrl,
+    tuneGrid = data.frame(mtry = best_mtry),
+    ntree = 300,
+    importance = TRUE,
+    maxnodes = maxnodes
+  )
+  store_maxnodes[[as.character(maxnodes)]] <- fit
+}
+
+res_maxnodes <- resamples(store_maxnodes)
+summary(res_maxnodes)
+```
+
+Pick a value (example: the one with best mean accuracy in the summary output) and store it manually:
+
+```{r, eval=FALSE}
+best_maxnodes <- (5:30)[which.max(summary(res_maxnodes)$statistics$Accuracy[, "Mean"])]
+```
+
+# Step 5: Tune ntree (number of trees)
+
+```{r, eval=FALSE}
+store_ntree <- list()
+
+for (ntree in c(250, 300, 400, 500, 800, 1000)) {
+  set.seed(5678)
+  fit <- train(
+    Survived ~ .,
+    data = data_train,
+    method = "rf",
+    metric = "Accuracy",
+    trControl = tr_ctrl,
+    tuneGrid = data.frame(mtry = best_mtry),
+    ntree = ntree,
+    importance = TRUE,
+    maxnodes = best_maxnodes
+  )
+  store_ntree[[as.character(ntree)]] <- fit
+}
+
+res_ntree <- resamples(store_ntree)
+summary(res_ntree)
+```
+
+# Step 6: Fit the final model and evaluate on the test set
+
+```{r, eval=FALSE}
+set.seed(1234)
+
+fit_rf <- train(
+  Survived ~ .,
+  data = data_train,
+  method = "rf",
+  metric = "Accuracy",
+  trControl = tr_ctrl,
+  tuneGrid = data.frame(mtry = best_mtry),
+  ntree = 300,
+  importance = TRUE,
+  maxnodes = best_maxnodes
+)
+
+pred <- predict(fit_rf, newdata = data_test)
+
+pred
+```
+
+# Step 7: Variable importance
+
+```{r, eval=FALSE}
+varImp(fit_rf)
+plot(varImp(fit_rf))
+```
+
+# Notes
+
+- For real projects, prefer nested CV or repeated CV for more stable model selection.
+- Consider class imbalance, calibration, and metrics beyond accuracy (e.g., ROC AUC, F1).
