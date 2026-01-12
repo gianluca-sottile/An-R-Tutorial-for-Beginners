@@ -1,0 +1,207 @@
+---
+pagetitle: "Lesson 26"
+title: "Decision Trees in R (rpart): Classification Example with Titanic"
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+# Decision trees in R
+
+A decision tree is a supervised learning model that can be used for:
+- classification (predicting classes)
+- regression (predicting numeric outcomes)
+
+In this lesson we build a simple **classification tree** in R using `rpart`, then evaluate and tune it.
+
+# Step 1: Import the data
+
+We will use a Titanic dataset hosted online.
+
+```{r}
+path <- "raw_data/titanic_data.csv"
+titanic <- read.csv(path, stringsAsFactors = FALSE)
+
+dim(titanic)
+head(titanic, 3)
+```
+
+## Why shuffling matters
+
+If the dataset is sorted (e.g., by passenger class or an ID), a naive split like “first 80% train, last 20% test” may create biased splits.
+To avoid this, shuffle rows before splitting.
+
+```{r}
+set.seed(678)
+idx <- sample.int(nrow(titanic))
+titanic <- titanic[idx, ]
+```
+
+# Step 2: Clean the dataset
+
+Typical cleaning steps for this dataset:
+- drop high-cardinality or irrelevant columns
+- create factors for categorical variables
+- handle missing values
+
+```{r}
+library(dplyr)
+
+titanic_clean <- titanic |>
+  select(-c(home.dest, cabin, name, x, ticket)) |>
+  mutate(
+    pclass = factor(
+      pclass,
+      levels = c(1, 2, 3),
+      labels = c("Upper", "Middle", "Lower")
+    ),
+    survived = factor(
+      survived,
+      levels = c(0, 1),
+      labels = c("No", "Yes")
+    ),
+    sex = factor(sex),
+    embarked = factor(embarked),
+    age = as.numeric(age),
+    fare = as.numeric(fare)
+  ) |>
+  na.omit()
+
+glimpse(titanic_clean)
+```
+
+# Step 3: Train/test split
+
+A simple and reproducible split that returns both datasets.
+
+```{r}
+split_data <- function(df, prop = 0.8, seed = NULL) {
+  stopifnot(is.data.frame(df))
+  stopifnot(prop > 0 && prop < 1)
+
+  if (!is.null(seed)) set.seed(seed)
+
+  n <- nrow(df)
+  n_train <- floor(prop * n)
+  idx_train <- sample.int(n, size = n_train)
+
+  list(
+    train = df[idx_train, , drop = FALSE],
+    test  = df[-idx_train, , drop = FALSE]
+  )
+}
+
+spl <- split_data(titanic_clean, prop = 0.8, seed = 123)
+
+train <- spl$train
+test  <- spl$test
+
+dim(train)
+dim(test)
+
+prop.table(table(train$survived))
+prop.table(table(test$survived))
+```
+
+# Step 4: Fit a classification tree (rpart)
+
+```{r}
+library(rpart)
+
+fit <- rpart(
+  survived ~ .,
+  data = train,
+  method = "class"
+)
+
+fit
+```
+
+## Visualize the tree
+
+```{r}
+# install.packages("rpart.plot")  # if needed
+library(rpart.plot)
+
+rpart.plot(fit, extra = 106)
+```
+
+# Step 5: Predict on the test set
+
+```{r}
+pred_class <- predict(fit, newdata = test, type = "class")
+head(pred_class)
+```
+
+# Step 6: Evaluate performance
+
+A quick evaluation uses a confusion matrix and accuracy.
+
+```{r}
+cm <- table(actual = test$survived, predicted = pred_class)
+cm
+
+accuracy <- sum(diag(cm)) / sum(cm)
+accuracy
+```
+
+Tip: for imbalanced datasets, also consider metrics like sensitivity/recall, specificity, precision, and F1-score.
+
+# Step 7: Tune hyperparameters (simple grid search)
+
+Below is a minimal tuning loop over a few `rpart.control()` parameters.
+This is intentionally simple for learning; in real projects you would likely use cross-validation.
+
+```{r}
+accuracy_tree <- function(fit, test_df) {
+  pred <- predict(fit, newdata = test_df, type = "class")
+  cm <- table(test_df$survived, pred)
+  sum(diag(cm)) / sum(cm)
+}
+
+grid <- expand.grid(
+  maxdepth = c(2, 3, 4, 5),
+  minsplit = c(2, 5, 10, 20),
+  stringsAsFactors = FALSE
+)
+
+results <- grid
+results$accuracy <- NA_real_
+
+for (i in seq_len(nrow(grid))) {
+  ctrl <- rpart.control(
+    maxdepth = grid$maxdepth[i],
+    minsplit = grid$minsplit[i],
+    cp = 0
+  )
+
+  fit_i <- rpart(
+    survived ~ .,
+    data = train,
+    method = "class",
+    control = ctrl
+  )
+
+  results$accuracy[i] <- accuracy_tree(fit_i, test)
+}
+
+results <- results[order(-results$accuracy), ]
+head(results, 10)
+```
+
+# Summary
+
+In this lesson you learned how to:
+- import and clean data
+- split train/test properly (with shuffling + reproducibility)
+- fit a classification tree with `rpart`
+- visualize the model with `rpart.plot`
+- evaluate accuracy and run a simple tuning loop
