@@ -65,6 +65,7 @@ Live website: https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/
 | 25 | K-means Clustering | [Rmd](R%20course_lesson%2025.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-25.html) |
 | 26 | Decision Trees | [Rmd](R%20course_lesson%2026.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-26.html) |
 | 27 | Random Forest | [Rmd](R%20course_lesson%2027.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-27.html) |
+| 28 | Gradient Boosting | [Rmd](R%20course_lesson%2028.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-28.html) |
 
 ## Quick start 🚀
 
