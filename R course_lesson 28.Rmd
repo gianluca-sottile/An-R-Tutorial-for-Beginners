@@ -1,0 +1,253 @@
+---
+pagetitle: "Lesson 28"
+title: "Gradient Boosting in R (XGBoost) — Titanic Classification"
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+# Gradient Boosting (XGBoost) on Titanic
+
+Gradient boosting builds trees sequentially: each new tree focuses on correcting the mistakes of the previous ensemble.
+XGBoost is a highly optimized implementation of gradient boosting with practical features like regularization and early stopping.
+
+In this lesson we will:
+- Import Titanic data from a URL
+- Clean and encode features for XGBoost
+- Create train/test split
+- Train XGBoost for binary classification
+- Evaluate accuracy + confusion matrix
+- Use cross-validation with early stopping
+- Inspect feature importance
+
+# Step 1: Import the data
+
+```{r}
+library(dplyr)
+
+path <- "raw_data/titanic_data.csv"
+titanic <- read.csv(path, stringsAsFactors = FALSE)
+
+dim(titanic)
+head(titanic, 3)
+```
+
+# Step 2: Clean and prepare data
+
+We follow a simple approach similar to the Decision Tree lesson:
+- Drop columns that are not useful or require heavy feature engineering (IDs, names, ticket, cabin, etc.)
+- Convert categorical variables to factors
+- Remove missing values (for simplicity)
+
+```{r}
+titanic_clean <- titanic |>
+  select(-c(home.dest, cabin, name, x, ticket)) |>
+  filter(embarked != "?") |>
+  mutate(
+    pclass = factor(
+      pclass,
+      levels = c(1, 2, 3),
+      labels = c("Upper", "Middle", "Lower")
+    ),
+    survived = factor(survived, levels = c(0, 1), labels = c("No", "Yes")),
+    sex = factor(sex),
+    embarked = factor(embarked),
+    age = as.numeric(age),
+    fare = as.numeric(fare)
+  ) |>
+  na.omit()
+
+glimpse(titanic_clean)
+```
+
+## Why we need encoding
+
+XGBoost expects a numeric matrix.
+A common and reliable approach is one-hot encoding via `model.matrix()`.
+
+```{r}
+# Create design matrix (one-hot encoding for factors)
+X_all <- model.matrix(survived ~ . - 1, data = titanic_clean)
+
+# Label as 0/1 (XGBoost wants numeric labels for binary logistic)
+y_all <- ifelse(titanic_clean$survived == "Yes", 1, 0)
+
+dim(X_all)
+table(y_all)
+```
+
+# Step 3: Train/test split
+
+```{r}
+set.seed(123)
+
+n <- nrow(X_all)
+idx_train <- sample.int(n, size = floor(0.8 * n))
+
+X_train <- X_all[idx_train, , drop = FALSE]
+y_train <- y_all[idx_train]
+
+X_test <- X_all[-idx_train, , drop = FALSE]
+y_test <- y_all[-idx_train]
+
+c(n_train = nrow(X_train), n_test = nrow(X_test))
+```
+
+# Step 4: Train a baseline XGBoost model
+
+We use binary logistic objective:
+- output is a probability in [0, 1]
+- we then choose a threshold (e.g., 0.5) for class prediction
+
+```{r}
+library(xgboost)
+
+dtrain <- xgb.DMatrix(data = X_train, label = y_train)
+dtest  <- xgb.DMatrix(data = X_test,  label = y_test)
+
+params <- list(
+  objective = "binary:logistic",
+  eval_metric = "logloss",
+  max_depth = 3,
+  eta = 0.1,
+  subsample = 0.8,
+  colsample_bytree = 0.8
+)
+
+set.seed(123)
+xgb_fit <- xgb.train(
+  params = params,
+  data = dtrain,
+  nrounds = 200,
+  watchlist = list(train = dtrain, test = dtest),
+  verbose = 0
+)
+
+xgb_fit
+```
+
+# Step 5: Predictions and evaluation
+
+```{r}
+pred_prob <- predict(xgb_fit, newdata = dtest)
+pred_class <- ifelse(pred_prob >= 0.5, 1, 0)
+
+conf_mat <- table(actual = y_test, predicted = pred_class)
+conf_mat
+
+accuracy <- sum(diag(conf_mat)) / sum(conf_mat)
+accuracy
+```
+
+# Step 6: Cross-validation + early stopping (choose nrounds)
+
+Early stopping finds the number of boosting rounds that minimizes the validation loss and stops when there is no improvement for some rounds.
+
+```{r}
+set.seed(123)
+
+cv <- xgb.cv(
+  params = params,
+  data = dtrain,
+  nrounds = 1000,
+  nfold = 5,
+  early_stopping_rounds = 25,
+  verbose = 0
+)
+
+cv$best_iteration
+```
+
+Train a final model using the best number of rounds:
+
+```{r}
+best_nrounds <- cv$best_iteration
+
+set.seed(123)
+xgb_final <- xgb.train(
+  params = params,
+  data = dtrain,
+  nrounds = best_nrounds,
+  watchlist = list(train = dtrain, test = dtest),
+  verbose = 0
+)
+
+pred_prob2 <- predict(xgb_final, newdata = dtest)
+pred_class2 <- ifelse(pred_prob2 >= 0.5, 1, 0)
+
+conf_mat2 <- table(actual = y_test, predicted = pred_class2)
+conf_mat2
+
+accuracy2 <- sum(diag(conf_mat2)) / sum(conf_mat2)
+accuracy2
+```
+
+# Step 7: Feature importance
+
+```{r}
+imp <- xgb.importance(model = xgb_final, feature_names = colnames(X_train))
+head(imp, 10)
+
+xgb.plot.importance(imp, top_n = 15)
+```
+
+# (Optional) Step 8: Simple tuning grid
+
+This is a small grid search to illustrate the idea (not exhaustive).
+
+```{r}
+grid <- expand.grid(
+  max_depth = c(2, 3, 4),
+  eta = c(0.05, 0.1),
+  subsample = c(0.8, 1.0),
+  colsample_bytree = c(0.8, 1.0)
+)
+
+grid$best_iter <- NA_integer_
+grid$best_logloss <- NA_real_
+
+set.seed(123)
+
+for (i in seq_len(nrow(grid))) {
+  params_i <- list(
+    objective = "binary:logistic",
+    eval_metric = "logloss",
+    max_depth = grid$max_depth[i],
+    eta = grid$eta[i],
+    subsample = grid$subsample[i],
+    colsample_bytree = grid$colsample_bytree[i]
+  )
+
+  cv_i <- xgb.cv(
+    params = params_i,
+    data = dtrain,
+    nrounds = 800,
+    nfold = 5,
+    early_stopping_rounds = 25,
+    verbose = 0
+  )
+
+  grid$best_iter[i] <- cv_i$best_iteration
+  grid$best_logloss[i] <- cv_i$evaluation_log$test_logloss_mean[cv_i$best_iteration]
+}
+
+grid <- grid[order(grid$best_logloss), ]
+head(grid, 10)
+```
+
+# Summary
+
+You learned how to:
+- clean and encode Titanic data for XGBoost
+- train a gradient boosting model for binary classification
+- evaluate with a confusion matrix and accuracy
+- use cross-validation + early stopping to pick the number of trees
+- inspect feature importance
