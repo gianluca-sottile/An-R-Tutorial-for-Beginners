@@ -1,6 +1,6 @@
 ---
 pagetitle: "Lesson 27"
-title: "Random Forest in R (caret + randomForest): Classification Walkthrough"
+title: "Random Forest in R (caret + randomForest) — Titanic Classification"
 editor_options:
   chunk_output_type: inline
 ---
@@ -14,54 +14,81 @@ knitr::opts_chunk$set(
 )
 ```
 
-# Random Forest (classification)
+# Random Forest on Titanic
 
-A Random Forest is an ensemble of decision trees trained on random subsets of the data and features, with predictions aggregated (e.g., majority vote for classification). [page:1]
+A Random Forest is an ensemble of many decision trees that can be used for **classification** and **regression**.
+In this lesson we follow the same workflow as the Decision Tree / ML lessons: import → clean → split → fit → evaluate → tune → interpret.
 
-In this lesson we:
-- load a pre-split Titanic dataset (train + test) from the web [page:1]
-- train a Random Forest using cross-validation
-- tune key hyperparameters
-- evaluate the model on the test set
-- inspect feature importance
+In this lesson we will:
+- Import Titanic data from a local CSV
+- Clean the dataset (drop columns + fix types)
+- Create train/test split
+- Train a Random Forest classifier with cross-validation
+- Evaluate accuracy + confusion matrix
+- Tune `mtry` (number of candidate predictors per split)
+- Inspect feature importance
 
 # Step 1: Import the data
 
 ```{r}
 library(dplyr)
 
-train_path <- "raw_data/train.csv"
-test_path  <- "raw_data/test.csv"
+path <- "raw_data/titanic_data.csv"
+titanic <- read.csv(path, stringsAsFactors = FALSE)
 
-data_train <- read.csv(train_path, stringsAsFactors = FALSE)
-data_test  <- read.csv(test_path, stringsAsFactors = FALSE)
-
-glimpse(data_train)
-glimpse(data_test)
+dim(titanic)
+head(titanic, 3)
 ```
 
-Make sure the target is a factor (classification):
+# Step 2: Clean and prepare data
+
+Random Forest (via `randomForest`) can handle factors directly, so we typically do **not** need one-hot encoding like XGBoost.
 
 ```{r}
-data_train <- data_train |> 
-  select(-PassengerId, -Name, -Cabin, -Ticket) |> 
-  filter(!is.na(Age), !is.na(Fare), Embarked != "") |>
-  mutate(Sex = factor(Sex), 
-         Embarked = factor(Embarked), 
-         Survived = factor(Survived))
+titanic_clean <- titanic |>
+  # drop columns that are not useful or require heavy feature engineering
+  select(-any_of(c("home.dest", "cabin", "name", "X", "x", "ticket"))) |>
+  # remove invalid entries sometimes used in this dataset
+  filter(embarked != "?") |>
+  mutate(
+    pclass = factor(
+      pclass,
+      levels = c(1, 2, 3),
+      labels = c("Upper", "Middle", "Lower")
+    ),
+    survived = factor(survived, levels = c(0, 1), labels = c("No", "Yes")),
+    sex = factor(sex),
+    embarked = factor(embarked),
+    age = as.numeric(age),
+    fare = as.numeric(fare),
+    sibsp = as.numeric(sibsp),
+    parch = as.numeric(parch)
+  ) |>
+  na.omit()
 
-levels(data_train$Survived)
-
-data_test <- data_test |> 
-  select(-PassengerId, -Name, -Cabin, -Ticket) |> 
-  filter(!is.na(Age), !is.na(Fare), Embarked != "") |>
-  mutate(Sex = factor(Sex), 
-         Embarked = factor(Embarked))
+glimpse(titanic_clean)
 ```
 
-# Step 2: Train a baseline model (cross-validation)
+# Step 3: Train/test split
 
-We will use `caret` to run k-fold cross-validation and select the best model using accuracy. [page:1]
+```{r}
+set.seed(123)
+
+n <- nrow(titanic_clean)
+idx_train <- sample.int(n, size = floor(0.8 * n))
+
+train_df <- titanic_clean[idx_train, ]
+test_df  <- titanic_clean[-idx_train, ]
+
+c(n_train = nrow(train_df), n_test = nrow(test_df))
+prop.table(table(train_df$survived))
+prop.table(table(test_df$survived))
+```
+
+# Step 4: Train a baseline Random Forest (cross-validation)
+
+We will use `caret::train()` with `method = "rf"`, which fits a Random Forest and tunes `mtry` using resampling.
+In `caret`, the tuning grid for `method="rf"` is expected to include **only** `mtry` (while `ntree` is passed as a regular argument, not as a tuning parameter).
 
 ```{r}
 # install.packages(c("caret", "randomForest", "e1071"))
@@ -69,137 +96,94 @@ library(caret)
 library(randomForest)
 library(e1071)
 
-set.seed(1234)
+set.seed(123)
 
-tr_ctrl <- trainControl(
+ctrl <- trainControl(
   method = "cv",
-  number = 10,
-  search = "grid"
+  number = 5,
+  classProbs = TRUE
 )
 
-rf_default <- train(
-  Survived ~ .,
-  data = data_train,
+rf_cv <- train(
+  survived ~ .,
+  data = train_df,
   method = "rf",
   metric = "Accuracy",
-  trControl = tr_ctrl
-)
-
-rf_default
-```
-
-# Step 3: Tune mtry (number of candidate features at each split)
-
-```{r}
-set.seed(1234)
-
-grid_mtry <- expand.grid(mtry = 1:10)
-
-rf_mtry <- train(
-  Survived ~ .,
-  data = data_train,
-  method = "rf",
-  metric = "Accuracy",
-  trControl = tr_ctrl,
-  tuneGrid = grid_mtry,
-  ntree = 300,
+  trControl = ctrl,
+  tuneLength = 6,    # caret tries multiple mtry values
+  ntree = 500,
   importance = TRUE
 )
 
-rf_mtry
-best_mtry <- rf_mtry$bestTune$mtry
-best_mtry
+rf_cv
+rf_cv$bestTune
 ```
 
-# Step 4: Tune maxnodes (via a small loop)
-
-`caret::train(method="rf")` does not expose every `randomForest()` argument via `tuneGrid`, but you can still pass extra arguments (like `maxnodes`) directly.
+# Step 5: Predictions
 
 ```{r}
-set.seed(1234)
-
-store_maxnodes <- list()
-
-for (maxnodes in 5:30) {
-  fit <- train(
-    Survived ~ .,
-    data = data_train,
-    method = "rf",
-    metric = "Accuracy",
-    trControl = tr_ctrl,
-    tuneGrid = data.frame(mtry = best_mtry),
-    ntree = 300,
-    importance = TRUE,
-    maxnodes = maxnodes
-  )
-  store_maxnodes[[as.character(maxnodes)]] <- fit
-}
-
-res_maxnodes <- resamples(store_maxnodes)
-summary(res_maxnodes)
+pred_class <- predict(rf_cv, newdata = test_df)
+head(pred_class)
 ```
 
-Pick a value (example: the one with best mean accuracy in the summary output) and store it manually:
+# Step 6: Evaluation (confusion matrix + accuracy)
 
-```{r, eval=FALSE}
-best_maxnodes <- (5:30)[which.max(summary(res_maxnodes)$statistics$Accuracy[, "Mean"])]
+```{r}
+confusionMatrix(pred_class, test_df$survived)
 ```
 
-# Step 5: Tune ntree (number of trees)
+# Step 7: Feature importance
 
-```{r, eval=FALSE}
-store_ntree <- list()
+The `randomForest` model can report variable importance (e.g., MeanDecreaseAccuracy and MeanDecreaseGini in classification when importance is enabled).
 
-for (ntree in c(250, 300, 400, 500, 800, 1000)) {
-  set.seed(5678)
-  fit <- train(
-    Survived ~ .,
-    data = data_train,
-    method = "rf",
-    metric = "Accuracy",
-    trControl = tr_ctrl,
-    tuneGrid = data.frame(mtry = best_mtry),
-    ntree = ntree,
-    importance = TRUE,
-    maxnodes = best_maxnodes
-  )
-  store_ntree[[as.character(ntree)]] <- fit
-}
+```{r}
+# caret-style importance
+varimp_caret <- varImp(rf_cv)
+varimp_caret
+plot(varimp_caret, top = 15)
 
-res_ntree <- resamples(store_ntree)
-summary(res_ntree)
+# randomForest-style importance (from the final fitted model)
+rf_final <- rf_cv$finalModel
+imp_rf <- importance(rf_final)
+head(imp_rf[order(imp_rf[, "MeanDecreaseGini"], decreasing = TRUE), , drop = FALSE], 10)
 ```
 
-# Step 6: Fit the final model and evaluate on the test set
+# (Optional) Step 8: Manual tuning grid for mtry
 
-```{r, eval=FALSE}
-set.seed(1234)
+Here is a more explicit tuning grid for `mtry`; note that the grid must have the column `mtry` only.
 
-fit_rf <- train(
-  Survived ~ .,
-  data = data_train,
+```{r}
+p <- ncol(train_df) - 1  # predictors count (excluding survived)
+grid_mtry <- expand.grid(mtry = unique(pmax(1, round(c(1, sqrt(p), p/3, p/2)))))
+
+set.seed(123)
+rf_tuned <- train(
+  survived ~ .,
+  data = train_df,
   method = "rf",
   metric = "Accuracy",
-  trControl = tr_ctrl,
-  tuneGrid = data.frame(mtry = best_mtry),
-  ntree = 300,
-  importance = TRUE,
-  maxnodes = best_maxnodes
+  trControl = ctrl,
+  tuneGrid = grid_mtry,
+  ntree = 500,
+  importance = TRUE
 )
 
-pred <- predict(fit_rf, newdata = data_test)
-
-pred
+rf_tuned
+rf_tuned$bestTune
 ```
 
-# Step 7: Variable importance
+Evaluate the tuned model on the test set:
 
-```{r, eval=FALSE}
-varImp(fit_rf)
-plot(varImp(fit_rf))
+```{r}
+pred_class2 <- predict(rf_tuned, newdata = test_df)
+confusionMatrix(pred_class2, test_df$survived)
 ```
 
-# Notes
+# Summary
 
-- For real projects, prefer nested CV or repeated CV for more stable model selection.
-- Consider class imbalance, calibration, and metrics beyond accuracy (e.g., ROC AUC, F1).
+You learned how to:
+- clean Titanic data for Random Forest without one-hot encoding
+- train a Random Forest classifier with cross-validation using `caret`
+- tune `mtry` and keep `ntree` fixed during training
+- evaluate performance using a confusion matrix
+- inspect variable importance from the fitted forest
