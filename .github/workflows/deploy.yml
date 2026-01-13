@@ -32,9 +32,35 @@ jobs:
       uses: r-lib/actions/setup-r-dependencies@v2  # Magico: cache + binaries veloci
       with:
         packages: any::rmarkdown, any::knitr, any::png, any::ggplot2, any::dplyr, any::kableExtra, any::readxl, any::haven, any::xlsx, any::Hmisc, any::GGally, any::olsrr, any::ROCR, any::animation, any::tidyr, any::RColorBrewer, any::readr, any::cluster, any::factoextra, any::openxlsx, any::writexl, any::rpart, any::rpart.plot, any::caret, any::randomForest, any::e1071, any::xgboost
-    - name: Render site
+    - name: Cache R Markdown outputs (_site + _cache)
+      uses: actions/cache@v4
+      with:
+        path: |
+          docs/
+          _site/
+          _cache/
+          _freeze/
+          */_files/  # plots cachati
+        key: ${{ runner.os }}-rmd-v2-${{ hashFiles('**/*.Rmd', 'raw_data/**', '_site.yml') }}
+        restore-keys: ${{ runner.os }}-rmd-
+    - name: Render site (selective + cache)
       shell: Rscript {0}
-      run: rmarkdown::render_site()
+      run: |
+        # Trova .Rmd modificati
+        CHANGED=$(git diff --name-only HEAD~1 -- '*.Rmd' || echo "")
+        
+        if [ -z "$CHANGED" ]; then
+          echo "✅ No .Rmd changed → use cache!"
+          rmarkdown::render_site(encoding = 'UTF-8')
+          exit 0
+        fi
+        
+        echo "🔄 Rendering changed: $CHANGED"
+        # Render solo quelli + index
+        for file in $CHANGED; do
+          rmarkdown::render("$file", quiet = TRUE)
+        done
+        rmarkdown::render_site(encoding = 'UTF-8')
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
