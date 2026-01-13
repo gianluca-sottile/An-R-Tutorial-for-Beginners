@@ -76,8 +76,6 @@ navbar:
             href: R-course_lesson-26.html
           - text: "Random Forest"
             href: R-course_lesson-27.html
-          - text: "Gradient Boosting"
-            href: R-course_lesson-28.html
           
 output:
   html_document:
