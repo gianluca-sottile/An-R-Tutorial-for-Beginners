@@ -1,0 +1,183 @@
+---
+pagetitle: "Lesson 29"
+title: "Support Vector Machine in R (caret + kernlab) — Titanic Classification"
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+# Support Vector Machine (SVM) on Titanic
+
+Support Vector Machines are powerful classifiers that try to find a decision boundary with maximum margin.
+In this lesson we use an SVM with **Radial Basis Function (RBF)** kernel.
+
+In this lesson we will:
+- Import Titanic data from a local CSV
+- Clean the dataset (drop columns + fix types)
+- One-hot encode categorical variables (SVM needs numeric predictors)
+- Create train/test split
+- Train an SVM (RBF) with cross-validation
+- Evaluate accuracy + confusion matrix
+- Tune `sigma` and `C`
+
+# Step 1: Import the data
+
+```{r}
+library(dplyr)
+
+path <- "raw_data/titanic_data.csv"
+titanic <- read.csv(path, stringsAsFactors = FALSE)
+
+dim(titanic)
+head(titanic, 3)
+```
+
+# Step 2: Clean and prepare data
+
+```{r}
+titanic_clean <- titanic |>
+  select(-any_of(c("home.dest", "cabin", "name", "X", "x", "ticket"))) |>
+  filter(embarked != "?") |>
+  mutate(
+    pclass = factor(
+      pclass,
+      levels = c(1, 2, 3),
+      labels = c("Upper", "Middle", "Lower")
+    ),
+    survived = factor(survived, levels = c(0, 1), labels = c("No", "Yes")),
+    sex = factor(sex),
+    embarked = factor(embarked),
+    age = as.numeric(age),
+    fare = as.numeric(fare),
+    sibsp = as.numeric(sibsp),
+    parch = as.numeric(parch)
+  ) |>
+  na.omit()
+
+glimpse(titanic_clean)
+table(titanic_clean$survived)
+```
+
+## Encoding (SVM needs numeric predictors)
+
+We use one-hot encoding with `model.matrix()`.
+
+```{r}
+X_all <- model.matrix(survived ~ . - 1, data = titanic_clean)
+y_all <- titanic_clean$survived
+
+dim(X_all)
+table(y_all)
+```
+
+# Step 3: Train/test split
+
+```{r}
+set.seed(123)
+
+n <- nrow(X_all)
+idx_train <- sample.int(n, size = floor(0.8 * n))
+
+X_train <- X_all[idx_train, , drop = FALSE]
+y_train <- y_all[idx_train]
+
+X_test <- X_all[-idx_train, , drop = FALSE]
+y_test <- y_all[-idx_train]
+
+c(n_train = nrow(X_train), n_test = nrow(X_test))
+```
+
+# Step 4: Train a baseline SVM (RBF) with cross-validation
+
+Notes:
+- SVM is sensitive to feature scaling, so we apply `center` and `scale`.
+- `svmRadial` in caret tunes `sigma` and `C` (cost).
+
+```{r}
+# install.packages(c("caret", "kernlab", "e1071"))
+library(caret)
+library(kernlab)
+library(e1071)
+
+set.seed(123)
+
+ctrl <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE
+)
+
+svm_base <- train(
+  x = X_train,
+  y = y_train,
+  method = "svmRadial",
+  metric = "Accuracy",
+  preProcess = c("center", "scale"),
+  trControl = ctrl,
+  tuneLength = 6
+)
+
+svm_base
+svm_base$bestTune
+```
+
+# Step 5: Predictions
+
+```{r}
+pred_class <- predict(svm_base, newdata = X_test)
+head(pred_class)
+```
+
+# Step 6: Evaluation (confusion matrix + accuracy)
+
+```{r}
+confusionMatrix(pred_class, y_test)
+```
+
+# Step 7: Manual tuning grid (sigma, C)
+
+A small explicit grid search (you can expand it if needed).
+
+```{r}
+grid <- expand.grid(
+  sigma = c(0.001, 0.01, 0.05, 0.1),
+  C     = c(0.25, 0.5, 1, 2, 4)
+)
+
+set.seed(123)
+svm_tuned <- train(
+  x = X_train,
+  y = y_train,
+  method = "svmRadial",
+  metric = "Accuracy",
+  preProcess = c("center", "scale"),
+  trControl = ctrl,
+  tuneGrid = grid
+)
+
+svm_tuned
+svm_tuned$bestTune
+```
+
+Evaluate tuned model:
+
+```{r}
+pred_class2 <- predict(svm_tuned, newdata = X_test)
+confusionMatrix(pred_class2, y_test)
+```
+
+# Summary
+
+You learned how to:
+- clean Titanic data and create numeric predictors via one-hot encoding
+- train an SVM with RBF kernel using cross-validation
+- scale features (center/scale)
+- tune `sigma` and `C` and evaluate with a confusion matrix
