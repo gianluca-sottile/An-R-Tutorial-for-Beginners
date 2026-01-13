@@ -78,6 +78,8 @@ navbar:
             href: R-course_lesson-27.html
           - text: "Gradient Boosting"
             href: R-course_lesson-28.html
+          - text: "Support Vector Machine"
+            href: R-course_lesson-29.html
           
 output:
   html_document:
