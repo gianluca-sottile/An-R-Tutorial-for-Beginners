@@ -163,13 +163,13 @@ cv <- xgb.cv(
   verbose = 0
 )
 
-cv$best_iteration
+cv$early_stop$best_iteration
 ```
 
 Train a final model using the best number of rounds:
 
 ```{r}
-best_nrounds <- cv$best_iteration
+best_nrounds <- cv$early_stop$best_iteration
 
 set.seed(123)
 xgb_final <- xgb.train(
@@ -212,14 +212,14 @@ grid <- expand.grid(
 )
 
 grid$best_iter <- NA_integer_
-grid$best_logloss <- NA_real_
+grid$best_auc <- NA_real_
 
 set.seed(123)
 
 for (i in seq_len(nrow(grid))) {
   params_i <- list(
     objective = "binary:logistic",
-    eval_metric = "logloss",
+    eval_metric = "auc",
     max_depth = grid$max_depth[i],
     eta = grid$eta[i],
     subsample = grid$subsample[i],
@@ -235,11 +235,11 @@ for (i in seq_len(nrow(grid))) {
     verbose = 0
   )
 
-  grid$best_iter[i] <- cv_i$best_iteration
-  grid$best_logloss[i] <- cv_i$evaluation_log$test_logloss_mean[cv_i$best_iteration]
+  grid$best_iter[i] <- cv_i$early_stop$best_iteration
+  grid$best_auc[i] <- cv_i$evaluation_log$train_auc_mean[cv_i$early_stop$best_iteration]
 }
 
-grid <- grid[order(grid$best_logloss), ]
+grid <- grid[order(grid$best_auc, decreasing = TRUE), ]
 head(grid, 10)
 ```
 
