@@ -37,7 +37,7 @@ jobs:
     - name: 📦 Install packages
       uses: r-lib/actions/setup-r-dependencies@v2
       with:
-        packages: any::rmarkdown, any::knitr, any::png, any::ggplot2, any::dplyr, any::kableExtra, any::readxl, any::haven, any::xlsx, any::Hmisc, any::GGally, any::olsrr, any::ROCR, any::animation, any::tidyr, any::RColorBrewer, any::readr, any::cluster, any::factoextra, any::openxlsx, any::writexl, any::rpart, any::rpart.plot, any::caret, any::randomForest, any::e1071, any::xgboost, any::kernlab, any::psych, any::Rtsne, any::uwot
+        packages: any::rmarkdown, any::knitr, any::png, any::ggplot2, any::dplyr, any::kableExtra, any::readxl, any::haven, any::xlsx, any::Hmisc, any::GGally, any::olsrr, any::ROCR, any::animation, any::tidyr, any::RColorBrewer, any::readr, any::cluster, any::factoextra, any::openxlsx, any::writexl, any::rpart, any::rpart.plot, any::caret, any::randomForest, any::e1071, any::xgboost, any::kernlab, any::psych, any::Rtsne, any::uwot, any::ca
 
     # 🔥 CACHE OUTPUTS R Markdown (GAME-CHANGER!)
     - name: 💾 Cache R Markdown (_site + _cache)
