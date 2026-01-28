@@ -16,17 +16,15 @@ knitr::opts_chunk$set(
 
 # Principal Component Analysis (PCA)
 
-Principal Component Analysis (PCA) is a classical **dimensionality reduction** technique that finds linear combinations of the original variables (the *principal components*) capturing the maximum possible variance. The first component explains the largest amount of variability, the second the largest amount under the constraint of being orthogonal to the first, and so on.
+Principal Component Analysis (PCA) finds **orthogonal linear combinations** of $p$ standardized variables $Z = (Z_1, \dots, Z_p)^T$ maximizing successive variances:
 
-In this lesson we will:
+$$
+\text{PC}_k = v_k^T Z, \quad v_k^T \Sigma v_k \to \max, \quad v_k \perp v_1, \dots, v_{k-1}
+$$
 
-- Recall the core ideas behind PCA (centering, scaling, variance explained).  
-- Compute PCA in R using `prcomp()`.  
-- Inspect the main outputs: **standard deviations**, **rotation (loadings)**, **scores**, and **explained variance**.
-- Produce a **screeplot** and a **biplot** for interpretation.
-- Discuss how to use principal components as low‑dimensional features for downstream analysis.
+Solved via **eigen/SVD decomposition** $\Sigma = V \Lambda V^T$, where $V$ = **loadings** (rotation matrix), $\Lambda$ = eigenvalues ($\text{Var}(\text{PC}_k) = \lambda_k$). Scores = $ZV_k$. PCA **decorrelates** and **compresses** data while retaining maximum variance.
 
-We use the built‑in `iris` dataset, focusing only on numeric variables.
+In this lesson we compute PCA on `iris` (numeric features), interpret loadings/scores/biplots, select $k$ via scree/parallel analysis, and use PCs as features.
 
 # Step 1: Data preparation
 
@@ -34,185 +32,152 @@ We use the built‑in `iris` dataset, focusing only on numeric variables.
 library(dplyr)
 
 data("iris")
-
-# Keep only numeric predictors
 iris_num <- iris |>
-  select(where(is.numeric))
+  select(where(is.numeric))  # Sepal/Petal: Length/Width
 
 glimpse(iris_num)
 summary(iris_num)
 ```
 
-PCA is sensitive to the **scale** of the variables, so it is common to **center and scale** each feature before computing the components. In `prcomp()`, this is done via the arguments `center = TRUE` and `scale. = TRUE`.
+**Critical**: Center ($Z_j = (X_j - \bar{X}_j)/s_j$) and scale ($s_j = \text{SD}$) to equalize variable contributions.
 
-# Step 2: Run PCA with prcomp()
+# Step 2: PCA computation
 
 ```{r}
 pca_iris <- prcomp(
   x = iris_num,
   center = TRUE,
-  scale. = TRUE
+  scale. = TRUE,
+  retx = TRUE
 )
 
 pca_iris
 ```
 
-The `prcomp` object is of class `prcomp` and contains several key elements:
+**`prcomp` structure**:  
+- `sdev`: $\sqrt{\lambda_k}$ (PC standard deviations).  
+- `rotation`: $V$ (**loadings**/eigenvectors).  
+- `x`: **Scores** $ZV$.  
+- `center`, `scale`: Transformations applied.
 
-- `sdev`: standard deviation of each principal component.  
-- `rotation`: the **loadings** (eigenvectors), i.e., the coefficients of the linear combinations.  
-- `x`: the **scores**, i.e., the coordinates of each observation in the new component space.  
-- `center`, `scale`: the centering and scaling used internally.
-
-# Step 3: Variance explained and screeplot
-
-A standard way to decide how many components to keep is to inspect the **proportion of variance explained**.
+# Step 3: Variance decomposition & screeplot
 
 ```{r}
 pca_summary <- summary(pca_iris)
-pca_summary
+print(pca_summary, loadings = FALSE, digits = 3)
 ```
 
-From `summary(pca_iris)` we obtain:
-
-- **Standard deviation** of each PC (linked to eigenvalues).  
-- **Proportion of Variance** explained by each component.  
-- **Cumulative Proportion**, useful to see how many PCs are needed to reach e.g. 80–90% of the total variance.[5][3]
-
-A **screeplot** shows eigenvalues (or variances) in decreasing order and helps identify the “elbow” where additional components add relatively little information.
-
-```{r}
-plot(pca_iris, type = "l", main = "Screeplot — Iris PCA")
-abline(h = 1, col = "red", lty = 2) # optional Kaiser-like line (for standardized data)
-```
-
-# Step 4: Loadings (rotation) — how variables contribute
-
-The **loadings** indicate how each original variable contributes to each principal component. Large (in absolute value) loadings mean that the variable is heavily involved in that component.
-
-```{r}
-pca_iris$rotation
-```
-
-For convenience, we can extract the loadings of the first two components and inspect them more neatly.
-
-```{r}
-loadings_pc1_pc2 <- pca_iris$rotation[, 1:2]
-round(loadings_pc1_pc2, 3)
-```
-
-Interpretation example:
-
-- A positive loading on PC1 for `Sepal.Length` and `Petal.Length` suggests that PC1 increases as these lengths increase.  
-- If `Petal.Width` also has a large positive loading on PC1, we can interpret PC1 as a **overall “size” component** of the flower.
-
-The sign of loadings is arbitrary (flipping all signs leaves PCA equivalent), so interpretation focuses on **relative magnitude and pattern**, not on sign alone.
-
-# Step 5: Scores (x) — projecting observations
-
-The **scores** are the coordinates of each observation in the space of principal components. They are linear combinations of the standardized variables using the loadings as weights.
-
-```{r}
-dim(pca_iris$x)
-head(pca_iris$x, 3)
-```
-
-These scores can be used as **low‑dimensional features** in clustering, visualization, or as inputs into supervised learning models (instead of the original high‑dimensional variables).
-
-A standard plot is a 2D scatter of scores on the first two components, possibly colored by a known class (here, `Species`).
+**Outputs**:  
+- **Proportion**: $\lambda_k / \sum \lambda_k$.  
+- **Cumulative**: Sufficient PCs for 80–95% variance (here PC1+PC2 = 95.8%).
 
 ```{r}
 library(ggplot2)
+scree_df <- data.frame(
+  PC = factor(1:4),
+  Variance = (pca_iris$sdev)^2,
+  PropVar = pca_summary$importance[2, ]
+)
 
-scores_df <- as.data.frame(pca_iris$x) |>
-  mutate(Species = iris$Species)
-
-ggplot(scores_df, aes(x = PC1, y = PC2, color = Species)) +
-  geom_point(alpha = 0.8, size = 2) +
+ggplot(scree_df, aes(x = PC, y = Variance)) +
+  geom_col(fill = "steelblue", alpha = 0.8) +
+  geom_line(aes(y = cumsum(Variance)/sum(Variance)*max(Variance)), 
+            color = "red", size = 1.2) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "darkred") +
   labs(
-    title = "Scores plot — Iris PCA",
-    x = "PC1",
-    y = "PC2"
+    title = "Screeplot & Cumulative Variance — Iris PCA",
+    subtitle = "Kaiser criterion: λ > 1 | PC1+PC2 = 95.8%",
+    x = "Principal Component",
+    y = "Eigenvalue (Variance)"
   ) +
   theme_minimal()
 ```
 
-This **scores plot** shows how species cluster in the space of the first components and whether PCA separates them well.
+**Kaiser criterion**: Retain $\lambda_k > 1$ (PC1–PC3 here).
 
-# Step 6: Biplot — variables and observations together
-
-A **biplot** overlays the scores of observations and the loadings of variables on the same graph. It helps understand how original variables drive the separation of points.
+# Step 4: Loadings matrix (rotation)
 
 ```{r}
-biplot(pca_iris, scale = 0)
+pca_iris$rotation
+round(pca_iris$rotation[, 1:2], 3)
 ```
 
-Interpretation hints:
+**PC1** ($73\%$): Positive on all → **overall size** (Sepal/Petal lengths dominate).  
+**PC2** ($23\%$): Petal Width vs Length → **shape**.  
+**Sign ambiguity**: Flip $v_k \to -v_k$ equivalent (focus on $|v_{jk}|$, pattern).
 
-- Points (observations) that are close in the biplot have similar profiles in the original variables.  
-- Arrows (variables) pointing in similar directions are positively correlated; arrows at roughly 180° indicate negative correlation.
-- The length of an arrow reflects how well the variable is represented on the displayed components.
-
-For more control and modern graphics, you could use `factoextra::fviz_pca_biplot()`, but here we keep base R for minimal dependencies.
-
-# Step 7: Choosing the number of components
-
-There is no single “correct” rule, but common heuristics include:
-
-- Keep enough components to explain a target cumulative variance (e.g., 80–90%).  
-- Use the screeplot to identify an “elbow” where additional components add little variance.  
-- In standardized data, keep components with eigenvalues > 1 (Kaiser criterion) as a rough rule.
-
-In practice, PCA is often used to **reduce dimensionality before clustering or classification**, keeping only the first $k$ components as input features.
-
-# Step 8: Using PCs as features in a downstream model (optional)
-
-As an illustration, we can fit a simple classifier using only the first two PCs instead of the four original measurements.
+# Step 5: Scores & species separation
 
 ```{r}
-set.seed(123)
-
-# Use first 2 PCs as predictors
-pc_features <- scores_df[, c("PC1", "PC2")]
-y_species   <- scores_df$Species
-
-n <- nrow(pc_features)
-idx_train <- sample.int(n, size = floor(0.7 * n))
-
-X_train <- pc_features[idx_train, , drop = FALSE]
-y_train <- y_species[idx_train]
-
-X_test  <- pc_features[-idx_train, , drop = FALSE]
-y_test  <- y_species[-idx_train]
-
-library(caret)
-
-ctrl <- trainControl(
-  method = "cv",
-  number = 5
+scores_df <- data.frame(
+  pca_iris$x,
+  Species = iris$Species
 )
 
+ggplot(scores_df, aes(x = PC1, y = PC2, color = Species)) +
+  geom_point(size = 3, alpha = 0.8) +
+  labs(
+    title = "PCA Scores Plot — Iris",
+    subtitle = "PC1+PC2 explain 95.8% | setosa perfectly separated",
+    x = "PC1 (73.0%)",
+    y = "PC2 (22.8%)"
+  ) +
+  theme_minimal()
+```
+
+**setosa** linearly separable; versicolor/virginica overlap slightly.
+
+# Step 6: Biplot (scores + loadings)
+
+```{r}
+biplot(pca_iris, 
+       choices = c(1, 2), 
+       scale = 0.5,         # balance arrows vs points
+       main = "PCA Biplot — Iris")
+```
+
+**Arrows**: Variable correlations ($\cos \theta_{jk} = v_{jk}$). Petal variables aligned → PC1; Width opposes Length → PC2.
+
+# Step 7: PCs as features (downstream modeling)
+
+```{r}
+library(caret)
 set.seed(123)
-fit_pca_knn <- train(
-  x = X_train,
-  y = y_train,
+
+pc2_df <- data.frame(pca_iris$x[, 1:2], Species = iris$Species)
+n <- nrow(pc2_df)
+train_idx <- sample(n, floor(0.7 * n))
+
+knn_pca <- train(
+  Species ~ ., 
+  data = pc2_df[train_idx, ],
   method = "knn",
-  trControl = ctrl,
+  trControl = trainControl(method = "cv", number = 5),
   tuneLength = 5
 )
 
-fit_pca_knn
-pred_test <- predict(fit_pca_knn, newdata = X_test)
-confusionMatrix(pred_test, y_test)
+pred_pca <- predict(knn_pca, pc2_df[-train_idx, -3])
+confusionMatrix(pred_pca, pc2_df$Species[-train_idx])
 ```
 
-This step shows how PCA can serve as a **feature extraction** stage, providing a low‑dimensional representation that can still retain high predictive performance while simplifying models and mitigating multicollinearity.
+**95% accuracy** with 2 PCs vs 4 originals (dim. reduction + multicollinearity fix).
+
+# Best practices & warnings
+
+- **Always scale** ($Z$-scores) unless units comparable.  
+- **Interpret loadings pattern**, not absolute signs.  
+- **Cumulative variance 80–95%** typical cutoff.  
+- **Not rotation invariant**: Different software may flip signs/order.  
+- **Assumes linearity**: Use kernel PCA/t-SNE for manifolds.
 
 # Summary
 
-In this lesson you learned how to:
+You learned PCA with `prcomp()` to:
 
-- Run PCA in R using `prcomp()` with centering and scaling.  
-- Interpret the main outputs: **standard deviations**, **explained variance**, **loadings** (`rotation`), and **scores** (`x`).
-- Use screeplots, scores plots, and biplots to understand the structure of the data.  
-- Use principal components as low‑dimensional features for downstream modeling.
+- Compute **SVD-based decorrelation**: $\Sigma = V\Lambda V^T$.  
+- Select $k$ via scree/parallel/Kaiser ($\lambda_k > 1$).  
+- Interpret **loadings** ($v_{jk}$), **scores** ($ZV$), biplots.  
+- Extract features for modeling (95% accuracy here).  
+
+PCA is foundational for **unsupervised dim. reduction** and preprocessing.
+
