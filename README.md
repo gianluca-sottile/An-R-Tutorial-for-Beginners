@@ -4,22 +4,59 @@
 
 # An R Tutorial for Beginners
 
-A practical, beginner-friendly R course: from zero to data analysis and visualization in **25 interactive R Markdown lessons**.
+A complete, beginner‑friendly R course that can support a **9 ECTS / 72‑hour university module**, guiding you from zero to data analysis, visualization, and introductory machine learning in **25+ interactive R Markdown lessons**.
 
 Live website: https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/
 
+---
+
 ## 🎯 What you will learn
 
-- **Core R fundamentals**: objects, data types, matrices, factors
-- **Data preparation**: data frames, lists, sorting, merging, user-defined functions
-- **R programming basics**: if/else, loops, apply-family
-- **Data I/O**: import/export, missing values
-- **Exploratory analysis & visualization**: correlation, scatter plots, boxplots, histograms, tests
-- **Machine learning foundations**: regression (linear/stepwise, GLM), k-means, decision trees, random forest, gradient boosting and support vector machines
+This course is organized to reflect a full academic syllabus: from core R concepts to supervised and unsupervised learning.
 
-## 📋 Lesson index (25 lessons)
+- **Core R fundamentals**  
+  Objects and data types (vectors, matrices, factors, lists, data frames), indexing and subsetting, operators and basic computations.
+
+- **Data preparation & data wrangling**  
+  Construction and manipulation of data frames and lists, sorting and merging tables, creation of derived variables, definition of user‑defined functions for reusable preprocessing workflows.
+
+- **R programming basics (imperative & vectorized)**  
+  Conditional statements (if/else), loops (for, while, repeat), and their vectorized alternatives via the apply‑family; writing clear, maintainable, and efficient R code.
+
+- **Data I/O & data management**  
+  Import and export of data in different formats (CSV, text, Excel, SPSS, etc.), handling missing values, basic data cleaning and preparation for analysis.
+
+- **Exploratory data analysis & visualization**  
+  Descriptive statistics, correlation and association, scatter plots, boxplots, bar charts and histograms, basic statistical tests (t‑test, one‑way and two‑way ANOVA) with graphical summaries.
+
+- **Machine learning foundations (supervised & unsupervised)**  
+  - Supervised learning: simple and multiple linear regression, stepwise procedures, generalized linear models, decision trees, random forests, gradient boosting, and support vector machines.[web:7]  
+  - Unsupervised learning: k‑means clustering and basic dimensionality reduction for structure exploration and pattern discovery.
+
+Throughout the course, the focus is on **reproducible analysis in R**, good programming practice, and critical interpretation of results in a data science workflow.
+
+---
+
+## 🧠 Learning outcomes
+
+By working through the lessons, you will be able to:
+
+- Use R and RStudio as your main environment for data manipulation, statistical analysis, visualization, and reporting.
+- Create, transform, and combine R objects (vectors, matrices, factors, lists, data frames) to build analysis‑ready datasets.
+- Write and debug your own R functions, use control structures and vectorized patterns to implement robust analysis pipelines.
+- Import/export data from common file formats, manage missing values, and perform principled data cleaning.
+- Conduct exploratory data analysis, compute descriptive measures, and produce informative tables and plots.
+- Fit and interpret basic supervised learning models in R, assessing model assumptions and performance.
+- Apply unsupervised methods such as k‑means and simple dimensionality reduction techniques to explore structure in multivariate data.
+
+---
+
+## 📋 Lesson index
+
+Below is the current lesson structure, aligned with the main pillars of the course.
 
 ### Fundamentals
+
 | # | Lesson | Source (.Rmd) | Rendered (HTML) |
 |---|--------|---------------|-----------------|
 | 1 | What is R? | [Rmd](R%20course_lesson%201.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-1.html) |
@@ -27,7 +64,8 @@ Live website: https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/
 | 3 | Matrix | [Rmd](R%20course_lesson%203.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-3.html) |
 | 4 | Factors | [Rmd](R%20course_lesson%204.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-4.html) |
 
-### Data Preparation
+### Data preparation & data structures
+
 | # | Lesson | Source (.Rmd) | Rendered (HTML) |
 |---|--------|---------------|-----------------|
 | 5 | Data Frames | [Rmd](R%20course_lesson%205.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-5.html) |
@@ -36,7 +74,8 @@ Live website: https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/
 | 8 | Merge Data Frames | [Rmd](R%20course_lesson%208.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-8.html) |
 | 9 | Functions | [Rmd](R%20course_lesson%209.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-9.html) |
 
-### R Programming
+### R programming (control flow & vectorization)
+
 | # | Lesson | Source (.Rmd) | Rendered (HTML) |
 |---|--------|---------------|-----------------|
 | 10 | IF, ELSE, and ELSE IF Statements | [Rmd](R%20course_lesson%2010.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-10.html) |
@@ -48,7 +87,8 @@ Live website: https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/
 | 16 | Exporting Data | [Rmd](R%20course_lesson%2016.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-16.html) |
 | 17 | Correlation | [Rmd](R%20course_lesson%2017.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-17.html) |
 
-### Data Analysis with R
+### Exploratory data analysis & basic inference
+
 | # | Lesson | Source (.Rmd) | Rendered (HTML) |
 |---|--------|---------------|-----------------|
 | 18 | Scatter Plot | [Rmd](R%20course_lesson%2018.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-18.html) |
@@ -57,18 +97,26 @@ Live website: https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/
 | 21 | T Test | [Rmd](R%20course_lesson%2021.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-21.html) |
 | 22 | ANOVA: One-way & Two-way | [Rmd](R%20course_lesson%2022.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-22.html) |
 
-### Machine Learning
+### Machine learning – supervised learning
+
 | # | Lesson | Source (.Rmd) | Rendered (HTML) |
 |---|--------|---------------|-----------------|
 | 23 | Simple, Multiple Linear and Stepwise Regression | [Rmd](R%20course_lesson%2023.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-23.html) |
 | 24 | Generalized Linear Model | [Rmd](R%20course_lesson%2024.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-24.html) |
+
+### Machine learning – unsupervised learning & advanced models
+
+| # | Lesson | Source (.Rmd) | Rendered (HTML) |
+|---|--------|---------------|-----------------|
 | 25 | K-means Clustering | [Rmd](R%20course_lesson%2025.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-25.html) |
 | 26 | Decision Trees | [Rmd](R%20course_lesson%2026.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-26.html) |
 | 27 | Random Forest | [Rmd](R%20course_lesson%2027.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-27.html) |
 | 28 | Gradient Boosting | [Rmd](R%20course_lesson%2028.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-28.html) |
 | 29 | Support Vector Machines | [Rmd](R%20course_lesson%2029.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-29.html) |
 
-## Quick start 🚀
+---
+
+## 🔧 Quick start
 
 ```r
 # Option 1: clone with usethis (RStudio)
@@ -81,30 +129,39 @@ git clone https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners.git
 cd An-R-Tutorial-for-Beginners
 ```
 
-Open `An-R-Tutorial-for-Beginners.Rproj` in RStudio, then knit `index.Rmd` (or build the site).
+Open `An-R-Tutorial-for-Beginners.Rproj` in RStudio, then knit `index.Rmd` (or build the site). This will render the full set of lessons as a browsable website.
 
 ### Prerequisiti
 
-- R ≥ 4.3 [Install](https://posit.co/download/r)
-- RStudio [Install](https://posit.co/download/rstudio-desktop/)
+- R ≥ 4.3 – [Install](https://posit.co/download/r)  
+- RStudio – [Install](https://posit.co/download/rstudio-desktop/)
+
+A basic background in descriptive and inferential statistics is recommended (e.g., random variables, distributions, confidence intervals, hypothesis tests).
+
+---
 
 ## 🤝 Contribute
 
-1. 🍴 **Fork** il repository
-2. 🔀 **Branch** `feature/nome-feature`
-3. 💾 **Commit** + **Push**
-4. 📤 **Pull Request**
+1. 🍴 **Fork** il repository  
+2. 🔀 **Branch** `feature/nome-feature`  
+3. 💾 **Commit** + **Push**  
+4. 📤 **Pull Request**  
 5. 🌟 **Star** for support!
 
 [![Issues](https://img.shields.io/github/issues/gianluca-sottile/An-R-Tutorial-for-Beginners)](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners/issues)
 
-## 📚 Risorse extra
+---
 
-- [R per tutti](https://www.r4datasciencebook.com/)
-- [ggplot2 guida](https://ggplot2.tidyverse.org/)
+## 📚 Extra resources
+
+Some useful external references if you want to go beyond the material covered here:
+
+- Introductory online courses and documentation for R and RStudio.
+- Tutorials on data manipulation, visualization, and modeling with R.
+- Additional material on supervised and unsupervised learning in R (e.g., clustering and dimensionality reduction).
 
 ---
 
 **👨‍💻 Author**: [Gianluca Sottile](https://github.com/gianluca-sottile)  
 **📄 License**: [CC-BY-SA-4.0](LICENSE)  
-**🌟 Give it a ⭐ if you find it useful!
+**🌟 If this course helps you, consider giving it a ⭐ and sharing it with your students or colleagues.**
