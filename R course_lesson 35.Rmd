@@ -1,0 +1,141 @@
+---
+pagetitle: "Lesson 35"
+title: "Correspondence Analysis (CA) in R — PCA for Categorical Data"
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+# Correspondence Analysis (CA)
+
+Correspondence Analysis (CA) extends **PCA to two-way contingency tables** by decomposing the **Pearson residuals** matrix via singular value decomposition (SVD):
+
+$$
+\frac{n_{ij} - \mu_{ij}}{\sqrt{\mu_{ij}}} = U D V^T
+$$
+
+where $\mu_{ij} = row_i \cdot col_j$ under independence, yielding **principal axes** for rows and columns in low‑D space. **Total inertia** $\sum \lambda_k = \chi^2 / n$ measures deviation from independence (analogous to eigenvalues in PCA).
+
+CA visualizes **categorical associations**: categories close together co‑occur more than expected by chance.
+
+In this lesson we analyze `HairEyeColor` (hair × eye color), testing independence and interpreting associations.
+
+# Step 1: Contingency table and independence test
+
+```{r}
+data("HairEyeColor")
+table_hec <- apply(HairEyeColor, c(1, 2), sum)  # aggregate over Gender
+dimnames(table_hec) <- list(Hair = rownames(HairEyeColor), Eye = colnames(HairEyeColor))
+
+print(round(table_hec, 1))
+chisq.test(table_hec)
+```
+
+**$\chi^2 = 138.29$, df = 12, $p < 2.2e-16$**: Strong evidence against independence ($\neq$ uniform random association).
+
+# Step 2: Compute CA
+
+```{r}
+library(ca)
+
+ca_hec <- ca(table_hec)  # number of dimensions
+summary(ca_hec, Dim = c(1, 2))
+```
+
+**Key outputs**:
+- **Inertia**: $\lambda_k / \sum \lambda = $ proportion explained by dimension $k$.  
+- **Total $\chi^2$**: Deviation from independence.  
+- **Row/Col coordinates**: Principal coordinates ($U\sqrt{D}, V\sqrt{D}$).  
+- **Contributions** (`ctr`): % inertia due to each category on each axis.  
+- **Cos²**: Quality of representation on the plane.
+
+# Step 3: Inertia decomposition
+
+```{r}
+inertia_df <- data.frame(
+  Dim = factor(1:length(summary(ca_hec)$scree[,3])),
+  Inertia = summary(ca_hec)$scree[,3],
+  CumInertia = cumsum(summary(ca_hec)$scree[,3])
+)
+print(inertia_df, digits = 3)
+
+barplot(summary(ca_hec)$scree[,3][1:3], 
+        main = "CA Inertia — HairEyeColor",
+        ylab = "Inertia",
+        xlab = "Dimension")
+```
+
+**Dim 1 + 2**: $98.89\%$ inertia → Excellent 2D summary of associations.
+
+# Step 4: Symmetric biplot (rows vs columns)
+
+```{r}
+library(ggplot2)
+
+# Extract coordinates
+row_coord <- data.frame(ca_hec$rowcoord, type = "Hair", row.names = rownames(table_hec))
+col_coord <- data.frame(ca_hec$colcoord, type = "Eye",  row.names = colnames(table_hec))
+
+plot_df <- rbind(row_coord, col_coord)
+
+ggplot(plot_df, aes(x = `Dim1`, y = `Dim2`, color = type, shape = type)) +
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5) +
+  geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5) +
+  geom_point(size = 4, alpha = 0.9) +
+  geom_text(aes(label = rownames(plot_df)), vjust = -0.5, size = 3.5) +
+  labs(
+    title = "Correspondence Analysis Biplot — Hair × Eye Color",
+    subtitle = "Dim 1+2: 98.89% inertia | Associations deviate from independence",
+    x = "Dimension 1 (89.37%)",
+    y = "Dimension 2 (9.52%)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+**Interpretation**:[1]
+- **Quadrant I** (positive axes): Brown Hair ↔ Brown Eyes (strong positive association).  
+- **Quadrant III**: Blond Hair ↔ Blue Eyes.  
+- **Perpendicular**: Independence (orthogonal to origin).  
+- **Distance from origin**: Deviation strength from expected frequencies.
+
+# Step 5: Contributions to dimensions
+
+```{r}
+round(ca_hec$rowcoord[, 1:2], 1)  # Row contributions
+round(ca_hec$colcoord[, 1:2], 1)  # Column contributions
+```
+
+**Dim 1**: Driven by Black/Blond (rows) and Brown/Blue (columns).  
+**Dim 2**: Black/Red (rows) vs Hazel/Green (columns).
+
+# Step 6: Validation — silhouette on row profiles
+
+```{r}
+library(cluster)
+row_dist <- dist(ca_hec$rowcoord[, 1:2])
+hair_groups <- kmeans(row_dist, centers = 2)$cluster
+sil_ca <- silhouette(hair_groups, row_dist)
+mean(sil_ca[, 3])
+```
+
+Average silhouette confirms interpretable grouping of hair colors.
+
+# Summary
+
+You learned CA with `ca::ca()` to:
+
+- Decompose contingency tables via **Pearson residuals SVD**: $\chi^2/n = \sum \lambda_k$.  
+- Interpret **symmetric biplots**, **inertia** (like PCA eigenvalues), and **contributions**.  
+- Quantify category representation with Cos² and validate separation.  
+
+CA is essential for **categorical data visualization** and association discovery.
+

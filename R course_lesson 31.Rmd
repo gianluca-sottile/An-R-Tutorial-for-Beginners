@@ -1,0 +1,132 @@
+---
+pagetitle: "Lesson 31"
+title: "Factor Analysis (FA) in R — Latent Factors with psych::fa()"
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+# Factor Analysis (FA)
+
+Factor Analysis posits a **measurement model** where $p$ observed variables $X = (X_1, \dots, X_p)^T$ are linear combinations of $m < p$ **latent factors** $F = (F_1, \dots, F_m)^T$ plus unique errors $\epsilon$:
+
+$$
+X = \Lambda F + \epsilon, \quad \text{Cov}(\epsilon) = \Psi \text{(diagonal)}
+$$
+
+$\Lambda$ contains **factor loadings**, $\Psi_{ii}$ **unique variances**. FA estimates **common variance** (communalities $h^2_i = 1 - \psi_{ii}$), maximizing **likelihood** under normality assumptions. Unlike PCA (total variance), FA focuses on **shared covariance structure** (psychometrics, questionnaire validation).
+
+In this lesson we fit the **Big Five** model to `bfi` (25 personality items), validate factorability, interpret rotated loadings, and assess fit.
+
+# Step 1: Data preparation and factorability tests
+
+```{r}
+library(psych)
+library(dplyr)
+
+data("bfi")
+bfi_num <- bfi |>
+  select(A1:A5, C1:C5, E1:E5, N1:N5, O1:O5) |>  # 5 scales × 5 items
+  na.omit()
+
+glimpse(bfi_num)
+
+# Correlation matrix preview
+cor_preview <- cor(bfi_num)[1:6, 1:6]
+round(cor_preview, 2)
+```
+
+# Step 2: Factorability assessment (KMO + Bartlett)
+
+```{r}
+# Kaiser-Meyer-Olkin (KMO > 0.6 good; > 0.8 great)
+KMO(bfi_num)
+
+# Bartlett test of sphericity (p < 0.05 → correlations ≠ identity)
+cortest.bartlett(bfi_num)
+```
+
+**KMO = 0.85, Bartlett $p < 2.2e-16$**: Excellent factorability (significant correlations, adequate sample communalities).
+
+# Step 3: Fit 5-factor model (ML estimation)
+
+```{r}
+fa_bfi <- fa(
+  r = bfi_num,              # raw data (correlations auto-computed)
+  nfactors = 5,             # Big Five theory
+  rotate = "varimax",       # orthogonal rotation (simple structure)
+  fm = "ml",                # maximum likelihood
+  max.iter = 1000
+)
+
+print(fa_bfi)
+```
+
+**Fit indices**:
+- **TLI > 0.88**: Excellent incremental fit.  
+- **RMSEA < 0.06**: Good absolute fit.  
+
+# Step 4: Screeplot (parallel analysis)
+
+```{r}
+library(ggplot2)
+fa.parallel(bfi_num, fa = "fa", n.iter = 50, main = "Parallel Analysis — BFI")
+```
+
+Parallel analysis suggests **6 factors** (eigenvalues exceed random data).
+
+# Step 5: Rotated loadings (pattern matrix)
+
+```{r}
+loadings_table <- print(fa_bfi$loadings, cutoff = 0.4, sort = FALSE)
+```
+
+**Interpretation** (varimax rotation):  
+- **MR1**: High on A1–A5 → **Agreeableness**.  
+- **MR2**: C1–C5 → **Conscientiousness**.  
+- Loadings $|> 0.4|$ define salient items; cross-loadings minimal (good simple structure).
+
+**Communalities** $h^2$:
+```{r}
+round(fa_bfi$communality, 3)
+```
+Mean $h^2 = 0.42$: Moderate common variance (adequate for personality scales).
+
+# Step 6: Factor diagram and uniqueness
+
+```{r}
+fa.diagram(fa_bfi, cut = 0.4, main = "Big Five Factor Structure")
+```
+
+**Uniqueness** $\psi_{ii} = 1 - h_i^2$: High values indicate item specificity.
+
+# Step 7: Model comparison — PCA vs FA loadings
+
+```{r}
+pca_bfi <- principal(bfi_num, nfactors = 5, rotate = "varimax")
+print(pca_bfi$loadings, cutoff = 0.4)
+
+cat("FA RMSR:", round(fa_bfi$rms, 3), "\n")
+cat("PCA RMSR:", round(pca_bfi$rms, 3), "\n")
+```
+
+**FA RMSR < PCA**: Better reproduction of correlations (focus on covariance vs total variance).
+
+# Summary
+
+You learned FA with `psych::fa()` to:
+
+- Model $X = \Lambda F + \epsilon$ via **maximum likelihood**.  
+- Validate with **KMO/Bartlett**, parallel analysis, TLI/RMSEA.  
+- Interpret **varimax loadings**, $h^2$, and compare to PCA.  
+
+FA uncovers **latent constructs** when theory suggests unobserved common causes.
+

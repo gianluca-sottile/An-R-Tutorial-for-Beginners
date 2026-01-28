@@ -1,0 +1,150 @@
+---
+pagetitle: "Lesson 33"
+title: "t-SNE in R — Non-linear Local Structure Visualization"
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+# t-SNE (t-Distributed Stochastic Neighbor Embedding)
+
+t-SNE is a **non-linear dimensionality reduction** technique for **high-quality 2D/3D visualizations** of high‑dimensional data. It minimizes the **KL divergence** between high‑D similarities $P_{ij}$ (Gaussian) and low‑D similarities $Q_{ij}$ (Student $t$ distribution):
+
+$$
+KL(P \| Q) = \sum_i \sum_j p_{ij} \log \frac{p_{ij}}{q_{ij}}
+$$
+
+This preserves **local neighborhoods** (close points stay close) better than linear methods like PCA, at the expense of **global structure**. t-SNE is **stochastic and iterative**; key parameter is `perplexity` ($5 \leq perpl \leq 50$), balancing local/global focus.
+
+In this lesson we apply t-SNE to `iris`, comparing to PCA, and explore parameter sensitivity.
+
+# Step 1: Data preparation
+
+```{r}
+data("iris")
+iris_num <- iris |> 
+  dplyr::select(where(is.numeric)) |> 
+  scale(center = TRUE, scale = TRUE)  # standardize like PCA
+
+glimpse(iris_num)
+```
+
+Standardization ensures features contribute equally, as in PCA.
+
+# Step 2: Compute t-SNE embedding
+
+```{r}
+library(Rtsne)
+
+set.seed(123)
+tsne_iris <- Rtsne(
+  X = iris_num,
+  dims = 2,
+  perplexity = 30,        # effective neighbors per point
+  theta = 0.0,            # exact computation (no approx)
+  check_duplicates = FALSE,
+  verbose = TRUE
+)
+
+str(tsne_iris)
+head(tsne_iris$Y, 3)
+```
+
+**Key outputs**:  
+- `Y`: $150 \times 2$ **embedding coordinates**.  
+- `N`: Number of objects.  
+- `perplexity`: Used value (printed during computation).
+
+# Step 3: Visualization and cluster separation
+
+```{r}
+library(ggplot2)
+
+tsne_df <- data.frame(
+  tsne1 = tsne_iris$Y[, 1],
+  tsne2 = tsne_iris$Y[, 2],
+  Species = iris$Species
+)
+
+ggplot(tsne_df, aes(x = tsne1, y = tsne2, color = Species)) +
+  geom_point(size = 3, alpha = 0.8) +
+  labs(
+    title = "t-SNE Embedding — Iris Dataset",
+    subtitle = "Perplexity = 30 | Three species clearly separated",
+    x = "t-SNE Dimension 1",
+    y = "t-SNE Dimension 2"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+**Interpretation**:  
+- **setosa** perfectly separated (bottom‑left).  
+- **versicolor** and **virginica** form adjacent but distinct clusters (local structure preserved).  
+- Unlike PCA scores (linear), t-SNE reveals **non-linear manifolds**.
+
+# Step 4: Parameter sensitivity — perplexity effect
+
+```{r}
+# Compare perplexity 5 (local) vs 50 (global)
+set.seed(123)
+tsne_low  <- Rtsne(iris_num, check_duplicates = FALSE, dims = 2, perplexity = 5,  verbose = FALSE)$Y
+tsne_high <- Rtsne(iris_num, check_duplicates = FALSE, dims = 2, perplexity = 40, verbose = FALSE)$Y
+
+par(mfrow = c(1, 2))
+plot(tsne_low,  col = as.numeric(iris$Species), pch = 19, main = "Perplexity = 5 (local)")
+plot(tsne_high, col = as.numeric(iris$Species), pch = 19, main = "Perplexity = 40 (global)")
+```
+
+**Low perplexity**: Tight clusters, poor global view.  
+**High perplexity**: Better global layout, looser clusters.
+
+# Step 5: Validation — cluster purity vs PCA
+
+```{r}
+# Silhouette score (higher = better separation)
+library(cluster)
+sil_tsne <- silhouette(as.numeric(iris$Species), dist(tsne_iris$Y))
+mean(sil_tsne[, 3])  # average silhouette width
+
+# Compare to PCA
+pca_iris <- prcomp(iris_num)
+sil_pca  <- silhouette(as.numeric(iris$Species), dist(pca_iris$x[, 1:2]))
+cat("t-SNE silhouette:", round(mean(sil_tsne[, 3]), 3), "\n")
+cat("PCA  silhouette:", round(mean(sil_pca[, 3]), 3), "\n")
+```
+
+t-SNE often shows **higher silhouette** than PCA due to local optimization.
+
+# Step 6: High-D embedding (3D for animation)
+
+```{r eval=FALSE}
+tsne_3d <- Rtsne(iris_num, check_duplicates = FALSE, dims = 3, perplexity = 30)
+# Use plot3D::scatter3D() or plotly for interactive 3D
+```
+
+# Warnings and best practices
+
+- **Stochastic**: Always set `seed`.  
+- **Not for modeling**: Distances in t-SNE space meaningless; use only for **exploration/visualization**.  
+- **Scales poorly** (> 10k points: use UMAP).  
+- **Perplexity rule**: $perpl \approx 3\%$ of $$n$$ (here $30 \approx 20\%$ fine).
+
+# Summary
+
+You learned t-SNE with `Rtsne()` to:
+
+- Compute **non-linear embeddings** minimizing $KL(P \| Q)$.  
+- Tune `perplexity` and interpret **local cluster structure**.  
+- Compare quantitatively to PCA via silhouette scores.  
+
+t-SNE excels at **revealing hidden clusters** in exploratory analysis.
+
