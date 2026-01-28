@@ -8,13 +8,13 @@ home: "https://www.unipa.it/persone/docenti/s/gianluca.sottile"
 
 <br>
 
-# Welcome to the R Programming Tutorial 
+# Welcome to the R Programming Tutorial
 
-R is a powerful programming language widely embraced by data scientists and analysts for statistical analysis, data visualization, and more. Major companies like Google, Airbnb, and Facebook rely on R for data-driven decision making.
+R is an open‑source programming language and environment specifically designed for statistical computing, data analysis, and graphics. It is widely used in academia, research, and industry for tasks ranging from classical statistical modeling to modern data science and machine learning.
 
-This beginner-friendly tutorial will introduce you to the fundamentals of R programming. Whether you are a student, researcher, or professional, this course will provide the tools to analyze and interpret data effectively.
+This tutorial accompanies a structured course that can support up to **9 ECTS / 72 hours** of teaching and guided practice, introducing you step by step to the fundamentals of R programming, data manipulation, exploratory analysis, and introductory machine learning. Whether you are a student, researcher, or professional, the material is designed to help you build solid, reproducible workflows for analyzing and interpreting data.
 
-```{r fig.width=5, fig.height=5, fig.align='center', cache=TRUE, fig.cap="R: A language for data science.", fig.asp=0.50, echo=FALSE}
+```{r fig.width=5, fig.height=5, fig.align='center', cache=TRUE, fig.cap="R: a statistical computing environment for data science.", fig.asp=0.50, echo=FALSE}
 library(png)
 library(grid)
 img <- readPNG("R_logo.png")
@@ -23,14 +23,29 @@ grid.raster(img)
 
 ## Why Learn R?
 
-- **Versatile and Dynamic**: R is ideal for statistical modeling, machine learning, and data visualization.
-- **In Demand**: Widely used in industries like technology, healthcare, finance, and academia.
-- **Supportive Community**: The open-source community provides extensive documentation, packages, and tools for various applications.
+- **Focused on statistics and data analysis**  
+  R provides a rich set of tools for statistical modeling, hypothesis testing, time‑series analysis, classification, clustering, and advanced graphics in a single environment.
+
+- **Central in data science and research**  
+  R is a standard in many scientific disciplines and is used by data science teams in technology, healthcare, finance, and other sectors for data‑driven decision making and experimentation.
+
+- **Reproducible and extensible**  
+  With R Markdown and a large ecosystem of packages, R supports fully reproducible analyses, literate programming, and integration with version control systems such as Git and GitHub.
 
 ## Course Highlights
-- Fundamental R syntax and commands.
-- Data manipulation techniques to clean and preprocess data.
-- Creating stunning visualizations with ggplot2 and other libraries.
-- Basics of statistical modeling using R.
 
-Get ready to embark on this exciting journey of data-driven innovation!
+This tutorial is organized into self‑contained lessons that gradually increase in complexity and mirror the structure of a full academic course in R for data analysis.
+
+- **Core R fundamentals**  
+  Syntax, objects and data types (vectors, matrices, factors, lists, data frames), indexing and basic operations.
+
+- **Data preparation and programming**  
+  Data import/export, handling missing values, data cleaning and transformation, user‑defined functions, control structures (if/else, loops), and vectorized programming with the apply‑family.
+
+- **Exploratory data analysis and visualization**  
+  Descriptive statistics, correlation, scatter plots, boxplots, bar charts, histograms, and basic inferential procedures (t‑tests, one‑way and two‑way ANOVA) implemented directly in R.
+
+- **Machine learning foundations**  
+  Introduction to supervised learning (linear and generalized linear models, decision trees, random forests, gradient boosting, support vector machines) and unsupervised learning (k‑means clustering and basic dimensionality reduction) using R as the main analysis environment.
+
+Get ready to build a principled R workflow, from raw data to models and interpretable results, leveraging a modern statistical computing environment.
