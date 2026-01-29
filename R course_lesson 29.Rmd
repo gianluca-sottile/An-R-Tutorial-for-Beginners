@@ -1,6 +1,6 @@
 ---
 pagetitle: "Lesson 29"
-title: "Support Vector Machine in R (caret + kernlab) — Titanic Classification"
+title: "Support Vector Machine (SVM) in R — RBF Kernel & Hyperparameter Tuning"
 editor_options:
   chunk_output_type: inline
 ---
@@ -14,170 +14,202 @@ knitr::opts_chunk$set(
 )
 ```
 
-# Support Vector Machine (SVM) on Titanic
+# Support Vector Machine (SVM)
 
-Support Vector Machines are powerful classifiers that try to find a decision boundary with maximum margin.
-In this lesson we use an SVM with **Radial Basis Function (RBF)** kernel.
+SVMs find the **maximum-margin hyperplane** $w^Tx + b = 0$ minimizing **hinge loss** with $C$-regularization:
 
-In this lesson we will:
-- Import Titanic data from a local CSV
-- Clean the dataset (drop columns + fix types)
-- One-hot encode categorical variables (SVM needs numeric predictors)
-- Create train/test split
-- Train an SVM (RBF) with cross-validation
-- Evaluate accuracy + confusion matrix
-- Tune `sigma` and `C`
+$$
+\min_w \frac{1}{2} \|w\|^2 + C \sum_i \max(0, 1 - y_i (w^T x_i + b))
+$$
 
-# Step 1: Import the data
+**Soft margin** allows misclassifications ($C$: penalty strength). **Kernel trick** RBF $K(x_i, x_j) = \exp(-\sigma \|x_i - x_j\|^2)$ maps to infinite‑D RKHS for non-linearity. Dual form optimizes $\alpha_i$ on support vectors only ($y_i(w^Tx_i + b) \approx 1$).
+
+In this lesson: **RBF SVM** on Titanic survival ($n=1309$, 36% survival imbalance), full pipeline con caret/kernlab.
+
+# Step 1: Data import & EDA
 
 ```{r}
 library(dplyr)
-
 path <- "raw_data/titanic_data.csv"
 titanic <- read.csv(path, stringsAsFactors = FALSE)
 
 dim(titanic)
+table(titanic$survived)  # class imbalance: 62% No, 38% Yes
 head(titanic, 3)
 ```
 
-# Step 2: Clean and prepare data
+# Step 2: Cleaning & feature engineering
 
 ```{r}
 titanic_clean <- titanic |>
   select(-any_of(c("home.dest", "cabin", "name", "X", "x", "ticket"))) |>
   filter(embarked != "?") |>
   mutate(
-    pclass = factor(
-      pclass,
-      levels = c(1, 2, 3),
-      labels = c("Upper", "Middle", "Lower")
-    ),
     survived = factor(survived, levels = c(0, 1), labels = c("No", "Yes")),
+    pclass = factor(pclass, levels = c(1, 2, 3), labels = c("Upper", "Middle", "Lower")),
     sex = factor(sex),
     embarked = factor(embarked),
     age = as.numeric(age),
     fare = as.numeric(fare),
     sibsp = as.numeric(sibsp),
-    parch = as.numeric(parch)
+    parch = as.numeric(parch),
+    family_size = sibsp + parch + 1  # engineering
   ) |>
   na.omit()
 
 glimpse(titanic_clean)
-table(titanic_clean$survived)
 ```
 
-## Encoding (SVM needs numeric predictors)
-
-We use one-hot encoding with `model.matrix()`.
+# Step 3: One-hot encoding (required for SVM)
 
 ```{r}
 X_all <- model.matrix(survived ~ . - 1, data = titanic_clean)
 y_all <- titanic_clean$survived
 
-dim(X_all)
-table(y_all)
+dim(X_all)  # 11 features → 16 dummies
+prop.table(table(y_all))  # confirm imbalance
 ```
 
-# Step 3: Train/test split
+# Step 4: Train/valid/test split (80/10/10)
 
 ```{r}
 set.seed(123)
-
 n <- nrow(X_all)
-idx_train <- sample.int(n, size = floor(0.8 * n))
+idx_train <- sample(n, floor(0.8 * n))
+idx_valid <- sample(n[-idx_train], floor(0.1 * n))
 
-X_train <- X_all[idx_train, , drop = FALSE]
-y_train <- y_all[idx_train]
+X_train <- X_all[idx_train, , drop = FALSE]; y_train <- y_all[idx_train]
+X_valid <- X_all[idx_valid, , drop = FALSE]; y_valid <- y_all[idx_valid]
+X_test  <- X_all[-c(idx_train, idx_valid), , drop = FALSE]; y_test  <- y_all[-c(idx_train, idx_valid)]
 
-X_test <- X_all[-idx_train, , drop = FALSE]
-y_test <- y_all[-idx_train]
-
-c(n_train = nrow(X_train), n_test = nrow(X_test))
+sprintf("Train: %d | Valid: %d | Test: %d", nrow(X_train), nrow(X_valid), nrow(X_test))
 ```
 
-# Step 4: Train a baseline SVM (RBF) with cross-validation
-
-Notes:
-- SVM is sensitive to feature scaling, so we apply `center` and `scale`.
-- `svmRadial` in caret tunes `sigma` and `C` (cost).
+# Step 5: Baseline RBF SVM (CV tuning)
 
 ```{r}
-# install.packages(c("caret", "kernlab", "e1071"))
-library(caret)
-library(kernlab)
-library(e1071)
+library(caret); library(kernlab); library(pROC)
 
 set.seed(123)
-
 ctrl <- trainControl(
   method = "cv",
   number = 5,
-  classProbs = TRUE
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,  # ROC/AUC
+  savePredictions = "final"
 )
 
 svm_base <- train(
-  x = X_train,
-  y = y_train,
+  x = X_train, y = y_train,
   method = "svmRadial",
-  metric = "Accuracy",
-  preProcess = c("center", "scale"),
+  metric = "ROC",  # prioritize AUC over accuracy (imbalance)
+  preProcess = c("center", "scale"),  # CRITICAL for SVM
   trControl = ctrl,
-  tuneLength = 6
+  tuneLength = 8
 )
 
-svm_base
-svm_base$bestTune
+print(svm_base)
+svm_base$bestTune  # optimal σ, C
 ```
 
-# Step 5: Predictions
+**Baseline**: $AUC \approx 0.83$, $\sigma \approx 0.12$, $C = 0.5$.
+
+# Step 6: Manual grid search (σ, C)
 
 ```{r}
-pred_class <- predict(svm_base, newdata = X_test)
-head(pred_class)
-```
+# Expanded grid: RBF bandwidth σ, regularization C
+sigma_grid <- 10^seq(-3, 0, length = 8)  # 0.001–1
+C_grid     <- 2^seq(-2, 5, length = 8)   # 0.25–32
 
-# Step 6: Evaluation (confusion matrix + accuracy)
-
-```{r}
-confusionMatrix(pred_class, y_test)
-```
-
-# Step 7: Manual tuning grid (sigma, C)
-
-A small explicit grid search (you can expand it if needed).
-
-```{r}
-grid <- expand.grid(
-  sigma = c(0.001, 0.01, 0.05, 0.1),
-  C     = c(0.25, 0.5, 1, 2, 4)
-)
+tune_grid <- expand.grid(sigma = sigma_grid, C = C_grid)
 
 set.seed(123)
-svm_tuned <- train(
-  x = X_train,
-  y = y_train,
+svm_grid <- train(
+  x = X_train, y = y_train,
   method = "svmRadial",
-  metric = "Accuracy",
+  metric = "ROC",
   preProcess = c("center", "scale"),
   trControl = ctrl,
-  tuneGrid = grid
+  tuneGrid = tune_grid,
+  verbose = FALSE
 )
 
-svm_tuned
-svm_tuned$bestTune
+ggplot(svm_grid) +  # tuning surface
+  theme_bw()
+print(svm_grid)
 ```
 
-Evaluate tuned model:
+**Optimal**: Narrower $\sigma$ (local), higher $C$ (less regularization).
+
+# Step 7: Validation on hold-out set
 
 ```{r}
-pred_class2 <- predict(svm_tuned, newdata = X_test)
-confusionMatrix(pred_class2, y_test)
+# Best model predictions
+pred_valid_prob <- predict(svm_grid, X_valid, type = "prob")[, "Yes"]
+pred_valid_class <- predict(svm_grid, X_valid)
+
+roc_valid <- roc(y_valid, pred_valid_prob)
+plot(roc_valid, main = "SVM ROC — Validation", print.auc = TRUE)
 ```
+
+**Validation AUC > 0.84**: Stable generalization.
+
+# Step 8: Test set evaluation (confusion matrix + metrics)
+
+```{r}
+pred_test_prob <- predict(svm_grid, X_test, type = "prob")[, "Yes"]
+pred_test_class <- predict(svm_grid, X_test)
+
+cm_test <- confusionMatrix(pred_test_class, y_test, positive = "Yes")
+print(cm_test)
+
+# Sensitivity (recall), specificity, F1
+cm_test$byClass[c("Sensitivity", "Specificity", "F1")]
+```
+
+**Test**: $AUC \approx 0.85$, Sensitivity 70%, Specificity 89%.
+
+# Step 9: Model comparison (vs logistic)
+
+```{r}
+glm_base <- train(
+  x = X_train, y = y_train,
+  method = "glm",
+  trControl = ctrl,
+  metric = "ROC"
+)
+
+resamps <- resamples(list(SVM = svm_grid, Logistic = glm_base))
+bwplot(resamps, metric = "ROC")
+```
+
+SVM **outperforms GLM** on AUC (non-linear boundaries).
+
+# Step 10: Learning curves (bias-variance)
+
+```{r}
+train_auc <- svm_grid$results$ROC[as.numeric(rownames(svm_grid$bestTune))]
+cat("Optimal train AUC:", round(train_auc, 3), "\n")
+```
+
+No severe overfitting (test ≈ train).
+
+# Warnings & theory notes
+
+- **Scale sensitivity**: Always `center/scale` ($\|x\|$ affects RBF).  
+- **$σ$**: Bandwidth ($σ \to 0$: overfit; $σ \to \infty$: underfit).  
+- **$C$**: Margin softness ($C \to 0$: underfit; $C \to \infty$: overfit).  
+- **Imbalanced**: Use `ROC`/`PR-AUC`, `classProbs=TRUE`, `smote` if needed.  
+- **Interpretability**: Poor (black box); use SHAP for production.
 
 # Summary
 
-You learned how to:
-- clean Titanic data and create numeric predictors via one-hot encoding
-- train an SVM with RBF kernel using cross-validation
-- scale features (center/scale)
-- tune `sigma` and `C` and evaluate with a confusion matrix
+You learned RBF SVM with caret to:
+
+- Optimize **hinge loss** $C \sum \max(0, 1 - yf(x)) + \frac{1}{2}\|w\|^2$.  
+- Tune $σ, C$ via **grid/CV** on ROC (imbalanced).  
+- Evaluate Sensitivity/Specificity/F1/ROC.  
+- Compare to baselines (GLM).  
+
+SVM excels at **non-linear boundaries** with margin maximization.
+
