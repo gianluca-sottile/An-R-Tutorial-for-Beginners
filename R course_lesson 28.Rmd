@@ -93,7 +93,7 @@ dtest  <- xgb.DMatrix(X_test,  label = y_test)
 # Step 4: Baseline model (logloss objective)
 
 ```{r}
-library(pROC); library(PRROC)
+library(pROC)
 
 params_base <- list(
   objective = "binary:logistic",
