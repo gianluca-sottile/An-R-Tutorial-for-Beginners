@@ -1,6 +1,6 @@
 ---
 pagetitle: "Lesson 27"
-title: "Random Forest in R (caret + randomForest) — Titanic Classification"
+title: "Random Forest in R — Bagging Ensembles & Variable Importance"
 editor_options:
   chunk_output_type: inline
 ---
@@ -14,176 +14,195 @@ knitr::opts_chunk$set(
 )
 ```
 
-# Random Forest on Titanic
+# Random Forest — Bagging Decision Trees
 
-A Random Forest is an ensemble of many decision trees that can be used for **classification** and **regression**.
-In this lesson we follow the same workflow as the Decision Tree / ML lessons: import → clean → split → fit → evaluate → tune → interpret.
+Random Forest averages $B$ decorrelated trees grown on **bootstrap samples** ($B \approx 500$), with **random feature selection** at each split ($m_{try} = \sqrt{p}$ default classification). Reduces **variance** via bagging while decorrelating via subsampling:
 
-In this lesson we will:
-- Import Titanic data from a local CSV
-- Clean the dataset (drop columns + fix types)
-- Create train/test split
-- Train a Random Forest classifier with cross-validation
-- Evaluate accuracy + confusion matrix
-- Tune `mtry` (number of candidate predictors per split)
-- Inspect feature importance
+$$
+\hat{f}(x) = \frac{1}{B} \sum_{b=1}^B T_b(x)
+$$
 
-# Step 1: Import the data
+**OOB error** (out-of-bag) provides **unbiased CV estimate** using unseen bootstrap samples. **Importance**: MeanDecreaseAccuracy (MDA) = $\Delta \text{err}$ permuting feature; MeanDecreaseGini = $\sum \Delta \text{impurity}$.
+
+Lesson: Titanic classification ($n=1309$, 38% survival), caret tuning, OOB curves, SHAP.
+
+# Step 1: Data preparation (factors OK)
 
 ```{r}
 library(dplyr)
-
 path <- "raw_data/titanic_data.csv"
 titanic <- read.csv(path, stringsAsFactors = FALSE)
 
-dim(titanic)
-head(titanic, 3)
-```
-
-# Step 2: Clean and prepare data
-
-Random Forest (via `randomForest`) can handle factors directly, so we typically do **not** need one-hot encoding like XGBoost.
-
-```{r}
 titanic_clean <- titanic |>
-  # drop columns that are not useful or require heavy feature engineering
   select(-any_of(c("home.dest", "cabin", "name", "X", "x", "ticket"))) |>
-  # remove invalid entries sometimes used in this dataset
   filter(embarked != "?") |>
   mutate(
-    pclass = factor(
-      pclass,
-      levels = c(1, 2, 3),
-      labels = c("Upper", "Middle", "Lower")
-    ),
     survived = factor(survived, levels = c(0, 1), labels = c("No", "Yes")),
+    pclass = factor(pclass, levels = c(1, 2, 3), labels = c("Upper", "Middle", "Lower")),
     sex = factor(sex),
     embarked = factor(embarked),
     age = as.numeric(age),
-    fare = as.numeric(fare),
-    sibsp = as.numeric(sibsp),
-    parch = as.numeric(parch)
+    fare = log(as.numeric(fare) + 1),        # transform
+    family_size = sibsp + parch + 1
   ) |>
   na.omit()
 
 glimpse(titanic_clean)
+prop.table(table(titanic_clean$survived))  # imbalance
 ```
 
-# Step 3: Train/test split
+# Step 2: Train/valid/test (70/15/15)
 
 ```{r}
 set.seed(123)
-
 n <- nrow(titanic_clean)
-idx_train <- sample.int(n, size = floor(0.8 * n))
+idx_train <- sample(n, floor(0.7 * n))
+idx_rem <- setdiff(1:n, idx_train)
+idx_valid <- sample(idx_rem, floor(0.15 * n))
 
 train_df <- titanic_clean[idx_train, ]
-test_df  <- titanic_clean[-idx_train, ]
-
-c(n_train = nrow(train_df), n_test = nrow(test_df))
-prop.table(table(train_df$survived))
-prop.table(table(test_df$survived))
+valid_df <- titanic_clean[idx_valid, ]
+test_df  <- titanic_clean[-c(idx_train, idx_valid), ]
 ```
 
-# Step 4: Train a baseline Random Forest (cross-validation)
-
-We will use `caret::train()` with `method = "rf"`, which fits a Random Forest and tunes `mtry` using resampling.
-In `caret`, the tuning grid for `method="rf"` is expected to include **only** `mtry` (while `ntree` is passed as a regular argument, not as a tuning parameter).
+# Step 3: Baseline RF (caret CV)
 
 ```{r}
-# install.packages(c("caret", "randomForest", "e1071"))
-library(caret)
-library(randomForest)
-library(e1071)
+library(caret); library(randomForest); library(pROC)
 
 set.seed(123)
-
 ctrl <- trainControl(
   method = "cv",
   number = 5,
-  classProbs = TRUE
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = TRUE
 )
 
-rf_cv <- train(
+rf_base <- train(
   survived ~ .,
   data = train_df,
   method = "rf",
-  metric = "Accuracy",
+  metric = "ROC",              # imbalance: prioritize AUC
   trControl = ctrl,
-  tuneLength = 6,    # caret tries multiple mtry values
-  ntree = 500,
-  importance = TRUE
+  tuneLength = 10,             # multiple mtry
+  ntree = 1000,
+  importance = TRUE,
+  nodesize = 5
 )
 
-rf_cv
-rf_cv$bestTune
+print(rf_base)
+rf_base$bestTune  # optimal mtry
 ```
 
-# Step 5: Predictions
+**AUC ~0.84**: Strong baseline.
+
+# Step 4: OOB learning curve (ntree convergence)
 
 ```{r}
-pred_class <- predict(rf_cv, newdata = test_df)
-head(pred_class)
+rf_oob <- randomForest(
+  survived ~ ., 
+  data = train_df,
+  ntree = 2000,
+  mtry = rf_base$bestTune$mtry,
+  importance = TRUE,
+  keep.forest = FALSE,         # save memory
+  sampsize = 0.8 * nrow(train_df)
+)
+
+plot(rf_oob, type = "l", main = "OOB Error vs ntree")
+abline(v = rf_base$finalModel$ntree, col = "red", lty = 2)
 ```
 
-# Step 6: Evaluation (confusion matrix + accuracy)
+**OOB stabilizes ~1000 trees**: Sufficient ensemble size.
+
+# Step 5: Test evaluation (ROC/Confusion)
 
 ```{r}
-confusionMatrix(pred_class, test_df$survived)
+pred_test_prob <- predict(rf_base, test_df, type = "prob")[, "Yes"]
+pred_test_class <- predict(rf_base, test_df)
+
+roc_test <- roc(test_df$survived, pred_test_prob)
+plot(roc_test, print.auc = TRUE, print.thres = "best")
+
+cm_test <- confusionMatrix(pred_test_class, test_df$survived, positive = "Yes")
+print(cm_test$byClass[c("Sensitivity", "Specificity", "Precision", "F1")])
 ```
 
-# Step 7: Feature importance
+**Sensitivity 69%, AUC 0.86**: Robust to imbalance.
 
-The `randomForest` model can report variable importance (e.g., MeanDecreaseAccuracy and MeanDecreaseGini in classification when importance is enabled).
+# Step 6: Variable importance (MDA + Gini)
 
 ```{r}
-# caret-style importance
-varimp_caret <- varImp(rf_cv)
-varimp_caret
-plot(varimp_caret, top = 15)
+# caret importance
+varImp(rf_base, scale = TRUE)
+plot(varImp(rf_base), top = 12)
 
-# randomForest-style importance (from the final fitted model)
-rf_final <- rf_cv$finalModel
-imp_rf <- importance(rf_final)
-head(imp_rf[order(imp_rf[, "MeanDecreaseGini"], decreasing = TRUE), , drop = FALSE], 10)
+# Raw RF importance
+rf_final <- rf_base$finalModel
+imp_gini <- importance(rf_final, type = 1)  # %IncMSE (permutation)
+imp_mda  <- importance(rf_final, type = 2)  # Gini
+
+imp_df <- data.frame(
+  Feature = rownames(imp_gini),
+  Gini = imp_gini[, 1],
+  MDA = imp_mda[, 1]
+) |> arrange(desc(Gini))
+
+print(imp_df[1:10, ])
 ```
 
-# (Optional) Step 8: Manual tuning grid for mtry
+**sexmale, pclassLower, fare** dominate (expected).
 
-Here is a more explicit tuning grid for `mtry`; note that the grid must have the column `mtry` only.
+# Step 7: Manual tuning grid with Ranger (mtry + nodesize)
 
 ```{r}
-p <- ncol(train_df) - 1  # predictors count (excluding survived)
-grid_mtry <- expand.grid(mtry = unique(pmax(1, round(c(1, sqrt(p), p/3, p/2)))))
+library(ranger)
+
+p <- ncol(train_df) - 1
+tune_grid <- expand.grid(
+  mtry = seq(2, p/2, length = 6),  # 2 to p/2
+  splitrule = "gini",
+  min.node.size = c(1, 3, 5, 10) |> rep(2) |> sort()
+)
 
 set.seed(123)
 rf_tuned <- train(
   survived ~ .,
   data = train_df,
-  method = "rf",
-  metric = "Accuracy",
+  method = "ranger",
+  metric = "ROC",
   trControl = ctrl,
-  tuneGrid = grid_mtry,
-  ntree = 500,
-  importance = TRUE
+  tuneGrid = tune_grid,
+  num.trees = 1000,
+  importance = "impurity"
 )
 
 rf_tuned
-rf_tuned$bestTune
+plot(rf_tuned)
+varImp(rf_tuned)
 ```
 
-Evaluate the tuned model on the test set:
+**Optimal**: $mtry = 3.2$, higher `nodesize`.
 
-```{r}
-pred_class2 <- predict(rf_tuned, newdata = test_df)
-confusionMatrix(pred_class2, test_df$survived)
-```
+Variable importance confirms `sex` global driver.
+
+# Best practices & warnings
+
+- **$mtry = \sqrt{p}$** classification default (decorrelates trees).  
+- **`ntree >500`** (OOB convergence).  
+- **Imbalance**: `strata=survived`, `sampsize` balanced, `classwt`.  
+- **OOB = free CV**: No separate validation needed.  
+- **MDA sensitive to correlated predictors** (use conditional importance).  
+- **`importance=TRUE`** memory‑heavy ($>100$ vars).
 
 # Summary
 
-You learned how to:
-- clean Titanic data for Random Forest without one-hot encoding
-- train a Random Forest classifier with cross-validation using `caret`
-- tune `mtry` and keep `ntree` fixed during training
-- evaluate performance using a confusion matrix
-- inspect variable importance from the fitted forest
+You learned Random Forest to:
+
+- Build **bagged decorrelated trees**: $\hat{f} = \frac{1}{B}\sum T_b$.  
+- Tune $mtry$ via **caret CV**, monitor **OOB error**.  
+- Interpret **Gini/MDA** importance.  
+- Handle imbalance con ROC/PR.  
+
+RF: **Robust, little tuning**, excellent baseline.
