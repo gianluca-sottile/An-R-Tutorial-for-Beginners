@@ -14,135 +14,102 @@ knitr::opts_chunk$set(
 )
 ```
 
-# Simple linear regression
+# Linear regression (OLS): theory + practice
 
-Linear regression answers a practical question: *is there an approximately linear relationship between a target variable and one (or more) predictors?*
+Linear regression models the conditional mean of a response as a linear function of predictors: $$ \mathbb{E}[Y \mid X] = X\beta $$.  
+Under the classical assumptions (linearity in parameters, zero-mean errors conditional on $$X$$, homoscedasticity, no perfect multicollinearity), OLS is BLUE: **best linear unbiased estimator**.
 
-The simplest linear model is:
+We cover:
+- Simple regression (by hand + `lm()`).
+- Multiple regression (diagnostics, collinearity, inference).
+- Regression with factors (dummy coding, reference levels).
+- Stepwise regression (AIC) + **out-of-sample validation**.
 
-\[
-y = \beta_0 + \beta_1 x + \epsilon
-\]
+***
 
-where:
+## 1) Simple linear regression
 
-- \(y\) is the dependent (target) variable,
-- \(x\) is the independent (predictor) variable,
-- \(\epsilon\) is a random error term,
-- \(\beta_0\) is the intercept,
-- \(\beta_1\) is the slope.
+Model:
+$$
+y_i = \beta_0 + \beta_1 x_i + \epsilon_i, \quad \mathbb{E}[\epsilon_i \mid x_i] = 0
+$$
 
-If \(x = 0\), the expected value of \(y\) equals \(\beta_0\). The slope \(\beta_1\) tells how much \(y\) is expected to change for a one-unit increase in \(x\).
-
-To estimate \(\beta_0\) and \(\beta_1\), Ordinary Least Squares (OLS) chooses the line that minimizes the sum of squared residuals (vertical distances between observed and fitted values).
-
-## Scatterplot
-
-We will use a small dataset (Average Heights and Weights for American Women). The dataset has 15 observations, and the goal is to see whether height is positively associated with weight.
+### Data + scatterplot
 
 ```{r}
 library(ggplot2)
 library(readr)
 
-path <- "raw_data/women.csv"
-
-women_df <- read_csv(path, show_col_types = FALSE)
+women_df <- read_csv("raw_data/women.csv", show_col_types = FALSE)
 
 ggplot(women_df, aes(x = height, y = weight)) +
-  geom_point() +
-  theme_classic()
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", se = TRUE, color = "steelblue") +
+  theme_classic() +
+  labs(title = "Women dataset: height vs weight")
 ```
 
-The scatterplot suggests that weight tends to increase as height increases.
+### OLS estimates (by hand)
 
-## Least squares estimates (by hand)
-
-In simple linear regression, the slope can be written as:
-
-\[
-\hat{\beta}_1 = \frac{\text{Cov}(x,y)}{\text{Var}(x)}
-\]
-
-and the intercept as:
-
-\[
+In simple regression:
+$$
+\hat{\beta}_1 = \frac{\text{Cov}(x,y)}{\text{Var}(x)}, \quad
 \hat{\beta}_0 = \bar{y} - \hat{\beta}_1 \bar{x}
-\]
-
-You can compute these values in R:
+$$
 
 ```{r}
 beta_1 <- cov(women_df$height, women_df$weight) / var(women_df$height)
-beta_1
-```
-
-```{r}
 beta_0 <- mean(women_df$weight) - beta_1 * mean(women_df$height)
-beta_0
+c(beta_0 = beta_0, beta_1 = beta_1)
 ```
 
-This manual approach is useful to understand the math, but in practice you should use `lm()`.
-
-## Simple regression with lm()
+### Fit with `lm()` + interpretation
 
 ```{r}
 fit_simple <- lm(weight ~ height, data = women_df)
 summary(fit_simple)
-```
-
-```{r}
 coef(fit_simple)
 ```
 
-# Multiple linear regression
+### Confidence interval vs prediction interval
 
-Most real problems involve more than one predictor. A multiple linear regression model is:
+A confidence interval targets the **mean response** $$ \mathbb{E}[Y \mid X=x] $$, while a prediction interval targets a **new observation** $$Y_{\text{new}}$$, and is therefore typically wider.
 
-\[
-y = \beta_0 + \beta_1 x_1 + \cdots + \beta_k x_k + \epsilon
-\]
+```{r}
+new_h <- data.frame(height = c(60, 65, 70))
 
-In matrix form:
+pred_ci <- predict(fit_simple, newdata = new_h, interval = "confidence", level = 0.95)
+pred_pi <- predict(fit_simple, newdata = new_h, interval = "prediction", level = 0.95)
 
-\[
-Y = X\beta + \epsilon
-\]
+cbind(new_h, round(pred_ci, 2), round(pred_pi, 2))
+```
 
-OLS estimates \(\beta\) by minimizing the sum of squared residuals; the closed-form solution is:
+***
 
-\[
-\hat{\beta}=(X^TX)^{-1}X^Ty
-\]
+## 2) Multiple linear regression
 
-We will use the `mtcars` dataset and predict fuel efficiency (`mpg`) using continuous predictors.
+Model:
+$$
+y = \beta_0 + \beta_1 x_1 + \cdots + \beta_k x_k + \epsilon,
+\quad \hat{\beta} = (X^T X)^{-1} X^T y
+$$
 
-## Continuous variables only
+We use `mtcars` to predict `mpg`.
 
-We start by dropping categorical/binary variables (`am`, `vs`, `cyl`, `gear`, `carb`) and keep only continuous predictors.
+### Fit a baseline model
 
 ```{r}
 library(dplyr)
 
 cars_cont <- mtcars |>
-  select(-am, -vs, -cyl, -gear, -carb)
+  select(mpg, disp, hp, drat, wt)
 
-glimpse(cars_cont)
-```
-
-Fit a multiple regression model:
-
-```{r}
 fit_multi <- lm(mpg ~ disp + hp + drat + wt, data = cars_cont)
 summary(fit_multi)
-```
-
-You can also run an ANOVA table for the fitted model:
-
-```{r}
 anova(fit_multi)
 ```
 
-## Diagnostic plots
+### Diagnostics (linearity, normality, leverage)
 
 ```{r}
 par(mfrow = c(2, 2))
@@ -150,45 +117,72 @@ plot(fit_multi)
 par(mfrow = c(1, 1))
 ```
 
-The `lm()` object also stores useful components:
+### Influential points (Cook’s distance)
 
-- `fit_multi$coefficients`
-- `fit_multi$residuals`
-- `fit_multi$fitted.values`
+Cook’s distance measures how much the fitted model would change if an observation were removed, combining residual size and leverage.
 
-# Regression with factors
+```{r}
+cd <- cooks.distance(fit_multi)
 
-Adding categorical predictors is straightforward, but it is important to ensure they are stored as factors.
+plot(cd, type = "h", main = "Cook's distance (mtcars)", ylab = "Cook's D")
+abline(h = 0, col = "grey60")
+
+# Show the most influential points
+head(sort(cd, decreasing = TRUE), 5)
+```
+
+### Multicollinearity (VIF)
+
+```{r}
+# install.packages("car")  # if needed
+library(car)
+vif(fit_multi)
+```
+
+Rule of thumb: VIF much larger than 5–10 suggests strong collinearity (unstable coefficients).
+
+### Heteroscedasticity + robust SE (optional)
+
+```{r}
+# install.packages(c("lmtest", "sandwich"))  # if needed
+library(lmtest)
+library(sandwich)
+
+bptest(fit_multi)  # Breusch–Pagan test
+
+# Robust (HC) standard errors
+coeftest(fit_multi, vcov. = vcovHC(fit_multi, type = "HC1"))
+```
+
+***
+
+## 3) Regression with factors (dummy coding)
+
+With factors, `lm()` uses a reference level and estimates coefficients as differences relative to that baseline.
 
 ```{r}
 cars_all <- mtcars |>
-  mutate(
-    across(c(cyl, vs, am, gear, carb), as.factor)
-  )
+  mutate(across(c(cyl, vs, am, gear, carb), as.factor))
 
 fit_factors <- lm(mpg ~ ., data = cars_all)
 summary(fit_factors)
+
+# Inspect the design matrix for factor coding
+mm <- model.matrix(mpg ~ ., data = cars_all)
+dim(mm)
+head(mm[, 1:8])
 ```
 
-R uses the first factor level as the reference group, and the other coefficients represent differences relative to that baseline.
+Tip: you can change the baseline level via `relevel()` to match the interpretation you want.
 
-# Stepwise regression (model selection)
+***
 
-Stepwise regression is an automated procedure that adds/removes predictors to optimize a criterion (often AIC). In base R, this is done with `stats::step()` which uses AIC by default.
+## 4) Stepwise regression (AIC) + validation
 
-This approach is popular for quick exploration, but it can be unstable and should be used cautiously; it is mainly included here for illustration.
+AIC is defined as $$ \mathrm{AIC} = 2k - 2\ln(\hat{L}) $$, i.e., a trade-off between fit and complexity.
+Stepwise procedures can be useful for exploration, but they can be unstable and optimistic; good practice is to evaluate performance out-of-sample or via cross-validation.
 
-## Correlation overview (optional)
-
-```{r}
-library(GGally)
-
-ggscatmat(cars_cont, columns = 1:ncol(cars_cont))
-```
-
-## Stepwise selection with base R (AIC)
-
-We define a “full” model and a “null” (intercept-only) model, then run stepwise search.
+### Stepwise (AIC) in base R
 
 ```{r}
 fit_full <- lm(mpg ~ ., data = cars_cont)
@@ -202,35 +196,58 @@ fit_step_aic <- step(
 )
 
 summary(fit_step_aic)
+AIC(fit_full, fit_step_aic, fit_null)
 ```
 
-## Stepwise / all-subsets with olsrr (optional)
+### Out-of-sample check (simple train/test RMSE)
 
-The `olsrr` package can fit many subsets and compare them. For example, `ols_step_all_possible()` fits all combinations up to a chosen order.
+```{r}
+set.seed(123)
+n <- nrow(cars_cont)
+idx_train <- sample.int(n, size = floor(0.8 * n))
 
-```{r, eval=FALSE}
-library(olsrr)
+train_df <- cars_cont[idx_train, ]
+test_df  <- cars_cont[-idx_train, ]
 
-test_all <- ols_step_all_possible(fit_full)
-plot(test_all)
+m_full <- lm(mpg ~ ., data = train_df)
+m_step <- step(lm(mpg ~ 1, data = train_df),
+               scope = list(lower = mpg ~ 1, upper = mpg ~ .),
+               direction = "both",
+               trace = 0)
 
-# Example (both-direction stepwise based on p-values)
-ols_step_both_p(fit_full, pent = 0.1, prem = 0.3, details = FALSE)
+rmse <- function(y, yhat) sqrt(mean((y - yhat)^2))
+
+pred_full <- predict(m_full, newdata = test_df)
+pred_step <- predict(m_step, newdata = test_df)
+
+c(
+  RMSE_full = rmse(test_df$mpg, pred_full),
+  RMSE_step = rmse(test_df$mpg, pred_step)
+)
 ```
 
-# Summary
+***
+
+## 5) Summary table
 
 ```{r, echo=FALSE}
 knitr::kable(
   data.frame(
-    Topic = c("Simple linear regression", "Multiple regression", "Factors in regression", "Stepwise (AIC)"),
-    Main_function = c("lm()", "lm()", "lm()", "stats::step()"),
+    Topic = c("Simple regression", "Multiple regression", "Factors", "Model selection"),
+    Main_function = c("lm()", "lm()", "lm()", "step() + validation"),
+    Key_outputs = c(
+      "Slope/intercept, CI/PI, residuals",
+      "t-tests, R^2, diagnostics, VIF, Cook's D",
+      "Reference level, dummy coding, interpretation",
+      "AIC trade-off + out-of-sample RMSE/CV"
+    ),
     Notes = c(
-      "Understand slope/intercept; use lm() in practice",
-      "Multiple predictors; check diagnostics",
-      "Convert categorical variables with as.factor()",
-      "Automated model selection using AIC"
+      "Use PI for individual predictions",
+      "Check assumptions; consider robust SE if needed",
+      "Relevel factors to control baseline",
+      "Stepwise is exploratory; always validate"
     )
   )
 )
 ```
+
