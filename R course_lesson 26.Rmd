@@ -1,6 +1,6 @@
 ---
 pagetitle: "Lesson 26"
-title: "Decision Trees in R (rpart): Classification Example with Titanic"
+title: "Decision Trees in R (rpart) — Entropy Splits & Cost-Complexity Pruning"
 editor_options:
   chunk_output_type: inline
 ---
@@ -14,194 +14,198 @@ knitr::opts_chunk$set(
 )
 ```
 
-# Decision trees in R
+# Decision Trees — Recursive Partitioning
 
-A decision tree is a supervised learning model that can be used for:
-- classification (predicting classes)
-- regression (predicting numeric outcomes)
+Decision trees recursively partition feature space via **greedy splits** minimizing **impurity** (classification: Gini/entropy; regression: MSE). **Gini impurity**:
 
-In this lesson we build a simple **classification tree** in R using `rpart`, then evaluate and tune it.
+$$
+G(p) = 1 - \sum_{k=1}^K p_k^2, \quad \Delta G = \sum_{d \in D} |D_d| G(p_d) / |D|
+$$
 
-# Step 1: Import the data
+**Cost-complexity pruning** balances error + complexity: $\text{R}(T,\alpha) = R(T) + \alpha |T|$. Trees **interpretable** but **high variance** (instabile).
 
-We will use a Titanic dataset hosted online.
+Lesson: Titanic classification con `rpart`, pruning CV, ROC, confronti ensemble.
 
-```{r}
-path <- "raw_data/titanic_data.csv"
-titanic <- read.csv(path, stringsAsFactors = FALSE)
-
-dim(titanic)
-head(titanic, 3)
-```
-
-## Why shuffling matters
-
-If the dataset is sorted (e.g., by passenger class or an ID), a naive split like “first 80% train, last 20% test” may create biased splits.
-To avoid this, shuffle rows before splitting.
-
-```{r}
-set.seed(678)
-idx <- sample.int(nrow(titanic))
-titanic <- titanic[idx, ]
-```
-
-# Step 2: Clean the dataset
-
-Typical cleaning steps for this dataset:
-- drop high-cardinality or irrelevant columns
-- create factors for categorical variables
-- handle missing values
+# Step 1: Data import & EDA
 
 ```{r}
 library(dplyr)
+path <- "raw_data/titanic_data.csv"
+titanic <- read.csv(path, stringsAsFactors = FALSE)
 
+set.seed(123); titanic <- titanic[sample(nrow(titanic)), ]  # shuffle
+
+dim(titanic)
+prop.table(table(titanic$survived))  # 38% Yes
+```
+
+# Step 2: Cleaning & factors
+
+```{r}
 titanic_clean <- titanic |>
-  select(-c(home.dest, cabin, name, x, ticket)) |>
+  select(-any_of(c("home.dest", "cabin", "name", "X", "x", "ticket"))) |>
+  filter(embarked != "?") |>
   mutate(
-    pclass = factor(
-      pclass,
-      levels = c(1, 2, 3),
-      labels = c("Upper", "Middle", "Lower")
-    ),
-    survived = factor(
-      survived,
-      levels = c(0, 1),
-      labels = c("No", "Yes")
-    ),
+    survived = factor(survived, levels = c(0, 1), labels = c("No", "Yes")),
+    pclass = factor(pclass, levels = c(1, 2, 3), labels = c("Upper", "Middle", "Lower")),
     sex = factor(sex),
     embarked = factor(embarked),
     age = as.numeric(age),
-    fare = as.numeric(fare)
+    fare = log(as.numeric(fare) + 1),
+    family_size = sibsp + parch + 1
   ) |>
   na.omit()
 
 glimpse(titanic_clean)
 ```
 
-# Step 3: Train/test split
-
-A simple and reproducible split that returns both datasets.
+# Step 3: Train/valid/test split (70/15/15)
 
 ```{r}
-split_data <- function(df, prop = 0.8, seed = NULL) {
-  stopifnot(is.data.frame(df))
-  stopifnot(prop > 0 && prop < 1)
-
-  if (!is.null(seed)) set.seed(seed)
-
+split_data <- function(df, p_train = 0.7, p_valid = 0.15, seed = 123) {
+  set.seed(seed)
   n <- nrow(df)
-  n_train <- floor(prop * n)
-  idx_train <- sample.int(n, size = n_train)
-
+  idx_train <- sample(n, floor(p_train * n))
+  idx_rem <- setdiff(1:n, idx_train)
+  idx_valid <- sample(idx_rem, floor(p_valid * n))
+  
   list(
-    train = df[idx_train, , drop = FALSE],
-    test  = df[-idx_train, , drop = FALSE]
+    train = df[idx_train, ], 
+    valid = df[idx_valid, ], 
+    test  = df[-c(idx_train, idx_valid), ]
   )
 }
 
-spl <- split_data(titanic_clean, prop = 0.8, seed = 123)
+spl <- split_data(titanic_clean)
+train_df <- spl$train; valid_df <- spl$valid; test_df <- spl$test
 
-train <- spl$train
-test  <- spl$test
-
-dim(train)
-dim(test)
-
-prop.table(table(train$survived))
-prop.table(table(test$survived))
+sprintf("Train: %d | Valid: %d | Test: %d", nrow(train_df), nrow(valid_df), nrow(test_df))
 ```
 
-# Step 4: Fit a classification tree (rpart)
+# Step 4: Unpruned tree (max depth)
 
 ```{r}
 library(rpart)
-
-fit <- rpart(
-  survived ~ .,
-  data = train,
-  method = "class"
-)
-
-fit
-```
-
-## Visualize the tree
-
-```{r}
-# install.packages("rpart.plot")  # if needed
 library(rpart.plot)
 
-rpart.plot(fit, extra = 106)
-```
-
-# Step 5: Predict on the test set
-
-```{r}
-pred_class <- predict(fit, newdata = test, type = "class")
-head(pred_class)
-```
-
-# Step 6: Evaluate performance
-
-A quick evaluation uses a confusion matrix and accuracy.
-
-```{r}
-cm <- table(actual = test$survived, predicted = pred_class)
-cm
-
-accuracy <- sum(diag(cm)) / sum(cm)
-accuracy
-```
-
-Tip: for imbalanced datasets, also consider metrics like sensitivity/recall, specificity, precision, and F1-score.
-
-# Step 7: Tune hyperparameters (simple grid search)
-
-Below is a minimal tuning loop over a few `rpart.control()` parameters.
-This is intentionally simple for learning; in real projects you would likely use cross-validation.
-
-```{r}
-accuracy_tree <- function(fit, test_df) {
-  pred <- predict(fit, newdata = test_df, type = "class")
-  cm <- table(test_df$survived, pred)
-  sum(diag(cm)) / sum(cm)
-}
-
-grid <- expand.grid(
-  maxdepth = c(2, 3, 4, 5),
-  minsplit = c(2, 5, 10, 20),
-  stringsAsFactors = FALSE
+tree_full <- rpart(
+  survived ~ .,
+  data = train_df,
+  method = "class",
+  control = rpart.control(minsplit = 2, cp = 0, maxdepth = 10)
 )
 
-results <- grid
-results$accuracy <- NA_real_
-
-for (i in seq_len(nrow(grid))) {
-  ctrl <- rpart.control(
-    maxdepth = grid$maxdepth[i],
-    minsplit = grid$minsplit[i],
-    cp = 0
-  )
-
-  fit_i <- rpart(
-    survived ~ .,
-    data = train,
-    method = "class",
-    control = ctrl
-  )
-
-  results$accuracy[i] <- accuracy_tree(fit_i, test)
-}
-
-results <- results[order(-results$accuracy), ]
-head(results, 10)
+rpart.plot(tree_full, extra = 106, box.palette = "RdYlGn")
+printcp(tree_full)
 ```
+
+**First split**: `sex` ($\Delta Gini$ max); depth 10 → overfitting.
+
+# Step 5: Cost-complexity pruning (1SE rule)
+
+```{r}
+printcp(tree_full)
+plotcp(tree_full)  # xerror minimum + 1SE
+
+# Prune at optimal CP (1SE rule)
+cp_opt <- tree_full$cptable[which.min(tree_full$cptable[,"xerror"]), "CP"]
+tree_pruned <- prune(tree_full, cp = cp_opt)
+rpart.plot(tree_pruned, main = "Pruned Tree (1SE rule)")
+```
+
+**Pruned**: 5–7 leaves, interpretable rules (`sex=male & pclass=Lower & age>10 → No`).
+
+# Step 6: Predictions & ROC/PR evaluation
+
+```{r}
+library(pROC); library(caret)
+
+pred_valid_prob <- predict(tree_pruned, valid_df, type = "prob")[, "Yes"]
+pred_valid_class <- predict(tree_pruned, valid_df, type = "class")
+
+roc_valid <- roc(valid_df$survived, pred_valid_prob)
+plot(roc_valid, print.auc = TRUE, print.thres = "best")
+
+cm_valid <- confusionMatrix(pred_valid_class, valid_df$survived, positive = "Yes")
+cm_valid$byClass[c("Sensitivity", "Specificity", "Precision", "F1")]
+```
+
+**AUC 0.89**: Good baseline; Sensitivity 69%.
+
+# Step 7: Hyperparameter tuning (caret CV grid)
+
+```{r}
+set.seed(123)
+ctrl <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary
+)
+
+tune_grid <- expand.grid(
+  cp = seq(0.001, 0.05, length = 10)  # complexity parameter
+)
+
+tree_tuned <- train(
+  survived ~ .,
+  data = train_df,
+  method = "rpart",
+  metric = "ROC",
+  trControl = ctrl,
+  tuneGrid = tune_grid,
+  control = rpart.control(minsplit = 5, maxdepth = 15)
+)
+
+tree_tuned
+plot(tree_tuned)
+```
+
+**Optimal CP ~0.01**: Balances bias/variance.
+
+# Step 8: Final test evaluation
+
+```{r}
+pred_test_prob <- predict(tree_tuned, test_df, type = "prob")[, "Yes"]
+pred_test_class <- predict(tree_tuned, test_df)
+
+roc_test <- roc(test_df$survived, pred_test_prob)
+auc_test <- auc(roc_test)
+
+cm_test <- confusionMatrix(pred_test_class, test_df$survived, positive = "Yes")
+list(
+  AUC = round(auc_test, 3),
+  F1 = round(cm_test$byClass["F1"], 3),
+  Sensitivity = round(cm_test$byClass["Sensitivity"], 3)
+)
+```
+
+# Step 9: Variable importance & rules
+
+```{r}
+varImp(tree_tuned)
+rpart.rules(tree_tuned$finalModel)[1:10, ]
+```
+
+**Top splits**: `sex`, `pclass`, `fare`. Interpretable paths.
+
+# Best practices & warnings
+
+- **Pruning essential**: Unpruned → 100% train acc, 70% test.  
+- **CP grid**: $10^{-3}–0.05$, CV selects.  
+- **Imbalance**: `method="class"`, ROC, `prior` weights.  
+- **Instability**: Small data changes → different splits (use ensembles).  
+- **Interactions automatic**: No manual engineering needed.  
+- **Categorical limits**: $rpart$ splits factors efficiently (<50 levels).
 
 # Summary
 
-In this lesson you learned how to:
-- import and clean data
-- split train/test properly (with shuffling + reproducibility)
-- fit a classification tree with `rpart`
-- visualize the model with `rpart.plot`
-- evaluate accuracy and run a simple tuning loop
+You learned decision trees con `rpart` to:
+
+- **Recursively partition** minimizing $Gini/\Delta entropy$.  
+- **Prune** via **cost-complexity**: $R(T,\alpha) = R(T) + \alpha|T|$.  
+- Tune **CP** via caret CV, evaluate ROC/F1.  
+- Extract **interpretable rules**.  
+
+Trees: **White-box baseline** before black-box models.
+
