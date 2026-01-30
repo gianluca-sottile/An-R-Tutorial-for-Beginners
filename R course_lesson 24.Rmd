@@ -1,6 +1,6 @@
 ---
-title: "GLM in R: Generalized Linear Model (with Example)"
-pagetitle: "Lesson 24"
+pagetitle: "Lesson 26"
+title: "Decision Trees in R (rpart) — Entropy Splits & Cost-Complexity Pruning"
 editor_options:
   chunk_output_type: inline
 ---
@@ -14,376 +14,198 @@ knitr::opts_chunk$set(
 )
 ```
 
-# What is logistic regression?
+# Decision Trees — Recursive Partitioning
 
-Logistic regression is used for **classification** when the target is binary (e.g., 0/1). Instead of predicting a continuous value like linear regression, it models the probability that an observation belongs to the positive class.
+Decision trees recursively partition feature space via **greedy splits** minimizing **impurity** (classification: Gini/entropy; regression: MSE). **Gini impurity**:
 
-Imagine you want to predict whether a loan is rejected or approved based on an applicant’s attributes. We can encode the outcome as \(y \in \{0, 1\}\), where \(y=0\) means “rejected” and \(y=1\) means “approved”.
+$$
+G(p) = 1 - \sum_{k=1}^K p_k^2, \quad \Delta G = \sum_{d \in D} |D_d| G(p_d) / |D|
+$$
 
-A logistic regression differs from linear regression in two key ways:
+**Cost-complexity pruning** balances error + complexity: $\text{R}(T,\alpha) = R(T) + \alpha |T|$. Trees **interpretable** but **high variance** (instabile).
 
-- The dependent variable is binary.
-- The model output is transformed through a link function (the **sigmoid**), which maps any real number to a value between 0 and 1:
-\[
-\sigma(t)=\frac{1}{1+\exp(-t)}
-\]
+Lesson: Titanic classification con `rpart`, pruning CV, ROC, confronti ensemble.
 
-The sigmoid returns a probability. To obtain a class label, a common approach is to set a decision threshold (e.g., 0.5): values above the threshold are classified as 1, and values below as 0.
-
-# How to fit a GLM (logistic) in R
-
-We will use the Adult dataset to illustrate logistic regression. The goal is to predict whether an individual’s annual income exceeds 50,000 USD.
-
-## Import data
+# Step 1: Data import & EDA
 
 ```{r}
 library(dplyr)
-library(readr)
+path <- "raw_data/titanic_data.csv"
+titanic <- read.csv(path, stringsAsFactors = FALSE)
 
-data_adult <- read_csv(
-  "raw_data/adult.csv",
-  name_repair = "universal",
-  show_col_types = FALSE
-) |>
-  # Make the import robust to possible "X"/"x" index columns
-  select(-any_of(c("X", "x"))) |>
-  mutate(across(where(is.character), as.factor))
+set.seed(123); titanic <- titanic[sample(nrow(titanic)), ]  # shuffle
 
-glimpse(data_adult)
+dim(titanic)
+prop.table(table(titanic$survived))  # 38% Yes
 ```
 
-We will proceed as follows:
-
-- Step 1: Inspect numeric variables
-- Step 2: Inspect categorical variables
-- Step 3: Feature engineering
-- Step 4: Exploratory summaries
-- Step 5: Train/test split
-- Step 6: Fit the model
-- Step 7: Evaluate performance
-- Step 8: Improve the model
-
-Your task is to predict which individuals will have an income above 50K.
-
-## Step 1) Inspect numeric variables
+# Step 2: Cleaning & factors
 
 ```{r}
-continuous <- data_adult |>
-  select(where(is.numeric))
-
-summary(continuous)
-```
-
-From the summary, some variables are on very different scales, and `hours.per.week` can contain high values (potential outliers).
-
-### 1) Plot the distribution of hours.per.week
-
-```{r}
-library(ggplot2)
-
-ggplot(data_adult, aes(x = hours.per.week)) +
-  geom_histogram(bins = 40, fill = "#4AA4DE", color = "white", alpha = 0.85) +
-  labs(x = "Hours per week", y = "Count") +
-  theme_classic()
-```
-
-### 2) Cap extreme values (optional) and standardize
-
-A simple way to reduce the influence of extreme values is to remove the top 1% of `hours.per.week` (99th percentile).
-
-```{r}
-top_1_percent <- quantile(data_adult$hours.per.week, 0.99, na.rm = TRUE)
-top_1_percent
-```
-
-```{r}
-data_adult_drop <- data_adult |>
-  filter(hours.per.week < top_1_percent)
-
-dim(data_adult_drop)
-```
-
-Now standardize numeric variables (z-scores).  
-Note: this lesson standardizes before splitting for simplicity; in production, scaling parameters should be learned on the training set and applied to the test set.
-
-```{r}
-data_adult_rescale <- data_adult_drop |>
-  mutate(across(where(is.numeric), ~ as.numeric(scale(.x))))
-
-glimpse(data_adult_rescale)
-```
-
-## Step 2) Inspect categorical variables
-
-This step has two objectives:
-
-- Check the number of levels in each categorical column.
-- Identify candidates for level recoding.
-
-```{r}
-factor_df <- data_adult_rescale |>
-  select(where(is.factor))
-
-ncol(factor_df)
-```
-
-Instead of generating one plot per variable with `lapply()`, a tidy approach is to reshape to long format and facet the bar charts.
-
-```{r}
-library(tidyr)
-
-factor_long <- factor_df |>
-  pivot_longer(cols = everything(), names_to = "variable", values_to = "level")
-
-ggplot(factor_long, aes(x = level)) +
-  geom_bar(fill = "#1F65CC", alpha = 0.9) +
-  facet_wrap(~ variable, scales = "free_x") +
-  theme_classic() +
-  theme(
-    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
-    strip.text = element_text(face = "bold")
-  ) +
-  labs(x = NULL, y = "Count")
-```
-
-## Step 3) Feature engineering
-
-### Recode education
-
-The `education` variable often has many levels. A common approach is to group them into fewer, more interpretable categories.
-
-```{r}
-recast_data <- data_adult_rescale |>
+titanic_clean <- titanic |>
+  select(-any_of(c("home.dest", "cabin", "name", "X", "x", "ticket"))) |>
+  filter(embarked != "?") |>
   mutate(
-    education = case_when(
-      education %in% c("Preschool", "1st-4th", "5th-6th", "7th-8th", "9th",
-                       "10th", "11th", "12th") ~ "Dropout",
-      education == "HS-grad" ~ "HighGrad",
-      education %in% c("Some-college", "Assoc-acdm", "Assoc-voc") ~ "Community",
-      education == "Bachelors" ~ "Bachelors",
-      education %in% c("Masters", "Prof-school") ~ "Master",
-      education == "Doctorate" ~ "PhD",
-      TRUE ~ as.character(education)
-    ) |>
-      factor(levels = c("Dropout", "HighGrad", "Community", "Bachelors", "Master", "PhD"))
-  )
-```
-
-Check how `educational.num` relates to the recoded groups:
-
-```{r}
-recast_data |>
-  dplyr::group_by(education) |>
-  dplyr::summarize(
-    average_educ_year = mean(educational.num, na.rm = TRUE),
-    count = n(),
-    .groups = "drop"
+    survived = factor(survived, levels = c(0, 1), labels = c("No", "Yes")),
+    pclass = factor(pclass, levels = c(1, 2, 3), labels = c("Upper", "Middle", "Lower")),
+    sex = factor(sex),
+    embarked = factor(embarked),
+    age = as.numeric(age),
+    fare = log(as.numeric(fare) + 1),
+    family_size = sibsp + parch + 1
   ) |>
-  dplyr::arrange(average_educ_year)
+  na.omit()
+
+glimpse(titanic_clean)
 ```
 
-### Recode marital.status
+# Step 3: Train/valid/test split (70/15/15)
 
 ```{r}
-recast_data <- recast_data |>
-  mutate(
-    marital.status = case_when(
-      marital.status %in% c("Never-married", "Married-spouse-absent") ~ "Not_married",
-      marital.status %in% c("Married-AF-spouse", "Married-civ-spouse") ~ "Married",
-      marital.status %in% c("Separated", "Divorced") ~ "Separated",
-      marital.status == "Widowed" ~ "Widowed",
-      TRUE ~ as.character(marital.status)
-    ) |>
-      factor()
+split_data <- function(df, p_train = 0.7, p_valid = 0.15, seed = 123) {
+  set.seed(seed)
+  n <- nrow(df)
+  idx_train <- sample(n, floor(p_train * n))
+  idx_rem <- setdiff(1:n, idx_train)
+  idx_valid <- sample(idx_rem, floor(p_valid * n))
+  
+  list(
+    train = df[idx_train, ], 
+    valid = df[idx_valid, ], 
+    test  = df[-c(idx_train, idx_valid), ]
   )
-
-table(recast_data$marital.status)
-```
-
-## Step 4) Exploratory summaries
-
-### Income distribution by gender
-
-```{r}
-ggplot(recast_data, aes(x = gender, fill = income)) +
-  geom_bar(position = "fill") +
-  theme_classic() +
-  labs(y = "Proportion")
-```
-
-### Income distribution by race
-
-```{r}
-ggplot(recast_data, aes(x = race, fill = income)) +
-  geom_bar(position = "fill") +
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
-  labs(y = "Proportion")
-```
-
-### Hours per week by gender
-
-```{r}
-ggplot(recast_data, aes(x = gender, y = hours.per.week)) +
-  geom_boxplot() +
-  stat_summary(fun = mean, geom = "point", size = 3, color = "steelblue") +
-  theme_classic()
-```
-
-### Hours per week density by education
-
-```{r}
-ggplot(recast_data, aes(x = hours.per.week, color = education)) +
-  geom_density(alpha = 0.25) +
-  theme_classic()
-```
-
-A quick one-way ANOVA can test differences in average working hours across education groups:
-
-```{r}
-anova_fit <- aov(hours.per.week ~ education, data = recast_data)
-summary(anova_fit)
-```
-
-### Non-linearity check: age vs hours.per.week
-
-```{r}
-ggplot(recast_data, aes(x = age, y = hours.per.week, color = income)) +
-  geom_point(size = 0.5, alpha = 0.6) +
-  geom_smooth(method = "lm", formula = y ~ poly(x, 2), se = TRUE) +
-  theme_classic()
-```
-
-### Correlation heatmap (quick & approximate)
-
-This converts factors to integer codes to compute a Spearman correlation matrix. Treat this as exploratory only.
-
-```{r}
-library(GGally)
-
-corr_df <- recast_data |>
-  mutate(across(where(is.factor), ~ as.integer(.x)))
-
-ggcorr(
-  corr_df,
-  method = c("pairwise", "spearman"),
-  nbreaks = 6,
-  hjust = 0.8,
-  label = TRUE,
-  label_size = 3,
-  color = "grey50"
-)
-```
-
-## Step 5) Train/test split
-
-A supervised learning task requires splitting into train and test sets. Here we do a random split (80/20).
-
-```{r}
-set.seed(1234)
-
-n <- nrow(recast_data)
-idx_train <- sample.int(n, size = floor(0.8 * n))
-
-data_train <- recast_data[idx_train, ]
-data_test  <- recast_data[-idx_train, ]
-
-dim(data_train)
-dim(data_test)
-```
-
-## Step 6) Fit the model (GLM logistic regression)
-
-```{r}
-logit <- glm(income ~ ., data = data_train, family = binomial(link = "logit"))
-summary(logit)
-```
-
-You can access metrics directly from the fitted model. For example:
-
-```{r}
-logit$aic
-```
-
-## Step 7) Evaluate performance
-
-### Confusion matrix (threshold = 0.5)
-
-```{r}
-prob <- predict(logit, newdata = data_test, type = "response")
-
-# Make predictions as factor with same levels as the truth
-pred_class <- ifelse(prob > 0.5, ">50K", "<=50K") |>
-  factor(levels = levels(data_test$income))
-
-cm <- table(truth = data_test$income, estimate = pred_class)
-cm
-```
-
-### Accuracy, precision, recall, F1
-
-```{r}
-metrics_from_cm <- function(cm, positive = ">50K", negative = "<=50K") {
-  tp <- cm[positive, positive]
-  tn <- cm[negative, negative]
-  fp <- cm[negative, positive]
-  fn <- cm[positive, negative]
-
-  accuracy  <- (tp + tn) / sum(cm)
-  precision <- tp / (tp + fp)
-  recall    <- tp / (tp + fn)
-  f1        <- 2 * (precision * recall) / (precision + recall)
-
-  c(accuracy = accuracy, precision = precision, recall = recall, f1 = f1)
 }
 
-metrics_from_cm(cm)
+spl <- split_data(titanic_clean)
+train_df <- spl$train; valid_df <- spl$valid; test_df <- spl$test
+
+sprintf("Train: %d | Valid: %d | Test: %d", nrow(train_df), nrow(valid_df), nrow(test_df))
 ```
 
-### ROC curve
-
-To plot the ROC curve, you can use the `ROCR` package.
+# Step 4: Unpruned tree (max depth)
 
 ```{r}
-library(ROCR)
+library(rpart)
+library(rpart.plot)
 
-rocr_pred <- prediction(prob, data_test$income)
-rocr_perf <- performance(rocr_pred, "tpr", "fpr")
-
-plot(rocr_perf, colorize = TRUE, text.adj = c(-0.2, 1.7))
-abline(a = 0, b = 1, lty = 2, col = "grey60")
-```
-
-## Step 8) Improve the model (interaction terms + model comparison)
-
-A simple improvement is to add interaction terms (e.g., `age:hours.per.week` and `gender:hours.per.week`) and compare models with a likelihood ratio test.
-
-```{r}
-logit_2 <- glm(
-  income ~ . + age:hours.per.week + gender:hours.per.week,
-  data = data_train,
-  family = binomial(link = "logit")
+tree_full <- rpart(
+  survived ~ .,
+  data = train_df,
+  method = "class",
+  control = rpart.control(minsplit = 2, cp = 0, maxdepth = 10)
 )
 
-anova(logit, logit_2, test = "Chisq")
+rpart.plot(tree_full, extra = 106, box.palette = "RdYlGn")
+printcp(tree_full)
 ```
 
-Now compare performance on the test set:
+**First split**: `sex` ($\Delta Gini$ max); depth 10 → overfitting.
+
+# Step 5: Cost-complexity pruning (1SE rule)
 
 ```{r}
-prob_2 <- predict(logit_2, newdata = data_test, type = "response")
+printcp(tree_full)
+plotcp(tree_full)  # xerror minimum + 1SE
 
-pred_class_2 <- ifelse(prob_2 > 0.5, ">50K", "<=50K") |>
-  factor(levels = levels(data_test$income))
-
-cm_2 <- table(truth = data_test$income, estimate = pred_class_2)
-cm_2
-
-metrics_from_cm(cm_2)
+# Prune at optimal CP (1SE rule)
+cp_opt <- tree_full$cptable[which.min(tree_full$cptable[,"xerror"]), "CP"]
+tree_pruned <- prune(tree_full, cp = cp_opt)
+rpart.plot(tree_pruned, main = "Pruned Tree (1SE rule)")
 ```
+
+**Pruned**: 5–7 leaves, interpretable rules (`sex=male & pclass=Lower & age>10 → No`).
+
+# Step 6: Predictions & ROC/PR evaluation
+
+```{r}
+library(pROC); library(caret)
+
+pred_valid_prob <- predict(tree_pruned, valid_df, type = "prob")[, "Yes"]
+pred_valid_class <- predict(tree_pruned, valid_df, type = "class")
+
+roc_valid <- roc(valid_df$survived, pred_valid_prob)
+plot(roc_valid, print.auc = TRUE, print.thres = "best")
+
+cm_valid <- confusionMatrix(pred_valid_class, valid_df$survived, positive = "Yes")
+cm_valid$byClass[c("Sensitivity", "Specificity", "Precision", "F1")]
+```
+
+**AUC 0.89**: Good baseline; Sensitivity 69%.
+
+# Step 7: Hyperparameter tuning (caret CV grid)
+
+```{r}
+set.seed(123)
+ctrl <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary
+)
+
+tune_grid <- expand.grid(
+  cp = seq(0.001, 0.05, length = 10)  # complexity parameter
+)
+
+tree_tuned <- train(
+  survived ~ .,
+  data = train_df,
+  method = "rpart",
+  metric = "ROC",
+  trControl = ctrl,
+  tuneGrid = tune_grid,
+  control = rpart.control(minsplit = 5, maxdepth = 15)
+)
+
+tree_tuned
+plot(tree_tuned)
+```
+
+**Optimal CP ~0.01**: Balances bias/variance.
+
+# Step 8: Final test evaluation
+
+```{r}
+pred_test_prob <- predict(tree_tuned, test_df, type = "prob")[, "Yes"]
+pred_test_class <- predict(tree_tuned, test_df)
+
+roc_test <- roc(test_df$survived, pred_test_prob)
+auc_test <- auc(roc_test)
+
+cm_test <- confusionMatrix(pred_test_class, test_df$survived, positive = "Yes")
+list(
+  AUC = round(auc_test, 3),
+  F1 = round(cm_test$byClass["F1"], 3),
+  Sensitivity = round(cm_test$byClass["Sensitivity"], 3)
+)
+```
+
+# Step 9: Variable importance & rules
+
+```{r}
+varImp(tree_tuned)
+rpart.rules(tree_tuned$finalModel)[1:10, ]
+```
+
+**Top splits**: `sex`, `pclass`, `fare`. Interpretable paths.
+
+# Best practices & warnings
+
+- **Pruning essential**: Unpruned → 100% train acc, 70% test.  
+- **CP grid**: $10^{-3}–0.05$, CV selects.  
+- **Imbalance**: `method="class"`, ROC, `prior` weights.  
+- **Instability**: Small data changes → different splits (use ensembles).  
+- **Interactions automatic**: No manual engineering needed.  
+- **Categorical limits**: $rpart$ splits factors efficiently (<50 levels).
 
 # Summary
 
-- Logistic regression models the probability of a binary outcome using a sigmoid link.
-- In R, logistic regression is fitted using `glm(..., family = binomial(link = "logit"))`.
-- For imbalanced classes, accuracy alone can be misleading; precision, recall, F1 and the ROC curve provide a clearer picture.
+You learned decision trees con `rpart` to:
+
+- **Recursively partition** minimizing $Gini/\Delta entropy$.  
+- **Prune** via **cost-complexity**: $R(T,\alpha) = R(T) + \alpha|T|$.  
+- Tune **CP** via caret CV, evaluate ROC/F1.  
+- Extract **interpretable rules**.  
+
+Trees: **White-box baseline** before black-box models.
+
