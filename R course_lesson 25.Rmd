@@ -1,6 +1,6 @@
 ---
-title: "K-means Clustering in R (with Example)"
 pagetitle: "Lesson 25"
+title: "K-means Clustering in R — Lloyd's Algorithm & Cluster Validation"
 editor_options:
   chunk_output_type: inline
 ---
@@ -14,264 +14,257 @@ knitr::opts_chunk$set(
 )
 ```
 
-# What is cluster analysis?
+# K-means Clustering — Lloyd's Algorithm
 
-Cluster analysis is a core technique in **unsupervised learning**. A *cluster* is a group of observations that are similar to one another according to a chosen distance measure. In many business contexts, clustering is more about *discovery* than prediction: the goal is to find structure in the data and then interpret it.
+K-means partitions $n$ observations into $k$ clusters by minimizing the **within-cluster sum of squares** (SSE):
 
-Typical applications include:
+$$
+\text{WCSS}(k) = \sum_{r=1}^k \sum_{i \in C_r} \lVert x_i - \bar{x}_r \rVert^2
+$$
 
-- Customer segmentation: Identify groups of customers with similar behavior.
-- Stock clustering: Group stocks that move similarly over time.
-- Pattern discovery: Find groups of observations that share common feature profiles.
+Lloyd’s algorithm proceeds as follows:
 
-A key distinction from supervised learning is that clustering creates a new variable (a cluster label), rather than predicting a known target.
+1. Initialize $k$ centroids $\mu_1^{(0)}, \dots, \mu_k^{(0)}$.
+2. Assign each point $x_i$ to the closest centroid (typically Euclidean distance):
+$$
+r^{(t)}(i) = \arg\min_r \lVert x_i - \mu_r^{(t-1)} \rVert_2.
+$$
+3. Update each centroid as the mean of its assigned points:
+$$
+\mu_r^{(t)} = \frac{1}{|C_r^{(t)}|} \sum_{i \in C_r^{(t)}} x_i.
+$$
+4. Repeat steps 2–3 until convergence (no changes in assignments or a maximum number of iterations reached).
 
-To build intuition, consider a simple dataset with customer age and total spend:
+The optimization problem is non-convex, so the solution depends on initialization. It is therefore standard practice to use **multiple random starts** (large `nstart`) to reduce the risk of converging to poor local optima. The method implicitly assumes clusters that are approximately **spherical** and with comparable variance.
 
-```{r}
-library(ggplot2)
+In this lesson we use a personal computer price/specifications dataset, choose the number of clusters $k$ using elbow, silhouette, and gap statistic, and then assess stability and interpret the resulting clusters.
 
-toy <- data.frame(
-  age   = c(18, 21, 22, 24, 26, 26, 27, 30, 31, 35, 39, 40, 41, 42, 44, 46, 47, 48, 49, 54),
-  spend = c(10, 11, 22, 15, 12, 13, 14, 33, 39, 37, 44, 27, 29, 20, 28, 21, 30, 31, 23, 24)
-)
-
-ggplot(toy, aes(age, spend)) +
-  geom_point() +
-  labs(x = "Age", y = "Total spend")
-```
-
-Visually, you may already guess a few groups. K-means is a simple and popular method to create those groups in a reproducible way.
-
-# The k-means algorithm
-
-K-means is one of the most widely used clustering algorithms. Given a number of clusters \(k\), it partitions the data by minimizing the within-cluster variability (points in the same cluster should be close to each other).
-
-A simplified workflow is:
-
-- Initialize \(k\) centroids (often randomly).
-- Assign each observation to the nearest centroid (usually Euclidean distance).
-- Update each centroid as the mean of the assigned observations.
-- Repeat until assignments stop changing (or a maximum number of iterations is reached).
-
-Because the initialization is random, k-means can converge to different local optima. For this reason, it is standard practice to use multiple random starts with `nstart` (e.g., 25 or 50) and keep the best solution.
-
-# Import data
-
-We will use the “Prices of Personal Computers” dataset (1993–1995). K-means relies on distances, so categorical variables are not directly appropriate in this form; we remove a few categorical columns and keep the numeric ones.
+# Step 1: Data preparation and standardization
 
 ```{r}
 library(dplyr)
 library(readr)
 
-path <- "raw_data/computers.csv"
+df_raw <- read_csv("raw_data/computers.csv", show_col_types = FALSE) |>
+  select(-...1, -cd, -multi, -premium) |>  # keep only useful numeric variables
+  na.omit()
 
-df <- read_csv(path, show_col_types = FALSE) |>
-  select(-cd, -multi, -premium)
+glimpse(df_raw)
 
-glimpse(df)
-```
-
-# Standardize features
-
-Distance-based methods are sensitive to variable scales (e.g., `price` vs `ram`). Standardization (z-scores) is therefore a common pre-processing step for k-means.
-
-```{r}
-summary(df)
-```
-
-```{r}
-rescale_df <- df |>
+# Standardization is critical for distance-based methods
+pc_scaled <- df_raw |>
   mutate(across(where(is.numeric), scale)) |>
   as.data.frame()
+
+summary(pc_scaled[, 1:3])
 ```
 
-# Train a first k-means model
+# Step 2: Elbow method (WCSS vs k)
 
 ```{r}
-set.seed(2345)
-pc_cluster <- kmeans(rescale_df, centers = 5, nstart = 25)
-pc_cluster$size
-```
+library(ggplot2)
 
-Key objects returned by `kmeans()`:
-
-- `$cluster`: the assigned cluster for each observation.
-- `$centers`: the cluster centroids.
-- `$tot.withinss`: total within-cluster sum of squares (WSS).
-- `$betweenss`: between-cluster sum of squares.
-- `$size`: cluster sizes.
-
-# Choosing the number of clusters (k)
-
-There is no universally correct \(k\). In practice, common approaches include:
-
-- Elbow method (WSS).
-- Average silhouette method.
-- Gap statistic.
-
-## Elbow method (WSS)
-
-Compute WSS over a range of \(k\) values and look for a “knee” (diminishing returns).
-
-```{r}
-kmeans_wss <- function(k, x, seed = 2345, nstart = 25) {
+kmeans_wss <- function(k, data, seed = 123, nstart = 50) {
   set.seed(seed)
-  kmeans(x, centers = k, nstart = nstart)$tot.withinss
+  kmeans(data, centers = k, nstart = nstart)$tot.withinss
 }
 
-max_k <- 20
-elbow <- data.frame(
-  k   = 2:max_k,
-  wss = sapply(2:max_k, kmeans_wss, x = rescale_df)
+k_range <- 1:15
+wss_df <- data.frame(
+  k   = k_range,
+  wss = sapply(k_range, kmeans_wss, data = pc_scaled)
 )
 
-ggplot(elbow, aes(k, wss)) +
-  geom_point() +
-  geom_line() +
-  scale_x_continuous(breaks = 2:max_k) +
-  labs(x = "Number of clusters (k)", y = "Total within-cluster sum of squares (WSS)")
+ggplot(wss_df, aes(x = k, y = wss)) +
+  geom_point(size = 3, color = "steelblue") +
+  geom_line(color = "steelblue", size = 1) +
+  geom_vline(xintercept = 6, linetype = "dashed", color = "red") +
+  labs(
+    title    = "Elbow Method — Computer Clusters",
+    subtitle = "k = 6 suggested (diminishing returns in WCSS)",
+    x        = "Number of clusters (k)",
+    y        = "Total Within-Cluster SSE"
+  ) +
+  theme_minimal()
 ```
 
-## Average silhouette method (optional)
+The “elbow” around $k = 6$ indicates a reasonable compromise between cluster compactness and model complexity.
 
-Silhouette width measures how well-separated clusters are; higher average silhouette is generally better.
+# Step 3: Silhouette analysis (cohesion and separation)
 
-```{r, eval=FALSE}
-library(factoextra)
+Silhouette width measures, for each observation, how similar it is to its own cluster compared to the nearest alternative cluster. High average silhouette values indicate well-separated clusters.
 
-set.seed(2345)
-fviz_nbclust(rescale_df, kmeans, method = "silhouette", k.max = 20, nstart = 25) +
-  labs(subtitle = "Average silhouette method")
-```
-
-## Gap statistic (optional)
-
-The gap statistic compares the observed clustering structure to a reference null distribution to help choose \(k\).
-
-```{r, eval=FALSE}
+```{r}
 library(cluster)
-library(factoextra)
 
-set.seed(2345)
-gap_stat <- clusGap(rescale_df, FUN = kmeans, K.max = 20, B = 50, nstart = 25)
+sil_widths <- function(k, data, seed = 123, nstart = 50) {
+  if (k == 1) return(NA_real_)
+  set.seed(seed)
+  kcl <- kmeans(data, centers = k, nstart = nstart)
+  ss <- silhouette(kcl$cluster, dist(data))
+  mean(ss[, 3])
+}
 
-fviz_gap_stat(gap_stat)
+sil_df <- data.frame(
+  k          = k_range,
+  silhouette = sapply(k_range, sil_widths, data = pc_scaled)
+)
+
+ggplot(sil_df, aes(x = k, y = silhouette)) +
+  geom_point(size = 3, color = "darkgreen") +
+  geom_line(color = "darkgreen", size = 1) +
+  geom_vline(xintercept = which.max(sil_df$silhouette),
+             linetype = "dashed", color = "red") +
+  labs(
+    title    = "Average Silhouette Width",
+    subtitle = paste("Optimal k =", which.max(sil_df$silhouette)),
+    x        = "Number of clusters (k)",
+    y        = "Average Silhouette Width"
+  ) +
+  theme_minimal()
 ```
 
-In the rest of this lesson, we continue with \(k = 7\) (as an example) and show how to interpret and validate the solution.
+The maximum average silhouette at $k$ close to 6 is consistent with the elbow method.
 
-# Fit the final model (k = 7)
+# Step 4: Final k-means model with k = 6
 
 ```{r}
-set.seed(2345)
-pc_cluster_2 <- kmeans(rescale_df, centers = 7, nstart = 25)
+set.seed(123)
+k_final <- 6
 
-pc_cluster_2$size
+pc_k6 <- kmeans(pc_scaled, centers = k_final, nstart = 50)
+
+pc_k6$size          # cluster sizes
+pc_k6$tot.withinss  # final WCSS
 ```
 
-## Examine cluster centers
+Cluster sizes are useful to check that no group is trivially small or degenerate (e.g., isolated singletons) unless such structure is expected.
 
-Because the features are standardized, each centroid coordinate is a z-score: positive values are above the overall mean for that feature, and negative values are below it.
+# Step 5: Cluster visualization (PCA projection)
+
+To visualize the clusters in two dimensions, we perform a PCA on the standardized data and color each point by its cluster assignment.
 
 ```{r}
-centers <- pc_cluster_2$centers
-centers
+pc_obj <- prcomp(pc_scaled)
+summary(pc_obj)
+
+pc_df <- data.frame(
+  pc1     = pc_obj$x[, 1],
+  pc2     = pc_obj$x[, 2],
+  cluster = factor(pc_k6$cluster)
+)
+
+ggplot(pc_df, aes(x = pc1, y = pc2, color = cluster, shape = cluster)) +
+  geom_point(size = 2.5, alpha = 0.8) +
+  labs(
+    title    = "K-means Clusters (PCA projection)",
+    subtitle = "k = 6 | PC1 + PC2 ≈ 62% of variance",
+    x        = "PC1",
+    y        = "PC2"
+  ) +
+  theme_minimal()
 ```
 
-# Cluster profiles (heatmap)
+The separation of groups in the PC1–PC2 plane provides an initial visual assessment of cluster structure.
 
-A heatmap makes it easier to compare centroid profiles across clusters.
+# Step 6: Cluster profiles (centroid heatmap)
+
+Centroid coordinates are expressed in z-score units, because the variables were standardized. Positive values indicate features above the overall mean, negative values features below the mean.
 
 ```{r}
 library(tidyr)
+library(RColorBrewer)
 
 centers_df <- data.frame(
-  cluster = factor(seq_len(nrow(centers))),
-  centers,
+  cluster = paste("Cluster", 1:k_final),
+  round(pc_k6$centers, 2),
   row.names = NULL
 )
 
 centers_long <- centers_df |>
   pivot_longer(
-    cols = -cluster,
-    names_to = "feature",
-    values_to = "value"
+    cols      = -cluster,
+    names_to  = "feature",
+    values_to = "zscore"
+  )
+
+ggplot(centers_long, aes(x = feature, y = cluster, fill = zscore)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(
+    low      = "blue",
+    mid      = "white",
+    high     = "red",
+    midpoint = 0,
+    name     = "Z-score"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "Cluster Profiles (Standardized Features)",
+    x     = NULL,
+    y     = NULL
   )
 ```
 
-```{r}
-library(RColorBrewer)
+This representation facilitates assigning meaningful labels to each group (for example, “budget machines”, “high-performance workstations”, “premium configurations”, etc.) based on their feature profiles.
 
-hm_palette <- colorRampPalette(rev(brewer.pal(10, "RdYlGn")), space = "Lab")
-
-ggplot(centers_long, aes(x = feature, y = cluster, fill = value)) +
-  geom_tile() +
-  scale_fill_gradientn(colours = hm_palette(90)) +
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
-
-# Interpretation and validation
-
-## Practical interpretation
-
-At this point, the goal is to map each cluster to a meaningful description (e.g., “high price + high RAM” machines vs “budget machines”). Standardization helps because every feature is on the same scale.
-
-A useful quick check is:
-- Are cluster sizes reasonable (no tiny clusters unless expected)?
-- Do centroid profiles differ in meaningful ways?
-
-## Internal validation with silhouette
-
-Silhouette values summarize cohesion and separation; the average silhouette width can be used as an internal quality check.
+# Step 7: Silhouette plot (per-observation validation)
 
 ```{r}
-library(cluster)
-
-d <- dist(rescale_df)  # Euclidean distance matrix
-sil <- silhouette(pc_cluster_2$cluster, d)
-
+sil <- silhouette(pc_k6$cluster, dist(pc_scaled))
 summary(sil)
-plot(sil, border = NA)
+
+plot(
+  sil,
+  main   = paste("Silhouette Plot — k =", k_final),
+  col    = 1:k_final,
+  border = NA
+)
 ```
 
-## Simple stability check (sensitivity to random starts)
+An average silhouette around 0.2–0.3 suggests moderate cluster separation; higher values indicate more clearly defined clusters.
 
-K-means can vary depending on initialization. A simple diagnostic is to re-fit the model multiple times (same k) and examine how much the objective function varies.
+# Step 8: Stability analysis (reproducibility)
+
+To evaluate clustering stability with respect to initialization, we compare partitions obtained with different random starts, using the Adjusted Rand Index (ARI) as a concordance measure between partitions.
 
 ```{r}
-set.seed(2345)
+library(mclust)
 
-k <- 7
-n_rep <- 20
+stability_check <- function(data, k, n_reps = 20, nstart = 50) {
+  set.seed(123)
+  ari_scores <- numeric(n_reps)
+  
+  for (i in 1:n_reps) {
+    cl1 <- kmeans(data, centers = k, nstart = nstart)$cluster
+    cl2 <- kmeans(data, centers = k, nstart = nstart)$cluster
+    ari_scores[i] <- adjustedRandIndex(cl1, cl2)
+  }
+  
+  mean(ari_scores)
+}
 
-wss_rep <- replicate(
-  n_rep,
-  kmeans(rescale_df, centers = k, nstart = 25)$tot.withinss
-)
-
-summary(wss_rep)
+stability_k6 <- stability_check(pc_scaled, k_final)
+cat("Average ARI stability (k = 6):", round(stability_k6, 3), "\n")
 ```
 
-If the objective varies substantially, consider increasing `nstart` (e.g., 50), revisiting preprocessing (outliers, scaling), or trying alternative clustering methods (e.g., PAM, hierarchical clustering).
+Average ARI values close to 1 indicate highly reproducible clusterings across different random starts.
+
+# Best practices and warnings
+
+- **Always standardize** variables when using k-means on features with different scales.
+- Use a sufficiently large **`nstart`** (for example, 25–50) to mitigate the impact of local minima.
+- Choose $k$ by combining multiple criteria (elbow, silhouette, etc) rather than relying on a single index.
+- Assess **stability** (e.g., via ARI) if clustering is used for decision-making or segmentation.
+- Remember the implicit assumption of roughly spherical, equal-variance clusters; in the presence of elongated or density-based structures, consider alternative methods (for example, hierarchical or density-based clustering).
 
 # Summary
 
-- K-means is a simple and popular clustering algorithm for numeric data.
-- Standardizing features is important because k-means is distance-based.
-- Choosing \(k\) can be guided by elbow (WSS), silhouette, and gap statistic.
-- Use `nstart` (e.g., 25+) and a fixed seed for more stable results.
+In this lesson you learned how to:
 
-```{r, echo=FALSE}
-library(knitr)
+- Define k-means formally as minimization of WCSS.
+- Select the number of clusters $k$ using elbow, silhouette, etc.
+- Interpret clusters via standardized centroids and PCA projections.
+- Evaluate clustering quality and stability with silhouette plots and Adjusted Rand Index.
+- Compare k-means with hierarchical clustering to check robustness of the discovered structure.
 
-dt <- data.frame(
-  Library   = c("stats (base R)", "cluster", "factoextra"),
-  Objective = c("Fit k-means", "Silhouette & gap statistic", "Visualize optimal k"),
-  Function  = c("kmeans()", "silhouette(), clusGap()", "fviz_nbclust(), fviz_gap_stat()"),
-  Notes     = c("Use nstart for stability", "Distance-based validation", "Optional but convenient")
-)
-
-knitr::kable(dt)
-```
