@@ -89,7 +89,8 @@ Parallel analysis suggests **6 factors** (eigenvalues exceed random data).
 loadings_table <- print(fa_bfi$loadings, cutoff = 0.4, sort = FALSE)
 ```
 
-**Interpretation** (varimax rotation):  
+**Interpretation** (varimax rotation): 
+
 - **MR1**: High on A1–A5 → **Agreeableness**.  
 - **MR2**: C1–C5 → **Conscientiousness**.  
 - Loadings $|> 0.4|$ define salient items; cross-loadings minimal (good simple structure).
