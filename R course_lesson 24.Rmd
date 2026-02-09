@@ -154,6 +154,7 @@ AIC(glm_step)  # lower = better fit
 
 ```{r}
 library(pROC)
+library(caret)
 
 pred_valid_prob <- predict(glm_step, valid_df, type = "response")
 pred_valid_class <- ifelse(pred_valid_prob > 0.5, ">50K", "<=50K") |> 
