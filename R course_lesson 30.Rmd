@@ -55,6 +55,7 @@ pca_iris
 ```
 
 **`prcomp` structure**:  
+
 - `sdev`: $\sqrt{\lambda_k}$ (PC standard deviations).  
 - `rotation`: $V$ (**loadings**/eigenvectors).  
 - `x`: **Scores** $ZV$.  
