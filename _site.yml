@@ -46,14 +46,14 @@ navbar:
             href: R-course_lesson-13.html
           - text: "Import Data"
             href: R-course_lesson-14.html
-          - text: "How to Replace Missing Values"
-            href: R-course_lesson-15.html
           - text: "Exporting Data"
             href: R-course_lesson-16.html
-          - text: "Correlation"
-            href: R-course_lesson-17.html
         - text: "Data Analysis with R"
           menu:
+          - text: "How to Replace Missing Values"
+            href: R-course_lesson-15.html
+          - text: "Correlation"
+            href: R-course_lesson-17.html
           - text: "Scatter Plot"
             href: R-course_lesson-18.html
           - text: "How to Make a Boxplot"
@@ -66,20 +66,48 @@ navbar:
             href: R-course_lesson-22.html
         - text: "Machine Learning"
           menu:
-          - text: "Simple, Multiple Linear and Stepwise Regression"
-            href: R-course_lesson-23.html
-          - text: "Generalized Linear Model"
-            href: R-course_lesson-24.html
-          - text: "K-means Clustering"
-            href: R-course_lesson-25.html
-          - text: "Decision Trees"
-            href: R-course_lesson-26.html
-          - text: "Random Forest"
-            href: R-course_lesson-27.html
-          - text: "Gradient Boosting"
-            href: R-course_lesson-28.html
-          - text: "Support Vector Machine"
-            href: R-course_lesson-29.html
+          - text: "Supervised Learning"
+            menu:
+            - text: "Simple, Multiple Linear and Stepwise Regression"
+              href: R-course_lesson-23.html
+            - text: "Logistic Regression"
+              href: R-course_lesson-24.html
+            - text: "Penalized Linear Models"
+              href: R-course_lesson-36.html
+            - text: "Decision Trees"
+              href: R-course_lesson-26.html
+            - text: "Random Forest"
+              href: R-course_lesson-27.html
+            - text: "Gradient Boosting"
+              href: R-course_lesson-28.html
+            - text: "Support Vector Machine"
+              href: R-course_lesson-29.html
+          - text: "Dimensionality Reduction"
+            menu:
+            - text: "Principal Component Analysis"
+              href: R-course_lesson-30.html
+            - text: "Factor Analysis"
+              href: R-course_lesson-31.html
+            - text: "Multidimensional Scaling"
+              href: R-course_lesson-32.html
+            - text: "t-SNE"
+              href: R-course_lesson-33.html
+            - text: "UMAP"
+              href: R-course_lesson-34.html
+            - text: "Correspondence Analysis"
+              href: R-course_lesson-35.html
+          - text: "Unsupervised Learning"
+            menu:
+            - text: "K-means Clustering"
+              href: R-course_lesson-25.html
+            - text: "Hierarchical Clustering"
+              href: R-course_lesson-37.html
+            - text: "DBSCAN"
+              href: R-course_lesson-38.html
+            - text: "Model-based Clustering"
+              href: R-course_lesson-39.html
+            - text: "Spectral Clustering"
+              href: R-course_lesson-40.html
           
 output:
   html_document:
