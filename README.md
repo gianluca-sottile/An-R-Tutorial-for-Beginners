@@ -41,13 +41,13 @@ Throughout the course, the focus is on **reproducible analysis in R**, good prog
 
 By working through the lessons, you will be able to:
 
-- Use R and RStudio as your main environment for data manipulation, statistical analysis, visualization, and reporting.
+- Use R and RStudio as your main environment for data manipulation, statistical analysis, visualization, and reproducible reporting.
 - Create, transform, and combine R objects (vectors, matrices, factors, lists, data frames) to build analysis‑ready datasets.
-- Write and debug your own R functions, use control structures and vectorized patterns to implement robust analysis pipelines.
-- Import/export data from common file formats, manage missing values, and perform principled data cleaning.
+- Write and debug your own R functions, use control flow and vectorized patterns, and structure robust analysis pipelines.
+- Import and export data from common file formats, handle missing values, and perform principled data cleaning.
 - Conduct exploratory data analysis, compute descriptive measures, and produce informative tables and plots.
-- Fit and interpret basic supervised learning models in R, assessing model assumptions and performance.
-- Apply unsupervised methods such as k‑means and simple dimensionality reduction techniques to explore structure in multivariate data.
+- Fit and interpret core supervised learning models in R, checking model assumptions and evaluating predictive performance.
+- Apply unsupervised learning methods such as k‑means, hierarchical, density‑based, and model‑based clustering, as well as dimensionality reduction techniques, to explore structure in multivariate data.
 
 ---
 
@@ -83,14 +83,14 @@ Below is the current lesson structure, aligned with the main pillars of the cour
 | 12 | While Loop | [Rmd](R%20course_lesson%2012.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-12.html) |
 | 13 | apply(), lapply(), sapply(), tapply() | [Rmd](R%20course_lesson%2013.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-13.html) |
 | 14 | Import Data | [Rmd](R%20course_lesson%2014.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-14.html) |
-| 15 | How to Replace Missing Values | [Rmd](R%20course_lesson%2015.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-15.html) |
-| 16 | Exporting Data | [Rmd](R%20course_lesson%2016.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-16.html) |
-| 17 | Correlation | [Rmd](R%20course_lesson%2017.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-17.html) |
+| 15 | Exporting Data | [Rmd](R%20course_lesson%2016.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-16.html) |
 
 ### Exploratory data analysis & basic inference
 
 | # | Lesson | Source (.Rmd) | Rendered (HTML) |
 |---|--------|---------------|-----------------|
+| 16 | How to Replace Missing Values | [Rmd](R%20course_lesson%2015.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-15.html) |
+| 17 | Correlation | [Rmd](R%20course_lesson%2017.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-17.html) |
 | 18 | Scatter Plot | [Rmd](R%20course_lesson%2018.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-18.html) |
 | 19 | How to Make a Boxplot | [Rmd](R%20course_lesson%2019.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-19.html) |
 | 20 | Bar Chart & Histogram | [Rmd](R%20course_lesson%2020.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-20.html) |
@@ -102,17 +102,33 @@ Below is the current lesson structure, aligned with the main pillars of the cour
 | # | Lesson | Source (.Rmd) | Rendered (HTML) |
 |---|--------|---------------|-----------------|
 | 23 | Simple, Multiple Linear and Stepwise Regression | [Rmd](R%20course_lesson%2023.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-23.html) |
-| 24 | Generalized Linear Model | [Rmd](R%20course_lesson%2024.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-24.html) |
+| 24 | Generalized Linear Model (Logistic Regression) | [Rmd](R%20course_lesson%2024.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-24.html) |
+| 25 | Ridge & Lasso Regression (Penalized Linear Models) | [Rmd](R%20course_lesson%2036.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-36.html) |
+| 26 | Decision Trees | [Rmd](R%20course_lesson%2026.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-26.html) |
+| 27 | Random Forest | [Rmd](R%20course_lesson%2027.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-27.html) |
+| 28 | Gradient Boosting | [Rmd](R%20course_lesson%2028.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-28.html) |
+| 29 | Support Vector Machines | [Rmd](R%20course_lesson%2029.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-29.html) |
+
+### Machine learning – dimensionality reduction
+
+| # | Lesson | Source (.Rmd) | Rendered (HTML) |
+|---|--------|---------------|-----------------|
+| 30 | Principal Component Analysis (PCA) | [Rmd](R%20course_lesson%2030.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-30.html) |
+| 31 | Factor Analysis (FA) | [Rmd](R%20course_lesson%2031.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-31.html) |
+| 32 | Multidimensional Scaling (MDS) | [Rmd](R%20course_lesson%2032.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-32.html) |
+| 33 | t-Distributed Stochastic Neighbor Embedding (t-SNE) | [Rmd](R%20course_lesson%2033.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-33.html) |
+| 34 | Uniform Manifold Approximation and Projection (UMAP) | [Rmd](R%20course_lesson%2034.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-34.html) |
+| 35 | Correspondence Analysis (CA) | [Rmd](R%20course_lesson%2035.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-35.html) |
 
 ### Machine learning – unsupervised learning & advanced models
 
 | # | Lesson | Source (.Rmd) | Rendered (HTML) |
 |---|--------|---------------|-----------------|
-| 25 | K-means Clustering | [Rmd](R%20course_lesson%2025.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-25.html) |
-| 26 | Decision Trees | [Rmd](R%20course_lesson%2026.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-26.html) |
-| 27 | Random Forest | [Rmd](R%20course_lesson%2027.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-27.html) |
-| 28 | Gradient Boosting | [Rmd](R%20course_lesson%2028.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-28.html) |
-| 29 | Support Vector Machines | [Rmd](R%20course_lesson%2029.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-29.html) |
+| 36 | K-means Clustering | [Rmd](R%20course_lesson%2025.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-25.html) |
+| 37 | Hierarchical Clustering (Dendrograms & Linkage) | [Rmd](R%20course_lesson%2037.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-37.html) |
+| 38 | Density-based Clustering (DBSCAN) | [Rmd](R%20course_lesson%2038.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-38.html) |
+| 39 | Model-based Clustering (Gaussian Mixtures) | [Rmd](R%20course_lesson%2039.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-39.html) |
+| 40 | Spectral Clustering | [Rmd](R%20course_lesson%2040.Rmd) | [HTML](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/R-course_lesson-30.html) |
 
 ---
 
