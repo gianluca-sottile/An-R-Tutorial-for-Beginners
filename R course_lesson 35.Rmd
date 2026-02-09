@@ -51,6 +51,7 @@ summary(ca_hec, Dim = c(1, 2))
 ```
 
 **Key outputs**:
+
 - **Inertia**: $\lambda_k / \sum \lambda = $ proportion explained by dimension $k$.  
 - **Total $\chi^2$**: Deviation from independence.  
 - **Row/Col coordinates**: Principal coordinates ($U\sqrt{D}, V\sqrt{D}$).  
@@ -101,7 +102,8 @@ ggplot(plot_df, aes(x = `Dim1`, y = `Dim2`, color = type, shape = type)) +
   theme(legend.position = "bottom")
 ```
 
-**Interpretation**:[1]
+**Interpretation**:
+
 - **Quadrant I** (positive axes): Brown Hair ↔ Brown Eyes (strong positive association).  
 - **Quadrant III**: Blond Hair ↔ Blue Eyes.  
 - **Perpendicular**: Independence (orthogonal to origin).  
