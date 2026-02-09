@@ -39,12 +39,6 @@ library(readr)
 library(dplyr)
 
 local_path <- "raw_data/wholesale_customers.csv"
-
-if (!file.exists(local_path)) {
-  dir.create("raw_data", showWarnings = FALSE)
-  download.file(url_path, local_path, mode = "wb")
-}
-
 df_raw <- read_csv(local_path, show_col_types = FALSE)
 
 glimpse(df_raw)
