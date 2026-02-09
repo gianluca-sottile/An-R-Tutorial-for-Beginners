@@ -30,6 +30,8 @@ Lesson: Adult income (>50K?) classification ($n \approx 30k$, 24% positive), fea
 
 ```{r}
 library(dplyr)
+library(stringr)
+library(forcats)
 library(readr)
 library(ggplot2)
 
@@ -69,7 +71,7 @@ data_adult <- data_adult |>
 ```{r}
 data_adult <- data_adult |>
   mutate(
-    education = case_when(
+    education = dplyr::case_when(
       education %in% c("Preschool", "1st-4th", "5th-6th") ~ "NoHS",
       education %in% c("7th-8th", "9th", "10th", "11th", "12th") ~ "HSdropout",
       education == "HS-grad" ~ "HS",
@@ -78,8 +80,8 @@ data_adult <- data_adult |>
       TRUE ~ "Advanced"  # Masters, Prof, Doctorate
     ) |> factor(),
     
-    marital.status = case_when(
-      str_detect(marital.status, "Married") ~ "Married",
+    marital.status = dplyr::case_when(
+      stringr::str_detect(marital.status, "Married") ~ "Married",
       marital.status %in% c("Never-married", "Separated", "Divorced") ~ "Single",
       marital.status == "Widowed" ~ "Widowed"
     ) |> factor()
