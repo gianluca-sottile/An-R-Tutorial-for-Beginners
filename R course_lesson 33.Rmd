@@ -59,6 +59,7 @@ head(tsne_iris$Y, 3)
 ```
 
 **Key outputs**:  
+
 - `Y`: $150 \times 2$ **embedding coordinates**.  
 - `N`: Number of objects.  
 - `perplexity`: Used value (printed during computation).
@@ -87,6 +88,7 @@ ggplot(tsne_df, aes(x = tsne1, y = tsne2, color = Species)) +
 ```
 
 **Interpretation**:  
+
 - **setosa** perfectly separated (bottom‑left).  
 - **versicolor** and **virginica** form adjacent but distinct clusters (local structure preserved).  
 - Unlike PCA scores (linear), t-SNE reveals **non-linear manifolds**.
