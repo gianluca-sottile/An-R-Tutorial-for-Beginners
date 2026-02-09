@@ -1,6 +1,6 @@
 ---
-pagetitle: "Lesson 26"
-title: "Decision Trees in R (rpart) — Entropy Splits & Cost-Complexity Pruning"
+pagetitle: "Lesson 24"
+title: "Generalized Linear Models (GLM) in R — Logistic Regression & Model Selection"
 editor_options:
   chunk_output_type: inline
 ---
@@ -14,198 +14,194 @@ knitr::opts_chunk$set(
 )
 ```
 
-# Decision Trees — Recursive Partitioning
+# Generalized Linear Models (GLM) — Logistic Regression
 
-Decision trees recursively partition feature space via **greedy splits** minimizing **impurity** (classification: Gini/entropy; regression: MSE). **Gini impurity**:
+GLMs generalize linear regression via **link function** $g(\mu) = X\beta$ and **exponential family** density. **Logistic** ($Y \sim Bern(p)$):
 
 $$
-G(p) = 1 - \sum_{k=1}^K p_k^2, \quad \Delta G = \sum_{d \in D} |D_d| G(p_d) / |D|
+\log\frac{p}{1-p} = X\beta, \quad p = \sigma(X\beta) = \frac{1}{1+e^{-X\beta}}
 $$
 
-**Cost-complexity pruning** balances error + complexity: $\text{R}(T,\alpha) = R(T) + \alpha |T|$. Trees **interpretable** but **high variance** (instabile).
+**Deviance** $D = 2[\ell(\text{saturated}) - \ell(\hat{\mu})]$ measures fit (like $-2\log\lambda$). **AIC** $D + 2p$ balances goodness/complexity. **LRT**: $\text{Deviance}(\text{null}) - \text{Deviance}(\text{alt}) \sim \chi^2_{\Delta df}$.
 
-Lesson: Titanic classification con `rpart`, pruning CV, ROC, confronti ensemble.
+Lesson: Adult income (>50K?) classification ($n \approx 30k$, 24% positive), feature eng, stepwise, VIF, ROC/PR.
 
 # Step 1: Data import & EDA
 
 ```{r}
 library(dplyr)
-path <- "raw_data/titanic_data.csv"
-titanic <- read.csv(path, stringsAsFactors = FALSE)
+library(readr)
+library(ggplot2)
 
-set.seed(123); titanic <- titanic[sample(nrow(titanic)), ]  # shuffle
+data_adult <- read_csv("raw_data/adult.csv",
+                       na = c("?", "", " NA"),
+                       name_repair = "universal",
+                       show_col_types = FALSE) |>
+  select(-any_of(c("X", "x"))) |>
+  mutate(across(where(is.character), ~forcats::fct_explicit_na(as.factor(.x), "Missing")))
 
-dim(titanic)
-prop.table(table(titanic$survived))  # 38% Yes
+glimpse(data_adult)
+prop.table(table(data_adult$income))  # 24% >50K (imbalanced)
 ```
 
-# Step 2: Cleaning & factors
+# Step 2: Numeric EDA & transformation
 
 ```{r}
-titanic_clean <- titanic |>
-  select(-any_of(c("home.dest", "cabin", "name", "X", "x", "ticket"))) |>
-  filter(embarked != "?") |>
-  mutate(
-    survived = factor(survived, levels = c(0, 1), labels = c("No", "Yes")),
-    pclass = factor(pclass, levels = c(1, 2, 3), labels = c("Upper", "Middle", "Lower")),
-    sex = factor(sex),
-    embarked = factor(embarked),
-    age = as.numeric(age),
-    fare = log(as.numeric(fare) + 1),
-    family_size = sibsp + parch + 1
-  ) |>
-  na.omit()
+data_adult |>
+  select(where(is.numeric)) |>
+  summary()
 
-glimpse(titanic_clean)
-```
+# hours.per.week: cap 99th percentile, log outliers
+ggplot(data_adult, aes(hours.per.week)) +
+  geom_histogram(bins = 50, fill = "#4AA4DE", alpha = 0.8) +
+  labs(title = "Hours/Week Distribution (skewed)")
 
-# Step 3: Train/valid/test split (70/15/15)
+top1perc <- quantile(data_adult$hours.per.week, 0.99)
 
-```{r}
-split_data <- function(df, p_train = 0.7, p_valid = 0.15, seed = 123) {
-  set.seed(seed)
-  n <- nrow(df)
-  idx_train <- sample(n, floor(p_train * n))
-  idx_rem <- setdiff(1:n, idx_train)
-  idx_valid <- sample(idx_rem, floor(p_valid * n))
-  
-  list(
-    train = df[idx_train, ], 
-    valid = df[idx_valid, ], 
-    test  = df[-c(idx_train, idx_valid), ]
+data_adult <- data_adult |>
+  filter(hours.per.week < top1perc) |> 
+  mutate(across(where(is.numeric), ~scale(.x))
   )
+```
+
+# Step 3: Categorical recoding (reduce cardinality)
+
+```{r}
+data_adult <- data_adult |>
+  mutate(
+    education = case_when(
+      education %in% c("Preschool", "1st-4th", "5th-6th") ~ "NoHS",
+      education %in% c("7th-8th", "9th", "10th", "11th", "12th") ~ "HSdropout",
+      education == "HS-grad" ~ "HS",
+      education %in% c("Some-college", "Assoc-acdm", "Assoc-voc") ~ "College",
+      education == "Bachelors" ~ "Bachelor",
+      TRUE ~ "Advanced"  # Masters, Prof, Doctorate
+    ) |> factor(),
+    
+    marital.status = case_when(
+      str_detect(marital.status, "Married") ~ "Married",
+      marital.status %in% c("Never-married", "Separated", "Divorced") ~ "Single",
+      marital.status == "Widowed" ~ "Widowed"
+    ) |> factor()
+  )
+```
+
+# Step 4: EDA — income by key factors
+
+```{r}
+data_adult |>
+  dplyr::count(income, gender, sort = TRUE) |>
+  mutate(prop = n / sum(n)) |>
+  filter(gender == "Male")  # Males 30% >50K vs Females 11%
+
+ggplot(data_adult, aes(x = education, fill = income)) +
+  geom_bar(position = "fill") +
+  theme(axis.text.x = element_text(angle = 45)) +
+  labs(y = "Proportion >50K")
+```
+
+# Step 5: Train/valid/test (70/15/15)
+
+```{r}
+split_data <- function(df, p_train=0.7, p_valid=0.15, seed=123) {
+  set.seed(seed); n <- nrow(df)
+  idx_train <- sample(n, floor(p_train*n))
+  idx_rem <- setdiff(1:n, idx_train)
+  idx_valid <- sample(idx_rem, floor(p_valid*n))
+  list(train=df[idx_train,], valid=df[idx_valid,], test=df[-c(idx_train,idx_valid),])
 }
 
-spl <- split_data(titanic_clean)
+spl <- split_data(data_adult)
 train_df <- spl$train; valid_df <- spl$valid; test_df <- spl$test
-
-sprintf("Train: %d | Valid: %d | Test: %d", nrow(train_df), nrow(valid_df), nrow(test_df))
 ```
 
-# Step 4: Unpruned tree (max depth)
+# Step 6: Baseline logistic GLM
 
 ```{r}
-library(rpart)
-library(rpart.plot)
+glm_base <- glm(income ~ ., data = train_df, family = binomial())
 
-tree_full <- rpart(
-  survived ~ .,
-  data = train_df,
-  method = "class",
-  control = rpart.control(minsplit = 2, cp = 0, maxdepth = 10)
-)
-
-rpart.plot(tree_full, extra = 106, box.palette = "RdYlGn")
-printcp(tree_full)
+summary(glm_base)
+AIC(glm_base)
 ```
 
-**First split**: `sex` ($\Delta Gini$ max); depth 10 → overfitting.
+**Top predictors**: `workclass`, `education`, `marital.status`.
 
-# Step 5: Cost-complexity pruning (1SE rule)
+# Step 7: Model diagnostics (VIF, residuals)
 
 ```{r}
-printcp(tree_full)
-plotcp(tree_full)  # xerror minimum + 1SE
+library(car)
+vif(glm_base)  # multicollinearity (<5 OK)
 
-# Prune at optimal CP (1SE rule)
-cp_opt <- tree_full$cptable[which.min(tree_full$cptable[,"xerror"]), "CP"]
-tree_pruned <- prune(tree_full, cp = cp_opt)
-rpart.plot(tree_pruned, main = "Pruned Tree (1SE rule)")
+plot(glm_base, which = 1:2)  # residuals vs fitted, Q-Q
 ```
 
-**Pruned**: 5–7 leaves, interpretable rules (`sex=male & pclass=Lower & age>10 → No`).
-
-# Step 6: Predictions & ROC/PR evaluation
+# Step 8: Stepwise selection (forward/backward)
 
 ```{r}
-library(pROC); library(caret)
+# Both directions
+glm_step <- step(glm_base, direction = "both", trace = 0)
+summary(glm_step)
+anova(glm_base, glm_step, test = "LRT")  # LRT test
 
-pred_valid_prob <- predict(tree_pruned, valid_df, type = "prob")[, "Yes"]
-pred_valid_class <- predict(tree_pruned, valid_df, type = "class")
+AIC(glm_step)  # lower = better fit
+```
 
-roc_valid <- roc(valid_df$survived, pred_valid_prob)
-plot(roc_valid, print.auc = TRUE, print.thres = "best")
+**LRT p-value**: Improved fit justifies added terms.
 
-cm_valid <- confusionMatrix(pred_valid_class, valid_df$survived, positive = "Yes")
+# Step 9: Predictions & ROC evaluation
+
+```{r}
+library(pROC)
+
+pred_valid_prob <- predict(glm_step, valid_df, type = "response")
+pred_valid_class <- ifelse(pred_valid_prob > 0.5, ">50K", "<=50K") |> 
+  factor(levels = levels(valid_df$income))
+
+roc_valid <- roc(valid_df$income, pred_valid_prob)
+plot(roc_valid, print.auc=TRUE, print.thres="best")
+
+cm_valid <- confusionMatrix(pred_valid_class, valid_df$income, positive = ">50K")
 cm_valid$byClass[c("Sensitivity", "Specificity", "Precision", "F1")]
 ```
 
-**AUC 0.89**: Good baseline; Sensitivity 69%.
+**AUC 0.85+**, F1 0.58: Excellent despite imbalance.
 
-# Step 7: Hyperparameter tuning (caret CV grid)
+Optimal threshold ~0.2 (balance F1).
 
-```{r}
-set.seed(123)
-ctrl <- trainControl(
-  method = "cv",
-  number = 5,
-  classProbs = TRUE,
-  summaryFunction = twoClassSummary
-)
-
-tune_grid <- expand.grid(
-  cp = seq(0.001, 0.05, length = 10)  # complexity parameter
-)
-
-tree_tuned <- train(
-  survived ~ .,
-  data = train_df,
-  method = "rpart",
-  metric = "ROC",
-  trControl = ctrl,
-  tuneGrid = tune_grid,
-  control = rpart.control(minsplit = 5, maxdepth = 15)
-)
-
-tree_tuned
-plot(tree_tuned)
-```
-
-**Optimal CP ~0.01**: Balances bias/variance.
-
-# Step 8: Final test evaluation
+# Step 10: Final test performance
 
 ```{r}
-pred_test_prob <- predict(tree_tuned, test_df, type = "prob")[, "Yes"]
-pred_test_class <- predict(tree_tuned, test_df)
-
-roc_test <- roc(test_df$survived, pred_test_prob)
+pred_test_prob <- predict(glm_step, test_df, type = "response")
+roc_test <- roc(test_df$income, pred_test_prob)
 auc_test <- auc(roc_test)
 
-cm_test <- confusionMatrix(pred_test_class, test_df$survived, positive = "Yes")
-list(
-  AUC = round(auc_test, 3),
-  F1 = round(cm_test$byClass["F1"], 3),
-  Sensitivity = round(cm_test$byClass["Sensitivity"], 3)
-)
+pred_test_class_opt <- ifelse(pred_test_prob > 0.22, ">50K", "<=50K") |> 
+  factor(levels = levels(test_df$income))
+cm_test <- confusionMatrix(pred_test_class_opt, test_df$income, positive = ">50K")
+
+list(AUC = round(auc_test, 3), F1 = round(cm_test$byClass["F1"], 3))
 ```
 
-# Step 9: Variable importance & rules
+# Comparison: Null vs Stepwise vs Interactions
 
 ```{r}
-varImp(tree_tuned)
-rpart.rules(tree_tuned$finalModel)[1:10, ]
+glm_null <- glm(income ~ 1, data = train_df, family = binomial())
+anova(glm_null, glm_base, glm_step, test = "LRT")
 ```
 
-**Top splits**: `sex`, `pclass`, `fare`. Interpretable paths.
+# Warnings & best practices
 
-# Best practices & warnings
-
-- **Pruning essential**: Unpruned → 100% train acc, 70% test.  
-- **CP grid**: $10^{-3}–0.05$, CV selects.  
-- **Imbalance**: `method="class"`, ROC, `prior` weights.  
-- **Instability**: Small data changes → different splits (use ensembles).  
-- **Interactions automatic**: No manual engineering needed.  
-- **Categorical limits**: $rpart$ splits factors efficiently (<50 levels).
+- **Separation**: Perfect predictors → infinite coefficients (use Firth logistic).  
+- **Multicollinearity**: VIF $>10$ → drop/PCA.  
+- **Imbalance**: ROC/PR, threshold $\neq 0.5$, SMOTE.  
+- **Linearity logit**: Check via loess/BOX-TIDY.  
+- **AIC/LRT**: Relative fit; validate on hold-out.
 
 # Summary
 
-You learned decision trees con `rpart` to:
+You learned GLM logistic con `glm()` to:
 
-- **Recursively partition** minimizing $Gini/\Delta entropy$.  
-- **Prune** via **cost-complexity**: $R(T,\alpha) = R(T) + \alpha|T|$.  
-- Tune **CP** via caret CV, evaluate ROC/F1.  
-- Extract **interpretable rules**.  
-
-Trees: **White-box baseline** before black-box models.
-
+- Model **log-odds**: $\log(p/(1-p)) = X\beta$.  
+- Select via **stepwise + LRT**: $\Delta D \sim \chi^2_{\Delta df}$.  
+- Diagnose VIF/residuals, evaluate **ROC/PR/F1**.  
+- Optimize **threshold** for imbalance.  
