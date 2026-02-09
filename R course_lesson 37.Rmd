@@ -26,6 +26,7 @@ Given a dissimilarity $d(\cdot,\cdot)$, common linkages include:
 - **Ward**: merges that minimize the increase in within-cluster SSE (often strong baseline with Euclidean distance).
 
 In this lesson:
+
 - We build dendrograms with multiple linkages.
 - We cut the tree at $k$.
 - We validate clusters with silhouette.
@@ -84,6 +85,7 @@ par(mfrow = c(1, 1))
 ```
 
 Interpretation guideline:
+
 - Very “chained” dendrograms can indicate poor separation or inappropriate linkage/distance.
 - Ward often yields more balanced groups when Euclidean geometry is meaningful.
 
@@ -170,6 +172,7 @@ ari_hc_km
 ```
 
 Interpretation:
+
 - ARI close to 0.65: good agreement between partitions.
 - Lower ARI: methods capture different structure; investigate cluster shapes, outliers, and linkage choice.
 
