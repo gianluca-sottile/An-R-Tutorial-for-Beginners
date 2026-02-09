@@ -57,7 +57,8 @@ dim(umap_iris)
 head(umap_iris, 3)
 ```
 
-**Key parameters**:[2][1]
+**Key parameters**:
+
 - `n_neighbors`: $k$ in kNN graph ($5 \leq k \leq \min(15, n/3)$); low = local focus, high = global.  
 - `min_dist`: Separation in low-D ($0.001–0.5$); low = tight clusters.  
 - **Deterministic** given seed (unlike t-SNE).
@@ -86,6 +87,7 @@ ggplot(umap_df, aes(x = umap1, y = umap2, color = Species)) +
 ```
 
 **Interpretation**:  
+
 - **setosa** clearly separated (global structure).  
 - **versicolor**/**virginica** tight yet distinct (local structure).  
 - Superior to t-SNE in **global distances** preservation.
