@@ -16,10 +16,11 @@ knitr::opts_chunk$set(
 
 # Linear regression (OLS): theory + practice
 
-Linear regression models the conditional mean of a response as a linear function of predictors: $$ \mathbb{E}[Y \mid X] = X\beta $$.  
-Under the classical assumptions (linearity in parameters, zero-mean errors conditional on $$X$$, homoscedasticity, no perfect multicollinearity), OLS is BLUE: **best linear unbiased estimator**.
+Linear regression models the conditional mean of a response as a linear function of predictors: $ \mathbb{E}[Y \mid X] = X\beta $.  
+Under the classical assumptions (linearity in parameters, zero-mean errors conditional on $X$, homoscedasticity, no perfect multicollinearity), OLS is BLUE: **best linear unbiased estimator**.
 
 We cover:
+
 - Simple regression (by hand + `lm()`).
 - Multiple regression (diagnostics, collinearity, inference).
 - Regression with factors (dummy coding, reference levels).
@@ -73,7 +74,7 @@ coef(fit_simple)
 
 ### Confidence interval vs prediction interval
 
-A confidence interval targets the **mean response** $$ \mathbb{E}[Y \mid X=x] $$, while a prediction interval targets a **new observation** $$Y_{\text{new}}$$, and is therefore typically wider.
+A confidence interval targets the **mean response** $\mathbb{E}[Y \mid X=x]$, while a prediction interval targets a **new observation** $Y_{\text{new}}$, and is therefore typically wider.
 
 ```{r}
 new_h <- data.frame(height = c(60, 65, 70))
@@ -179,7 +180,7 @@ Tip: you can change the baseline level via `relevel()` to match the interpretati
 
 ## 4) Stepwise regression (AIC) + validation
 
-AIC is defined as $$ \mathrm{AIC} = 2k - 2\ln(\hat{L}) $$, i.e., a trade-off between fit and complexity.
+AIC is defined as $\mathrm{AIC} = 2k - 2\ln(\hat{L})$, i.e., a trade-off between fit and complexity.
 Stepwise procedures can be useful for exploration, but they can be unstable and optimistic; good practice is to evaluate performance out-of-sample or via cross-validation.
 
 ### Stepwise (AIC) in base R
