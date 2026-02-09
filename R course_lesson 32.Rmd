@@ -52,6 +52,7 @@ str(mds_euro, max.level = 2)
 ```
 
 **Key outputs**:
+
 - `points`: $n \times k$ matrix of **coordinates** in the embedded space ($Y$).  
 - `eig`: **Eigenvalues** of the centered $B$ matrix ($\Lambda$).  
 - `GOF`: **Goodness-of-fit** vector; `GOF[1]^2 + GOF[2]^2` = proportion of variance explained by first two dimensions.  
@@ -100,9 +101,11 @@ ggplot(cities_df, aes(x = x, y = y, label = city)) +
 ```
 
 **Geographic interpretation**:
+
 - **Iberian cluster** (LIS, MAD, POR) close together in bottom‑left.  
 - **Nordic/Baltic** (ATH, HEL, LIS) separated along Dim 1 (longitude proxy).  
 - **Central Europe** (BER, BRN, LUX) clustered centrally.  
+
 The configuration **recovers true geography** from distances alone, validating the method.
 
 # Step 5: Stress and validation (non-metric extension)
