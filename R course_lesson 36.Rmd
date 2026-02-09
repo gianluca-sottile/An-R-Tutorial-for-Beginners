@@ -19,6 +19,7 @@ knitr::opts_chunk$set(
 ## Why penalization?
 
 OLS estimates can become unstable when:
+
 - predictors are highly correlated (multicollinearity),
 - the number of predictors is large relative to the sample size,
 - you want a model that generalizes better (lower variance) and/or performs variable selection.
@@ -62,6 +63,7 @@ $$
 \ +\ \lambda\left[(1-\alpha)\frac{1}{2}\|\beta\|_2^2 + \alpha\|\beta\|_1\right]
 $$
 with $0 \le \alpha \le 1$:
+
 - $\alpha = 0$ → ridge
 - $\alpha = 1$ → lasso
 - $0<\alpha<1$ → elastic net
@@ -77,6 +79,7 @@ with $0 \le \alpha \le 1$:
 ## Practice in R with glmnet
 
 Key points:
+
 - `glmnet` expects a numeric matrix `x` (use `model.matrix()` for factors).
 - Use cross-validation to select $\lambda$ via `cv.glmnet()`.
 - Common choices:
