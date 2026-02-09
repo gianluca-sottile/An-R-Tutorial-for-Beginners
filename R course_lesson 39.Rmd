@@ -1,0 +1,143 @@
+---
+pagetitle: "Lesson 39"
+title: "Model-based Clustering in R — Gaussian Mixtures, Soft Assignments, and Component Selection"
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+# Model-based clustering (Gaussian Mixture Models)
+
+Model-based clustering assumes data arise from a mixture distribution:
+$ p(x) = \sum_{g=1}^G \pi_g \, \phi(x \mid \mu_g, \Sigma_g) $,
+where $\pi_g \ge 0$ and $\sum_g \pi_g = 1$.
+
+Key properties:
+
+- **Soft assignments** via posterior probabilities:
+$ \tau_{ig} = P(z_i=g \mid x_i) $.
+- Clusters can be **elliptical** (through $\Sigma_g$), unlike K-means which is inherently spherical in Euclidean space.
+- The number of components $G$ can be selected using information criteria (commonly BIC).
+
+In this lesson:
+
+- Fit a GMM with automatic model selection.
+- Inspect soft assignments (uncertainty).
+- Compare with K-means.
+
+# Step 1: Import + preprocessing
+
+```{r}
+library(readr)
+library(dplyr)
+
+local_path <- "raw_data/wholesale_customers.csv"
+df_raw <- read_csv(local_path, show_col_types = FALSE)
+
+spend_vars <- c("Fresh", "Milk", "Grocery", "Frozen", "Detergents_Paper", "Delicassen")
+
+X <- df_raw |>
+  mutate(across(all_of(spend_vars), ~ log1p(.x))) |>
+  select(all_of(spend_vars)) |>
+  mutate(across(everything(), scale)) |>
+  as.matrix()
+```
+
+# Step 2: Fit model-based clustering and select G by BIC
+
+```{r}
+# install.packages("mclust")  # if needed
+library(mclust)
+
+set.seed(123)
+fit <- Mclust(X, G = 1:12)
+
+fit
+plot(fit, what = "BIC")
+```
+
+Commentary:
+
+- If the BIC curve has a clear maximum, the selected $G$ is usually stable.
+- If BIC is flat across many $G$, clustering structure may be weak or sensitive to preprocessing.
+
+# Step 3: Hard vs soft clustering outputs
+
+```{r}
+cl <- fit$classification          # hard labels
+prob <- fit$z                     # posterior probabilities (n x G)
+uncert <- 1 - apply(prob, 1, max) # simple uncertainty measure
+
+table(cl)
+summary(uncert)
+```
+
+High uncertainty points indicate observations not clearly explained by any single component.
+
+# Step 4: Visualization (PCA + uncertainty)
+
+```{r}
+library(ggplot2)
+
+pc <- prcomp(X)
+plot_df <- data.frame(
+  PC1 = pc$x[, 1],
+  PC2 = pc$x[, 2],
+  cluster = factor(cl),
+  uncertainty = uncert
+)
+
+ggplot(plot_df, aes(PC1, PC2, color = cluster)) +
+  geom_point(aes(alpha = 1 - uncertainty), size = 2) +
+  theme_minimal() +
+  labs(
+    title = "Model-based clustering (GMM) — PCA projection",
+    subtitle = "Point transparency reflects assignment certainty",
+    x = "PC1", y = "PC2"
+  )
+```
+
+# Step 5: Compare with K-means (same number of clusters)
+
+```{r}
+set.seed(123)
+km <- kmeans(X, centers = length(unique(cl)), nstart = 50)
+
+ari <- adjustedRandIndex(cl, km$cluster)
+ari
+```
+
+Interpretation:
+
+- If ARI is high, both methods recover similar structure.
+- If ARI is lower, investigate covariance shapes: GMM can fit ellipses; K-means cannot.
+
+# Step 6: Cluster profiling
+
+```{r}
+df_prof <- as.data.frame(X)
+df_prof$cluster <- factor(cl)
+
+profiles <- df_prof |>
+  group_by(cluster) |>
+  summarize(across(where(is.numeric), mean), .groups = "drop")
+
+profiles
+```
+
+For business communication, it is often preferable to profile clusters on **original-scale** variables (before scaling/log), and report relative differences.
+
+# Summary
+
+- Model-based clustering provides a probabilistic framework with soft assignments.
+- It naturally supports elliptical clusters and explicit uncertainty quantification.
+- BIC-based selection helps choose the number of components.
+- Comparing GMM vs K-means clarifies whether “spherical” clustering is too restrictive.
