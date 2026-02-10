@@ -116,7 +116,7 @@ output:
     df_print: kable
     toc: true
     toc_float: true
-    toc_depth: 2
+    toc_depth: 1
     include:
       after_body: footer.html
       in_header: header.html
