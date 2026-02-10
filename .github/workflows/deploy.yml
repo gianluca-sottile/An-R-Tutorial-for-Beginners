@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages 🚀
+name: Deploy docs (incremental Rmd + render_site on _site.yml) 🚀
 
 on:
   push:
@@ -12,70 +12,110 @@ permissions:
 
 jobs:
   deploy:
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+
     steps:
-    - name: 📥 Checkout
-      uses: actions/checkout@v4
+      - name: 📥 Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: 🛠️ Setup R
-      uses: r-lib/actions/setup-r@v2
+      - name: 🛠️ Setup R
+        uses: r-lib/actions/setup-r@v2
 
-    - name: 📦 Setup Pandoc
-      uses: r-lib/actions/setup-pandoc@v2
+      - name: 📦 Setup Pandoc
+        uses: r-lib/actions/setup-pandoc@v2
 
-    # ⚡ CACHE R PACKAGES (perfetto!)
-    - name: 💾 Cache R packages
-      uses: actions/cache@v4
-      with:
-        path: ${{ env.R_LIBS_USER }}
-        key: ${{ runner.os }}-r-${{ hashFiles('DESCRIPTION') }}-${{ hashFiles('**/DESCRIPTION') }}
-        restore-keys: ${{ runner.os }}-r-
+      - name: 💾 Cache R packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: ${{ runner.os }}-r-${{ hashFiles('DESCRIPTION') }}-${{ hashFiles('**/DESCRIPTION') }}
+          restore-keys: ${{ runner.os }}-r-
 
-    - name: 📦 Install packages
-      uses: r-lib/actions/setup-r-dependencies@v2
-      with:
-        packages: any::rmarkdown, any::knitr, any::png, any::ggplot2, any::dplyr, any::kableExtra, any::readxl, any::haven, any::xlsx, any::Hmisc, any::GGally, any::olsrr, any::ROCR, any::animation, any::tidyr, any::RColorBrewer, any::readr, any::cluster, any::factoextra, any::openxlsx, any::writexl, any::rpart, any::rpart.plot, any::caret, any::randomForest, any::e1071, any::xgboost, any::kernlab, any::psych, any::Rtsne, any::uwot, any::ca, any::pROC, any::ranger, any::car, any::lmtest, any::sandwich, any::glmnet, any::mclust, any::dbscan, any::stringr, any::forcats
+      - name: 📦 Install R packages needed for render
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          # adatta la lista come preferisci
+          packages: any::rmarkdown, any::knitr, any::png, any::ggplot2, any::dplyr
 
-    # 🔥 CACHE OUTPUTS R Markdown (GAME-CHANGER!)
-    - name: 💾 Cache R Markdown (_site + _cache)
-      uses: actions/cache@v4
-      with:
-        path: |
-          docs/
-          _site/
-          _cache/
-          **/_cache/
-          **/_freeze/
-        key: ${{ runner.os }}-rmd-v3-${{ hashFiles('**/*.Rmd', 'raw_data/**', '_site.yml') }}
-        restore-keys: ${{ runner.os }}-rmd-
+      - name: 💾 Cache rendered outputs (optional speedup)
+        uses: actions/cache@v4
+        with:
+          path: |
+            docs/
+            _cache/
+            **/_cache/
+          key: ${{ runner.os }}-rmd-v1-${{ hashFiles('docs/**/*.Rmd', 'raw_data/**', '_site.yml') }}
+          restore-keys: ${{ runner.os }}-rmd-
 
-    # 🎬 RENDER SELETTIVO (FIXATO!)
-    - name: 🎬 Render site (selective + cache)
-      shell: bash  # ← CAMBIO CRUCIALE!
-      run: |
-        # Trova .Rmd modificati
-        CHANGED=$(git diff --name-only HEAD~1 -- '*.Rmd' 2>/dev/null || echo "")
-        
-        if [ -z "$CHANGED" ]; then
-          echo "✅ No .Rmd changed → full render with cache"
-        else
-          echo "🔄 Rendering changed only: $CHANGED"
-          for file in $CHANGED; do
-            Rscript -e "rmarkdown::render('$file', quiet = TRUE)"
-          done
-        fi
-        
-        # Sempre rebuild site (usa cache!)
-        Rscript -e 'rmarkdown::render_site(encoding = "UTF-8")'
+      - name: 🔎 Determine changes and render (selective or full site)
+        shell: bash
+        run: |
+          set -euo pipefail
 
-    - name: 📤 Upload artifact
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: ./docs/
+          echo "Event: $GITHUB_EVENT_NAME"
+          git fetch --all --tags --prune
 
-    - name: 🚀 Deploy
-      id: deployment
-      uses: actions/deploy-pages@v4
+          # Determine range for diff. For push events use github.event.before/github.sha
+          if [ "${{ github.event_name }}" = "push" ]; then
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.sha }}"
+            echo "Push event: BEFORE=$BEFORE AFTER=$AFTER"
+
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              # New branch / initial push: consider all Rmds in docs and also check _site.yml
+              echo "New branch / initial push detected — treating all docs/**/*.Rmd as changed"
+              CHANGED_RMDS=$(git ls-files 'docs/**/*.Rmd' || true)
+              CHANGED_SITE=$(git diff --name-only HEAD -- '_site.yml' || true)
+            else
+              # Regular push: list changed files between BEFORE and AFTER
+              CHANGED_RMDS=$(git diff --name-only "$BEFORE" "$AFTER" -- 'docs/**/*.Rmd' || true)
+              CHANGED_SITE=$(git diff --name-only "$BEFORE" "$AFTER" -- '_site.yml' || true)
+            fi
+          else
+            # workflow_dispatch or other: treat as "rebuild all"
+            echo "Manual dispatch or other event — will rebuild site (render_site)"
+            CHANGED_RMDS=$(git ls-files 'docs/**/*.Rmd' || true)
+            CHANGED_SITE="_site.yml"
+          fi
+
+          # Normalize (remove empty lines)
+          CHANGED_RMDS=$(echo "$CHANGED_RMDS" | sed '/^[[:space:]]*$/d' || true)
+          CHANGED_SITE=$(echo "$CHANGED_SITE" | sed '/^[[:space:]]*$/d' || true)
+
+          echo "Changed _site.yml entries:"
+          echo "$CHANGED_SITE"
+          echo "Changed Rmd files:"
+          echo "$CHANGED_RMDS"
+
+          # If _site.yml changed, do full site render (so navigation/index get updated)
+          if echo "$CHANGED_SITE" | grep -q "_site.yml"; then
+            echo "⚠️ _site.yml changed → running full rmarkdown::render_site() to rebuild navigation/index"
+            # Renders the entire site; _site.yml should control output to docs/.
+            Rscript -e 'rmarkdown::render_site(encoding = "UTF-8")'
+          else
+            # If there are changed Rmds, render each individually into its directory (preserve docs/)
+            if [ -n "$CHANGED_RMDS" ]; then
+              while IFS= read -r file; do
+                # Skip empty lines
+                [ -z "$file" ] && continue
+                echo "→ Rendering modified Rmd: $file"
+                Rscript -e "rmarkdown::render(path = '$file', output_dir = dirname('$file'), quiet = TRUE)"
+              done <<< "$CHANGED_RMDS"
+            else
+              echo "✅ Nessun .Rmd modificato in docs/ e _site.yml non modificato → niente da renderizzare."
+            fi
+          fi
+
+      - name: 📤 Upload pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs/
+
+      - name: 🚀 Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
