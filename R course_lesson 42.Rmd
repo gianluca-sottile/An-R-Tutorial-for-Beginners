@@ -1,0 +1,444 @@
+---
+pagetitle: "Lesson 42"
+title: "Autoencoders in R — Representation Learning, Denoising, and Anomaly Detection with Keras3"
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.align = "center",
+  message = TRUE,
+  warning = FALSE
+)
+
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(keras3)
+library(tensorflow)
+```
+
+# Autoencoders: theory and use cases
+
+An **autoencoder** is a neural network trained to reconstruct its input:
+$$
+f_\theta: x \mapsto \hat{x}
+$$
+with architecture split into:
+
+- **Encoder** $E_\phi$: maps input $x \in \mathbb{R}^p$ to a **latent code** $z \in \mathbb{R}^d$, usually with $d < p$  
+  $$
+  z = E_\phi(x)
+  $$
+- **Decoder** $D_\psi$: maps code $z$ back to a reconstruction $\hat{x}$  
+  $$
+  \hat{x} = D_\psi(z)
+  $$
+
+The overall model minimizes a **reconstruction loss**, e.g. mean squared error:
+$$
+\mathcal{L}(\phi,\psi) = \frac{1}{n}\sum_{i=1}^n \| x_i - D_\psi(E_\phi(x_i)) \|_2^2
+$$
+
+Deep autoencoders use multiple layers in encoder and decoder, allowing **non-linear representation learning**.
+
+Typical uses:
+
+- **Non-linear dimensionality reduction** (latent code as learned features).  
+- **Denoising**: reconstruct clean signals from noisy inputs.  
+- **Anomaly detection**: high reconstruction error as a proxy for “unusual” patterns.  
+- **Pretraining**: initialize deep architectures with unsupervised features.
+
+In this lesson we use the **Wholesale Customers** dataset (spending by product category) to:
+
+- Fit an autoencoder to learn a low-dimensional representation of spending profiles.  
+- Compare latent codes to PCA.  
+- Use reconstruction error for anomaly-style analysis.  
+
+***
+
+# Step 1: Data import and preprocessing
+
+```{r}
+local_path <- "raw_data/wholesale_customers.csv"
+url_path <- "https://raw.githubusercontent.com/SobiaNoorAI/Wholesale-Customer-Segmentation-and-Spending-Behavior-Analysis-By-ML/main/Data/Wholesale%20customers%20data.csv"
+
+if (!file.exists(local_path)) {
+  dir.create("raw_data", showWarnings = FALSE)
+  download.file(url_path, local_path, mode = "wb")
+}
+
+wholesale <- read_csv(local_path, show_col_types = FALSE)
+glimpse(wholesale)
+```
+
+Focus on the numeric spending variables:
+
+```{r}
+spend_vars <- c("Fresh", "Milk", "Grocery", "Frozen", "Detergents_Paper", "Delicassen")
+
+X_raw <- wholesale |>
+  select(all_of(spend_vars)) |>
+  na.omit()
+
+summary(X_raw)
+```
+
+Spending is strongly right-skewed. We apply $\log(1+x)$ and standardization:
+
+```{r}
+X_log <- X_raw |>
+  mutate(across(everything(), log1p))
+
+means <- sapply(X_log, mean)
+sds   <- sapply(X_log, sd)
+
+X <- X_log |>
+  mutate(across(everything(), ~ (.x - means[cur_column()]) / sds[cur_column()]))
+
+X_mat <- as.matrix(X)
+dim(X_mat)
+```
+
+We will train the autoencoder **only** on this standardized matrix.
+
+***
+
+# Step 2: Train/validation split (unsupervised)
+
+Even though there is no target, we still need a **validation set** to detect overfitting.
+
+```{r}
+set.seed(123)
+
+n <- nrow(X_mat)
+idx <- sample.int(n)
+train_frac <- 0.8
+n_train <- floor(train_frac * n)
+
+X_train <- X_mat[idx[1:n_train], , drop = FALSE]
+X_valid <- X_mat[idx[(n_train + 1):n], , drop = FALSE]
+
+dim(X_train)
+dim(X_valid)
+```
+
+***
+
+# Step 3: Autoencoder architecture design
+
+We choose a **symmetric deep autoencoder**:
+
+- Input dimension $p = 6$ (spending categories).  
+- Encoder:
+  - Dense(64) → Dense(32) → Dense($d$) where $d = 2$ (latent code).  
+- Decoder:
+  - Dense(32) → Dense(64) → Dense(6).
+
+We use:
+
+- ReLU activations in hidden layers.  
+- Linear activation in the output (since data are standardized and roughly continuous).  
+- MSE loss as reconstruction loss.  
+- Optional L2 regularization and dropout in the encoder to prevent trivial memorization.
+
+Mathematically:
+$$
+z = \sigma(W_2 \sigma(W_1 x + b_1) + b_2), \quad
+\hat{x} = W_4 \sigma(W_3 z + b_3) + b_4
+$$
+
+with $\sigma$ = ReLU and loss $\frac{1}{n}\sum_i \|x_i - \hat{x}_i\|^2$.
+
+***
+
+# Step 4: Implement the autoencoder in keras3
+
+```{r}
+input_dim <- ncol(X_train)
+latent_dim <- 2L
+
+build_autoencoder <- function(input_dim, latent_dim,
+                              l2_lambda = 1e-4, dropout_rate = 0.1) {
+  
+  input <- layer_input(shape = input_dim, name = "input_layer")
+  
+  # Encoder
+  encoded <- input |>
+    layer_dense(units = 64, activation = "relu",
+                kernel_regularizer = regularizer_l2(l2_lambda)) |>
+    layer_dropout(rate = dropout_rate) |>
+    layer_dense(units = 32, activation = "relu",
+                kernel_regularizer = regularizer_l2(l2_lambda)) |>
+    layer_dense(units = latent_dim, activation = "linear", name = "latent_code")
+  
+  # Decoder
+  decoded <- encoded |>
+    layer_dense(units = 32, activation = "relu",
+                kernel_regularizer = regularizer_l2(l2_lambda)) |>
+    layer_dense(units = 64, activation = "relu",
+                kernel_regularizer = regularizer_l2(l2_lambda)) |>
+    layer_dense(units = input_dim, activation = "linear", name = "reconstruction")
+  
+  autoencoder <- keras_model(inputs = input, outputs = decoded)
+  
+  autoencoder |>
+    compile(
+      optimizer = optimizer_adam(learning_rate = 1e-3),
+      loss = "mse"
+    )
+  
+  autoencoder
+}
+
+autoencoder <- build_autoencoder(input_dim, latent_dim)
+autoencoder
+```
+
+We can also define a standalone **encoder model** to map $x \mapsto z$:
+
+```{r}
+encoder <- keras_model(
+  inputs = autoencoder$input,
+  outputs = autoencoder$get_layer("latent_code")$output
+)
+encoder
+```
+
+***
+
+# Step 5: Train the autoencoder with early stopping
+
+```{r}
+callback_es <- callback_early_stopping(
+  monitor = "val_loss",
+  patience = 10,
+  restore_best_weights = TRUE
+)
+
+set.seed(123)
+history <- autoencoder |>
+  fit(
+    x = X_train,
+    y = X_train,               # target = input
+    validation_data = list(X_valid, X_valid),
+    epochs = 200,
+    batch_size = 64,
+    callbacks = list(callback_es),
+    verbose = 2
+  )
+```
+
+Learning curve:
+
+```{r}
+plot(history) +
+  theme_minimal() +
+  ggtitle("Autoencoder training and validation loss")
+```
+
+We want training and validation losses to converge to a low value without strong divergence, which would signal overfitting to idiosyncratic patterns.
+
+***
+
+# Step 6: Latent representation vs PCA
+
+Compute latent codes for all observations:
+
+```{r}
+Z <- encoder |>
+  predict(X_mat)
+
+latent_df <- data.frame(
+  z1 = Z[, 1],
+  z2 = Z[, 2]
+)
+
+head(latent_df)
+```
+
+Compare with a 2D PCA projection:
+
+```{r}
+pc <- prcomp(X_mat)
+pc_df <- data.frame(
+  PC1 = pc$x[, 1],
+  PC2 = pc$x[, 2]
+)
+
+# Plot PCA vs autoencoder codes
+p1 <- ggplot(pc_df, aes(PC1, PC2)) +
+  geom_point(alpha = 0.6) +
+  theme_minimal() +
+  ggtitle("PCA (2D) of wholesale spending")
+
+p2 <- ggplot(latent_df, aes(z1, z2)) +
+  geom_point(alpha = 0.6, color = "steelblue") +
+  theme_minimal() +
+  ggtitle("Autoencoder latent space (2D)")
+
+p1
+p2
+```
+
+Discussion:
+
+- PCA finds a **linear** 2D subspace that maximizes variance.  
+- The autoencoder learns a **non-linear** mapping to 2D, optimized for reconstruction rather than variance.  
+- Clusters or curved manifolds may appear more clearly in the autoencoder space, especially with more complex architectures.
+
+You can also examine how each latent dimension relates to original features via correlation:
+
+```{r}
+cor(cbind(latent_df, X_mat))
+```
+
+***
+
+# Step 7: Reconstruction error and anomaly-style analysis
+
+For each observation, the reconstruction error is
+$$
+e_i = \| x_i - \hat{x}_i \|_2^2
+$$
+which we can compute on the standardized scale.
+
+```{r}
+X_hat <- autoencoder |>
+  predict(X_mat)
+
+recon_error <- rowSums((X_mat - X_hat)^2)
+
+summary(recon_error)
+
+error_df <- data.frame(
+  error = recon_error
+)
+
+ggplot(error_df, aes(x = error)) +
+  geom_histogram(bins = 40, fill = "firebrick", alpha = 0.8, color = "white") +
+  theme_minimal() +
+  labs(
+    title = "Distribution of reconstruction error",
+    x = "Squared reconstruction error",
+    y = "Count"
+  )
+```
+
+A simple heuristic for “potential anomalies” is to flag observations in the upper tail of the reconstruction error distribution (e.g., top 5–10%).
+
+```{r}
+threshold <- quantile(recon_error, 0.95)
+idx_anom <- which(recon_error >= threshold)
+
+length(idx_anom) / n  # proportion flagged
+
+head(X_raw[idx_anom, ])
+```
+
+Caveats:
+
+- A high reconstruction error can identify unusual spending profiles, but autoencoders are **not guaranteed** to fail on anomalies; in some cases they reconstruct them surprisingly well.  
+- It is safer to treat reconstruction error as one feature among others in an anomaly pipeline, not as a stand-alone detector.
+
+***
+
+# Step 8: Denoising autoencoder variant
+
+A **denoising autoencoder** receives noisy inputs $\tilde{x} = x + \epsilon$ as input, but learns to reconstruct the **clean** $x$. The training objective becomes
+$$
+\mathcal{L} = \frac{1}{n}\sum_i \| x_i - D_\psi(E_\phi(\tilde{x}_i)) \|^2
+$$
+which forces the model to learn a representation robust to noise.
+
+We can simulate noise by adding Gaussian perturbations during training.
+
+```{r}
+set.seed(123)
+
+add_noise <- function(X, noise_sd = 0.2) {
+  X + matrix(rnorm(length(X), mean = 0, sd = noise_sd), nrow = nrow(X))
+}
+
+X_train_noisy <- add_noise(X_train, noise_sd = 0.2)
+X_valid_noisy <- add_noise(X_valid, noise_sd = 0.2)
+
+denoising_ae <- build_autoencoder(input_dim, latent_dim,
+                                  l2_lambda = 1e-4, dropout_rate = 0.0)
+
+history_denoise <- denoising_ae |>
+  fit(
+    x = X_train_noisy,
+    y = X_train,   # target = clean input
+    validation_data = list(X_valid_noisy, X_valid),
+    epochs = 200,
+    batch_size = 64,
+    callbacks = list(callback_es),
+    verbose = 0
+  )
+
+plot(history_denoise) +
+  theme_minimal() +
+  ggtitle("Denoising autoencoder training")
+```
+
+The denoising autoencoder tends to learn codes that emphasize **stable structure**, improving robustness for downstream tasks (e.g., clustering on the latent space).
+
+***
+
+# Step 9: Autoencoder codes as features for clustering
+
+We can use the latent representation $z$ as input to clustering algorithms (e.g., K-means) to obtain segmentations in a low-dimensional, non-linear feature space.
+
+```{r}
+# Build encoder model once from the existing autoencoder
+encoder_denoise <- keras_model(
+  inputs  = denoising_ae$input,
+  outputs = denoising_ae$get_layer("latent_code")$output
+)
+
+# Now get latent codes for all observations
+Z_all <- encoder_denoise |>
+  predict(X_mat)
+
+set.seed(123)
+km_latent <- kmeans(Z_all, centers = 4, nstart = 50)
+
+latent_cluster_df <- data.frame(
+  z1 = Z_all[, 1],
+  z2 = Z_all[, 2],
+  cluster = factor(km_latent$cluster)
+)
+
+ggplot(latent_cluster_df, aes(z1, z2, color = cluster)) +
+  geom_point(alpha = 0.8) +
+  theme_minimal() +
+  labs(
+    title = "K-means on autoencoder latent space",
+    x = "z1", y = "z2"
+  )
+```
+
+Comparing this clustering to K-means on the original standardized space can reveal whether the autoencoder has highlighted meaningful non-linear structure.
+
+***
+
+# Step 10: Summary of autoencoder use cases
+
+Autoencoders are versatile tools for:
+
+- **Non-linear dimensionality reduction**: learn compact codes for complex multivariate data.  
+- **Feature learning for downstream tasks**: use latent codes as input to clustering, classification, or regression models.  
+- **Denoising**: learn representations that are robust to noise and small perturbations.  
+- **Reconstruction-based anomaly analysis**: use reconstruction error as a signal of unusual patterns (with appropriate caution and validation).  
+- **Pretraining**: initialize deep models on unlabeled data before supervised fine-tuning.
+
+In this lesson you:
+
+- Implemented a deep autoencoder in R using keras3 and TensorFlow.  
+- Learned how to design encoder/decoder architectures and choose latent dimensionality.  
+- Used early stopping and validation for unsupervised training.  
+- Compared autoencoder latent space to PCA.  
+- Explored reconstruction error and denoising variants, and used autoencoder codes as inputs for clustering.
