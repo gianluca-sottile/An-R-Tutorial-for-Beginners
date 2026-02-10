@@ -111,6 +111,18 @@ jobs:
             fi
           fi
 
+      - name: 📁 Copy manual static HTML into docs/
+        run: |
+          # crea la cartella docs/ se non esiste
+          mkdir -p docs
+          # copia ricorsivamente le pagine manuali dentro docs/
+          # sovrascriverà eventuali file con lo stesso nome
+          cp -R static_pages/* docs/ || true
+          
+          # opzionale: mostra cosa è stato copiato (log utile)
+          echo "Manual static files copied into docs/:"
+          ls -R docs | sed -n '1,200p'
+
       - name: 📤 Upload pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
