@@ -1,3 +1,6 @@
+Ecco una versione aggiornata del tuo `index.Rmd` (o file di welcome) coerente con l’aggiunta del **track Deep Learning**. Ho mantenuto stile e struttura, aggiungendo solo ciò che serve (senza stravolgere il testo) e includendo anche una breve nota “optional” per keras3/TensorFlow.
+
+```markdown
 ---
 pagetitle: "An R Tutorial for Beginners"
 author: "by Gianluca Sottile"
@@ -10,9 +13,9 @@ home: "https://www.unipa.it/persone/docenti/s/gianluca.sottile"
 
 # Welcome to the R Programming Tutorial
 
-R is an open‑source programming language and environment specifically designed for statistical computing, data analysis, and graphics. It is widely used in academia, research, and industry for tasks ranging from classical statistical modeling to modern data science and machine learning.
+R is an open‑source programming language and environment specifically designed for statistical computing, data analysis, and graphics. It is widely used in academia, research, and industry for tasks ranging from classical statistical modeling to modern data science, machine learning, and reproducible research.
 
-This tutorial accompanies a structured course that can support up to **9 ECTS / 72 hours** of teaching and guided practice, introducing you step by step to the fundamentals of R programming, data manipulation, exploratory analysis, and introductory machine learning. Whether you are a student, researcher, or professional, the material is designed to help you build solid, reproducible workflows for analyzing and interpreting data.
+This tutorial accompanies a structured course that can support up to **9 ECTS / 72 hours** of teaching and guided practice, introducing you step by step to the fundamentals of R programming, data manipulation, exploratory analysis, and machine learning. The material is organized as a sequence of self‑contained R Markdown lessons designed to help you build solid, reproducible workflows for analyzing and interpreting data.
 
 ```{r fig.width=5, fig.height=5, fig.align='center', cache=TRUE, fig.cap="R: a statistical computing environment for data science.", fig.asp=0.50, echo=FALSE}
 library(png)
@@ -27,14 +30,14 @@ grid.raster(img)
   R provides a rich set of tools for statistical modeling, hypothesis testing, time‑series analysis, classification, clustering, and advanced graphics in a single environment.
 
 - **Central in data science and research**  
-  R is a standard in many scientific disciplines and is used by data science teams in technology, healthcare, finance, and other sectors for data‑driven decision making and experimentation.
+  R is a standard in many scientific disciplines and is used by data science teams in technology, healthcare, finance, energy, and other sectors for data‑driven decision making and experimentation.
 
 - **Reproducible and extensible**  
   With R Markdown and a large ecosystem of packages, R supports fully reproducible analyses, literate programming, and integration with version control systems such as Git and GitHub.
 
 ## Course Highlights
 
-This tutorial is organized into self‑contained lessons that gradually increase in complexity and mirror the structure of a full academic course in R for data analysis.
+This tutorial is organized into lessons that gradually increase in complexity and mirror the structure of a full academic course in R for data analysis.
 
 - **Core R fundamentals**  
   Syntax, objects and data types (vectors, matrices, factors, lists, data frames), indexing and basic operations.
@@ -46,6 +49,18 @@ This tutorial is organized into self‑contained lessons that gradually increase
   Descriptive statistics, correlation, scatter plots, boxplots, bar charts, histograms, and basic inferential procedures (t‑tests, one‑way and two‑way ANOVA) implemented directly in R.
 
 - **Machine learning foundations**  
-  Introduction to supervised learning (linear and generalized linear models, decision trees, random forests, gradient boosting, support vector machines) and unsupervised learning (k‑means clustering and basic dimensionality reduction) using R as the main analysis environment.
+  Introduction to supervised learning (linear and generalized linear models, penalized regression, decision trees, random forests, gradient boosting, support vector machines) and unsupervised learning (k‑means, hierarchical and density‑based clustering, model‑based clustering, spectral clustering, and core dimensionality reduction) using R as the main analysis environment.
+
+- **Deep learning track (optional, advanced)**  
+  A dedicated set of lessons introduces deep learning in R using **keras3** and **TensorFlow**, covering deep neural networks for tabular data, autoencoders for representation learning, LSTM/GRU models for sequences (e.g., electricity demand forecasting and text classification), and CNNs for image classification.
+
+### Notes on prerequisites (deep learning lessons)
+
+The deep learning lessons are designed to run **locally** (CPU is sufficient, GPU optional). You should have a working installation of `keras3` and `tensorflow` in your R environment before running the training code.
 
 Get ready to build a principled R workflow, from raw data to models and interpretable results, leveraging a modern statistical computing environment.
+```
+
+Due note rapide (scelte editoriali):
+- Ho aggiunto la parte deep learning come **track opzionale** per non “spaventare” chi sta seguendo il percorso base.
+- Ho lasciato invariata la chunk con `cache=TRUE`; se noti comportamenti strani, conviene usare cache solo sui chunk davvero lenti (ma questa è una scelta tua di course engineering).
