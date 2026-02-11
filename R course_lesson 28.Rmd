@@ -228,5 +228,3 @@ You learned XGBoost to:
 - Interpret via **gain/SHAP**, evaluate ROC/PR/confusion.  
 - Compare to GLM (superior non-linearity).  
 
-XGBoost is **SOTA** for tabular data (Kaggle winner).
-

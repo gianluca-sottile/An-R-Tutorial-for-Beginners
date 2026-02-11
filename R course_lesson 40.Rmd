@@ -17,10 +17,10 @@ knitr::opts_chunk$set(
 # Spectral Clustering
 
 Spectral clustering is a graph-based method. It builds an affinity graph $W$ from similarities (e.g., RBF kernel):
-$ W_{ij} = \exp(-\|x_i - x_j\|^2 / (2\sigma^2)) $.
+$W_{ij} = \exp(-\|x_i - x_j\|^2 / (2\sigma^2))$.
 
 Define the degree matrix $D$ where $D_{ii} = \sum_j W_{ij}$, and (one version of) the normalized Laplacian:
-$ L = I - D^{-1/2} W D^{-1/2} $.
+$L = I - D^{-1/2} W D^{-1/2}$.
 
 The algorithm embeds data into the space spanned by a few eigenvectors of $L$ (or a related matrix) and then runs a simple clustering method (often K-means) in that embedding.
 

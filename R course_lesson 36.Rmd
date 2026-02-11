@@ -30,7 +30,7 @@ Penalized regression adds a constraint/penalty to shrink coefficients toward zer
 
 ## Theory: Ridge, Lasso, Elastic Net
 
-Assume a linear model $$y = X\beta + \epsilon$$ with $$X \in \mathbb{R}^{n \times p}$$.
+Assume a linear model $y = X\beta + \epsilon$ with $X \in \mathbb{R}^{n \times p}$.
 The OLS objective minimizes RSS:
 $$
 \min_{\beta_0,\beta}\ \frac{1}{2n}\sum_{i=1}^n (y_i - \beta_0 - x_i^T\beta)^2

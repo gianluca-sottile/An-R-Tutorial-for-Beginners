@@ -94,6 +94,7 @@ sapply(X, FUN, ..., simplify = TRUE, USE.NAMES = TRUE)
 ## Example: min/max on the cars dataset
 
 ```{r}
+data(cars, "dataset")
 dt <- cars
 
 min_l <- lapply(dt, min)

@@ -22,7 +22,9 @@ $$
 \log\frac{p}{1-p} = X\beta, \quad p = \sigma(X\beta) = \frac{1}{1+e^{-X\beta}}
 $$
 
-**Deviance** $D = 2[\ell(\text{saturated}) - \ell(\hat{\mu})]$ measures fit (like $-2\log\lambda$). **AIC** $D + 2p$ balances goodness/complexity. **LRT**: $\text{Deviance}(\text{null}) - \text{Deviance}(\text{alt}) \sim \chi^2_{\Delta df}$.
+- **Deviance** $D = 2[\ell(\text{saturated}) - \ell(\hat{\mu})]$ measures fit (like $-2\log\lambda$). 
+- **AIC** $D + 2p$ balances goodness/complexity. 
+- **LRT**: $\text{Deviance}(\text{null}) - \text{Deviance}(\text{alt}) \sim \chi^2_{\Delta df}$.
 
 Lesson: Adult income (>50K?) classification ($n \approx 30k$, 24% positive), feature eng, stepwise, VIF, ROC/PR.
 

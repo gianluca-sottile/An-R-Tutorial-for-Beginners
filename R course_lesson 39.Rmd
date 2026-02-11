@@ -17,13 +17,13 @@ knitr::opts_chunk$set(
 # Model-based clustering (Gaussian Mixture Models)
 
 Model-based clustering assumes data arise from a mixture distribution:
-$ p(x) = \sum_{g=1}^G \pi_g \, \phi(x \mid \mu_g, \Sigma_g) $,
+$p(x) = \sum_{g=1}^G \pi_g \, \phi(x \mid \mu_g, \Sigma_g)$,
 where $\pi_g \ge 0$ and $\sum_g \pi_g = 1$.
 
 Key properties:
 
 - **Soft assignments** via posterior probabilities:
-$ \tau_{ig} = P(z_i=g \mid x_i) $.
+$\tau_{ig} = P(z_i=g \mid x_i)$.
 - Clusters can be **elliptical** (through $\Sigma_g$), unlike K-means which is inherently spherical in Euclidean space.
 - The number of components $G$ can be selected using information criteria (commonly BIC).
 
@@ -58,7 +58,7 @@ X <- df_raw |>
 library(mclust)
 
 set.seed(123)
-fit <- Mclust(X, G = 1:12)
+fit <- Mclust(X, G = 1:12, verbose = FALSE)
 
 fit
 plot(fit, what = "BIC")
