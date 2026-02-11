@@ -13,14 +13,18 @@ This 9 ECTS (approximately 72 contact hours) course is designed for students wit
 
 No prior experience with R is strictly required; however, previous exposure to any programming language (e.g., Python, MATLAB, C, or Java) is beneficial and will facilitate faster progression through the programming components of the course. Participants are expected to bring their own device (laptop) with administrative rights, on which they can install R, RStudio (or an equivalent IDE), and any additional packages used during the lectures and labs.
 
+**Optional deep learning track prerequisites**: a working local configuration of `keras3` and `tensorflow` for R is recommended to run the deep learning lessons end‑to‑end (including model training), for example by using the `install_keras()` helper when appropriate. [web:236]
+
 ## Course Description
 ***
 
 This course offers a structured and comprehensive introduction to the R programming language as a modern environment for data analysis, statistical computing, and reproducible research. Starting from the fundamentals of R syntax and core data structures, the course progressively covers user‑defined functions, control structures, and vectorized programming patterns that are essential for writing clear, efficient, and reusable code.
 
-A substantial part of the course is devoted to data management and transformation, including importing and exporting data from multiple formats, handling missing values, reshaping tables, and preparing analysis‑ready data sets. Students will then learn how to perform exploratory data analysis and produce informative visualizations to summarize univariate and multivariate patterns, using R’s base graphics and, where appropriate, more advanced plotting tools.
+A substantial part of the course is devoted to data management and transformation, including importing and exporting data from multiple formats, handling missing values, reshaping tables, and preparing analysis‑ready data sets. Students will then learn how to perform exploratory data analysis and produce informative visualizations to summarize univariate and multivariate patterns, using R’s base graphics and, where appropriate, modern plotting tools.
 
 In the final portion, the course introduces the foundations of machine learning with R, with a clear distinction between supervised and unsupervised approaches. Supervised learning topics include regression and classification models, while unsupervised learning covers dimensionality reduction techniques and clustering methods for exploratory pattern discovery. Throughout, emphasis is placed on good programming practice, critical assessment of model outputs, and reproducible workflows suitable for academic and applied research.
+
+An additional set of lessons provides an **optional deep learning track** implemented in modern R using Keras and TensorFlow, covering deep neural networks for structured (tabular) data, autoencoders for representation learning, sequence models (LSTM/GRU) for forecasting and text classification, and convolutional neural networks (CNNs) for image classification.
 
 ## Expected Outcomes
 ***
@@ -35,6 +39,7 @@ By the end of the course, students will:
 - Be familiar with standard procedures for importing and exporting data from and to common formats (CSV, text, Excel, SPSS, etc.), and with basic strategies for handling missing data.
 - Understand the basic principles of exploratory data analysis and data visualization, including measures of association, distributions, and graphical summaries.
 - Grasp core concepts in supervised learning (regression and classification) and unsupervised learning (dimensionality reduction and clustering), including typical evaluation criteria and limitations.
+- Understand the conceptual building blocks of modern deep learning (layers, activations, losses, optimization, regularization, validation) and how they relate to statistical learning principles such as bias–variance trade‑offs and generalization.
 
 ### Skills
 
@@ -45,8 +50,9 @@ Upon successful completion, students will be able to:
 - Write and debug user‑defined functions, implement control structures (if/else, for, while), and translate iterative code into vectorized or apply‑based solutions when appropriate.
 - Import and export data in a variety of file formats, manage missing values, recode variables, merge and reshape data sets, and derive new variables in a principled way.
 - Conduct exploratory data analysis, compute descriptive statistics, and produce high‑quality tables and graphics that communicate key findings clearly.
-- Fit, interpret, and critically evaluate basic supervised learning models (e.g., linear and generalized linear models, decision trees, random forests, and gradient boosting) in R.
+- Fit, interpret, and critically evaluate supervised learning models (e.g., linear and generalized linear models, penalized regression, decision trees, random forests, gradient boosting, and support vector machines) in R.
 - Apply unsupervised learning methods, such as principal component analysis and clustering algorithms, to explore high‑dimensional data and identify latent structure.
+- (Optional deep learning track) Build, train, and validate neural models in R using Keras/TensorFlow, including DNNs for tabular data, autoencoders for representation learning, LSTM/GRU models for sequences, and CNNs for images; use regularization, early stopping, and principled train/validation/test evaluation to control overfitting.
 
 ### Communication Skills
 
@@ -63,6 +69,7 @@ In addition, students will:
 - Develop autonomy in learning new R functions, packages, and workflows by consulting documentation, vignettes, and online resources.
 - Gain confidence in using R as a primary tool for data analysis in academic and professional contexts, enabling further self‑directed study in advanced statistics and machine learning.
 - Build transferable skills in reproducible computing that can be applied to other programming languages and analytical environments.
+- (Optional deep learning track) Learn how to read deep learning APIs critically, map code components to mathematical objects (losses, gradients, regularizers), and reason about model capacity, optimization stability, and generalization.
 
 ## Objectives
 ***
@@ -73,6 +80,7 @@ By the end of this course, students will be able to:
 2. Implement and document statistical and machine learning workflows in R using scripts and literate programming tools, ensuring transparency and reproducibility.
 3. Analyze real‑world data sets to extract meaningful insights, critically interpret results, and synthesize conclusions supported by appropriate graphical and numerical evidence.
 4. Select and apply suitable supervised and unsupervised learning methods in R, justify their use in context, and assess their performance using relevant diagnostic and validation techniques.
+5. (Optional deep learning track) Design and train neural network architectures in R for different data modalities (tabular, sequences, text, images), justify key hyperparameter choices (capacity, activations, regularization, optimization), and evaluate generalization with a clear validation protocol.
 
 ## Recommended Textbook and Resources
 ***
@@ -81,6 +89,7 @@ By the end of this course, students will be able to:
 - R Core Team: *R Language Definition* and *Writing R Extensions*, for deeper insight into the R language and programming best practices.
 - Online tutorials and open course materials on R programming, data manipulation, and visualization, including introductory and intermediate resources on CRAN, university pages, and recognized MOOC platforms.
 - Supplementary material (slides, scripts, data sets, and additional readings) provided by the instructor through the course repository or learning platform.
+- (Optional deep learning track) Official documentation for deep learning in R via Keras/TensorFlow and the course lesson notes for installation and reproducible execution.
 
 ## Lecture Schedule
 ***
@@ -94,6 +103,7 @@ The following schedule is indicative and may be adapted to the specific calendar
 | 8 | Programming fundamentals: functions, arguments, return values, environments. Control structures: if/else, for, while, repeat, and logical operators. Introduction to vectorization and the apply‑family of functions. |
 | 10 | Data import and export: reading and writing CSV, text, Excel, and common statistical formats (e.g., SPSS). Data cleaning and preparation: handling missing values, recoding variables, filtering, merging, and reshaping data. |
 | 10 | Exploratory data analysis: univariate and bivariate summaries, correlation and association measures. Visualization of distributions and relationships using histograms, boxplots, scatter plots, and other standard graphics. |
-| 14 | Supervised learning: linear regression, model diagnostics, variable selection, and introduction to generalized linear models. Classification methods such as decision trees, random forests, gradient boosting, and support vector machines, with emphasis on model evaluation and overfitting control. |
-| 10 | Unsupervised learning: dimensionality reduction techniques (e.g., principal component analysis) and clustering methods (e.g., k‑means, hierarchical clustering). Interpretation of components and clusters, visualization, and practical considerations in unsupervised analysis. |
+| 14 | Supervised learning: linear regression, model diagnostics, variable selection, and introduction to generalized linear models. Classification methods such as penalized regression, decision trees, random forests, gradient boosting, and support vector machines, with emphasis on model evaluation and overfitting control. |
+| 10 | Unsupervised learning: dimensionality reduction techniques (e.g., principal component analysis) and clustering methods (e.g., k‑means, hierarchical, density‑based, model‑based, and spectral clustering). Interpretation of components and clusters, visualization, and practical considerations in unsupervised analysis. |
 | 8 | Integrated case studies and project work: end‑to‑end analysis of real‑world data sets, from data ingestion to model building and reporting using reproducible R scripts and R Markdown. Review, discussion, and preparation for assessment. |
+| Optional (6–10) | Deep learning extension: DNNs for tabular data, autoencoders, LSTM/GRU for sequences and text, CNNs for images; training/validation protocols, regularization, and practical considerations for reproducible experiments in R. |
