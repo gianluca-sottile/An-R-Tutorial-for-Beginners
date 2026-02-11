@@ -1,6 +1,3 @@
-Ecco una versione aggiornata del tuo `index.Rmd` (o file di welcome) coerente con l’aggiunta del **track Deep Learning**. Ho mantenuto stile e struttura, aggiungendo solo ciò che serve (senza stravolgere il testo) e includendo anche una breve nota “optional” per keras3/TensorFlow.
-
-```markdown
 ---
 pagetitle: "An R Tutorial for Beginners"
 author: "by Gianluca Sottile"
