@@ -1,4 +1,4 @@
-/* Headings */
+/* Headings (style + fluid size) */
 h1, .h1, h2, .h2, h3, .h3 {
   margin-top: 24px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
@@ -6,24 +6,28 @@ h1, .h1, h2, .h2, h3, .h3 {
   letter-spacing: -0.01em;
 }
 
-/* Body */
+h1, .h1 { font-size: clamp(2rem, 3vw, 3.5rem) !important; }
+h2, .h2 { font-size: clamp(1.5rem, 2.2vw, 2.5rem) !important; }
+h3, .h3 { font-size: clamp(1.25rem, 1.8vw, 2rem) !important; }
+
+/* Body — FLUID FONT + LINE HEIGHT */
 body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  line-height: 1.7;
-  font-size: 16.5px;
+  font-size: clamp(16px, 1.2vw, 18px) !important;
+  line-height: 1.75;
   margin: 0;
-  padding-top: 74px; /* space for fixed navbar */
+  padding-top: 74px;
   padding-bottom: 40px;
   background-color: #f7f8fb;
   color: #374151;
 }
 
-/* Content width */
+/* Content width — RESPONSIVE */
 .container {
-  width: 84%;
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 22px;
+  width: min(96vw, 1400px) !important;
+  max-width: none !important;
+  margin: 0 auto !important;
+  padding: clamp(16px, 2vw, 28px);
 }
 
 .main-container {
@@ -110,8 +114,7 @@ html { scroll-padding-top: 84px; }
 
 /* Responsive mobile */
 @media (max-width: 768px) {
-  body { padding-top: 62px; font-size: 16px; }
-  .container { width: 95%; padding: 16px; }
+  body { padding-top: 62px; }             /* non toccare font-size */
+  .container { width: 96vw !important; }  /* coerente con min(96vw, ...) */
   html { scroll-padding-top: 70px; }
 }
-
