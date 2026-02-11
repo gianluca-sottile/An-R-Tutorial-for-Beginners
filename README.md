@@ -1,6 +1,3 @@
-Your live website is available at https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/ [gianluca-sottile.github](https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/)
-
-```markdown
 [![GitHub stars](https://img.shields.io/github/stars/gianluca-sottile/An-R-Tutorial-for-Beginners?style=social)](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners)
 [![License](https://img.shields.io/github/license/gianluca-sottile/An-R-Tutorial-for-Beginners?color=blue)](LICENSE)
 [![GitHub last commit](https://img.shields.io/github/last-commit/gianluca-sottile/An-R-Tutorial-for-Beginners)](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners)
@@ -200,12 +197,3 @@ If you want to go beyond the material covered here, consider exploring:
 
 **👨‍💻 Author**: [Gianluca Sottile](https://github.com/gianluca-sottile)  
 **📄 License**: [CC-BY-SA-4.0](LICENSE)
-```
-
-Key changes I made:
-- Removed the stray citation marker from the ML bullet list.
-- Fixed the lesson-number/filename swap for Missing Values vs Exporting Data.
-- Fixed the Spectral Clustering HTML link (it was pointing to lesson 30).
-- Added a dedicated **Deep learning** section with 5 lessons, plus a short prerequisites note.
-
-If your deep-learning files are currently numbered differently (e.g., 38–42), paste your actual filenames/URLs and I’ll align the table precisely to your repo.
