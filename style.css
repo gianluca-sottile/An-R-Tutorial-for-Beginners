@@ -22,16 +22,12 @@ body {
   color: #374151;
 }
 
-/* Content width — RESPONSIVE */
+.main-container,
 .container {
-  width: min(96vw, 1400px) !important;
+  width: 98vw !important;
   max-width: none !important;
-  margin: 0 auto !important;
-  padding: clamp(16px, 2vw, 28px);
-}
-
-.main-container {
-  padding-top: 10px;
+  padding-left: clamp(14px, 2vw, 34px) !important;
+  padding-right: clamp(14px, 2vw, 34px) !important;
 }
 
 /* Links */
@@ -114,7 +110,28 @@ html { scroll-padding-top: 84px; }
 
 /* Responsive mobile */
 @media (max-width: 768px) {
-  body { padding-top: 62px; }             /* non toccare font-size */
-  .container { width: 96vw !important; }  /* coerente con min(96vw, ...) */
-  html { scroll-padding-top: 70px; }
+  .main-container, .container {
+    width: 100vw !important;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+  div.tocify {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
 }
+
+pre,
+pre code,
+pre.sourceCode,
+code.sourceCode,
+div.sourceCode pre {
+  font-size: clamp(14px, 0.35vw + 13px, 16.5px);
+  line-height: 1.55;
+}
+
+/* Output blocks */
+pre:not(.sourceCode) {
+  font-size: 15px;
+}
+
