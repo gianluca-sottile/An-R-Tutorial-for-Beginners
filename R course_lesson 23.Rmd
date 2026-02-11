@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 
 # Linear regression (OLS): theory + practice
 
-Linear regression models the conditional mean of a response as a linear function of predictors: $ \mathbb{E}[Y \mid X] = X\beta $.  
+Linear regression models the conditional mean of a response as a linear function of predictors: $\mathbb{E}[Y \mid X] = X\beta$.  
 Under the classical assumptions (linearity in parameters, zero-mean errors conditional on $X$, homoscedasticity, no perfect multicollinearity), OLS is BLUE: **best linear unbiased estimator**.
 
 We cover:
