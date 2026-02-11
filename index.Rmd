@@ -56,8 +56,3 @@ This tutorial is organized into lessons that gradually increase in complexity an
 The deep learning lessons are designed to run **locally** (CPU is sufficient, GPU optional). You should have a working installation of `keras3` and `tensorflow` in your R environment before running the training code.
 
 Get ready to build a principled R workflow, from raw data to models and interpretable results, leveraging a modern statistical computing environment.
-```
-
-Due note rapide (scelte editoriali):
-- Ho aggiunto la parte deep learning come **track opzionale** per non “spaventare” chi sta seguendo il percorso base.
-- Ho lasciato invariata la chunk con `cache=TRUE`; se noti comportamenti strani, conviene usare cache solo sui chunk davvero lenti (ma questa è una scelta tua di course engineering).
