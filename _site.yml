@@ -108,6 +108,18 @@ navbar:
               href: R-course_lesson-39.html
             - text: "Spectral Clustering"
               href: R-course_lesson-40.html
+        - text: "Deep Learning"
+          menu:
+          - text: "Deep Neural Networks"
+            href: R-course_lesson-41.html
+          - text: "Autoencoders"
+            href: R-course_lesson-42.html
+          - text: "Long Short-Term Memory"
+            href: R-course_lesson-43.html
+          - text: "Gated Recurrent Unit Networks"
+            href: R-course_lesson-44.html
+          - text: "Convolutional Neural Networks"
+            href: R-course_lesson-45.html
           
 output:
   html_document:
@@ -116,7 +128,7 @@ output:
     df_print: kable
     toc: true
     toc_float: true
-    toc_depth: 1
+    toc_depth: 2
     include:
       after_body: footer.html
       in_header: header.html
