@@ -120,7 +120,6 @@ navbar:
             href: R-course_lesson-44.html
           - text: "Convolutional Neural Networks"
             href: R-course_lesson-45.html
-
           
 output:
   html_document:
