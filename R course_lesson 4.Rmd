@@ -33,6 +33,7 @@ factor(x, levels = NULL, labels = levels, ordered = FALSE)
 ```
 
 Key arguments:
+
 - `x`: a vector (typically character, integer, or numeric codes).
 - `levels`: the set of possible values (and their order, if provided).
 - `labels`: the human-readable labels for the levels.

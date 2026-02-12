@@ -17,11 +17,13 @@ knitr::opts_chunk$set(
 # What is a function in R?
 
 A function is a reusable piece of code. It helps you:
+
 - avoid repetition,
 - reduce complexity,
 - make code easier to test and maintain.
 
 A function can:
+
 - take inputs (arguments),
 - execute a body,
 - return a value (explicitly with `return()` or implicitly as the last expression).
@@ -58,6 +60,7 @@ plot(diff_ts, type = "l", main = "First differences")
 ## length(): number of elements
 
 `length()` returns:
+
 - number of elements for vectors,
 - number of columns for data frames/matrices.
 
@@ -142,6 +145,7 @@ summary(speed)
 # Writing your own functions
 
 A user-defined function has:
+
 - a name,
 - arguments (with optional defaults),
 - a body.
@@ -244,6 +248,7 @@ df_example |> select(ends_with("_norm")) |> head(5)
 # Functions with conditions: train/test split
 
 A more practical split function usually:
+
 - takes a proportion,
 - optionally takes a seed for reproducibility,
 - returns both train and test sets.

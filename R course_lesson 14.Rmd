@@ -20,6 +20,7 @@ read.csv(file, header = TRUE, sep = ",")
 ```
 
 Notes:
+
 - Since R 4.0, strings are **not** converted to factors by default, but older code often included `stringsAsFactors = FALSE`; keeping it can be useful for portability.
 - On Windows, paths in quotes need escaping (`\\`) or use forward slashes (`/`).
 

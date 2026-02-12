@@ -18,6 +18,7 @@ knitr::opts_chunk$set(
 
 The *apply* family helps you iterate over common data structures without writing explicit `for` loops.
 Use:
+
 - `apply()` for matrices (or data frames you *treat as matrices*)
 - `lapply()` for lists/vectors/data frames (returns a list)
 - `sapply()` like `lapply()` but it tries to simplify the result

@@ -17,6 +17,7 @@ knitr::opts_chunk$set(
 Missing values (NA) occur when observations are not recorded or when values cannot be parsed correctly. Before modeling or summarizing data, you should decide whether to **remove** missing rows or **impute** missing values.
 
 In this lesson you will learn how to:
+
 - Identify which columns contain missing values
 - Remove rows containing missing values
 - Impute missing values using the mean or the median

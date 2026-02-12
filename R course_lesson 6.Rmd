@@ -106,6 +106,7 @@ str(prison_5)
 ```
 
 Note:
+
 - `prison[, 1:5]` means “all rows, columns 1 to 5”.
 - If you use `prison[1:5]` without the comma, R interprets it as selecting columns too, but `prison[, 1:5]` is clearer and safer when teaching.
 

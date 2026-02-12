@@ -53,6 +53,7 @@ cor(x, y, method = c("pearson", "spearman", "kendall"), use = "complete.obs")
 ```
 
 Important option for missing values:
+
 - `use = "complete.obs"` removes rows with any missing values (listwise deletion),
 - `use = "pairwise.complete.obs"` computes each pairwise correlation using available pairs.
 

@@ -56,6 +56,7 @@ out
 ```
 
 Notes:
+
 - `seq_along(x)` is safer than `1:length(x)` because it behaves correctly when `x` is empty.
 - `i^2` is clearer than `i*i`.
 
@@ -99,7 +100,7 @@ for (r in seq_len(nrow(mat))) {
 ```
 
 Notes:
+
 - `seq_len(n)` is a safe way to generate `1:n`-style sequences (it works well even when `n` can be 0).
 - `cat()` produces cleaner console output than `print(paste(...))` for simple messages.
-```
 

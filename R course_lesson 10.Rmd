@@ -14,7 +14,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-# The if / else statement {#buttons .tabset .tabset-fade .tabset-pills}
+# The if / else statement
 
 Conditional statements let you run different code depending on whether a condition is `TRUE` or `FALSE`. The basic syntax in R is:
 
@@ -73,6 +73,7 @@ if (quantity < 20) {
 ```
 
 Note:
+
 - `&&` is the scalar “AND” operator typically used in `if()` statements; `&` is vectorized and compares element-by-element.
 
 # Example: VAT rate by product category

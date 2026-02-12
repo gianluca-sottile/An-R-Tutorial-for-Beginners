@@ -44,6 +44,7 @@ while (i <= 10) {
 ```
 
 Notes:
+
 - `cat()` is convenient for printing multiple values in one line and controlling newlines with `"\n"`.
 - Avoid mixing `cat()` and `print()` unless there is a specific reason; it usually makes the output noisier.
 

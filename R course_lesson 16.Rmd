@@ -15,11 +15,13 @@ knitr::opts_chunk$set(
 ```
 
 Exporting data from R is mostly about choosing:
+
 - a destination path (folder),
 - a file name,
 - and a file format (extension).
 
 In this lesson you will export a small summary table to:
+
 - CSV
 - Excel (.xlsx)
 - R data formats (.rds / .RData)
@@ -151,4 +153,4 @@ save(df, file = "table_car.RData")
 # Notes about “open folder”
 
 Opening a folder from R (e.g., via `system()` / `shell.exec()`) may fail on servers and CI (GitHub Actions), so it’s safer to print the directory path and rely on the file browser of the environment.
-```
+

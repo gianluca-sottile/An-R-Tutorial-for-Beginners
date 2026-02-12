@@ -17,6 +17,7 @@ knitr::opts_chunk$set(
 # What is a data frame?
 
 A **data frame** is a table-like object where:
+
 - each column is a vector,
 - all columns have the same length,
 - different columns can have different types (numeric, character, logical, factor, ...).
@@ -68,6 +69,7 @@ str(df_tbl)
 # Slice (index) a data frame
 
 Indexing uses `df[rows, cols]`:
+
 - leaving `rows` blank means “all rows”
 - leaving `cols` blank means “all columns”
 
