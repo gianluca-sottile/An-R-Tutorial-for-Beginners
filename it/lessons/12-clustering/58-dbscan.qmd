@@ -1,0 +1,604 @@
+---
+title: "DBSCAN: clustering basato sulla densità"
+subtitle: "I cluster come regioni dense, i valori anomali come rumore — e come scegliere eps senza andare a tentoni"
+description: "Punti core, di confine e di rumore; i parametri eps e minPts; la scelta di eps dal grafico delle distanze dai k vicini più prossimi; DBSCAN su dati non convessi dove k-means fallisce; un'analisi onesta dei dati wholesale; e una breve introduzione a HDBSCAN."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~80 min]{} [Prerequisiti: [Clustering: il quadro generale](55-clustering-intro.qmd), [Clustering k-means](56-kmeans.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare l'idea del clustering **basato sulla densità** e classificare i punti come **core**, **di confine** (*border*) o **rumore** (*noise*);
+- scegliere `minPts` con una regola pratica ed `eps` dal **grafico delle distanze dai k vicini più prossimi**, giustificando la scelta;
+- eseguire `dbscan::dbscan()` e leggerne l'output, compresa l'etichetta **rumore** 0;
+- mostrare su dati non convessi perché DBSCAN può riuscire dove k-means fallisce;
+- interpretare DBSCAN in modo onesto su dati reali, anche quando **non** trova alcuna struttura di cluster utile, e sapere quando provare **HDBSCAN**.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+#| message: false
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+library(dbscan)    # dbscan(), kNNdist(), kNNdistplot(), hdbscan()
+library(cluster)   # silhouette()
+library(mclust)    # adjustedRandIndex()
+```
+
+## 1. Perché la densità?
+
+Immagina una fotografia notturna di un paese scattata dallo spazio. Le città sono chiazze luminose **dense**; tra l'una e l'altra c'è il buio, con qualche luce sparsa. Nessuno direbbe che una città debba essere rotonda, o che ogni cascina isolata debba appartenere a una città. Riconosciamo le città perché sono **regioni in cui le luci sono addensate**, separate da regioni in cui non lo sono.
+
+Questa è l'idea del **clustering basato sulla densità**:
+
+- un cluster è una regione in cui i punti sono **fittamente addensati**;
+- i cluster sono separati da regioni a **bassa densità**;
+- i punti nelle regioni a bassa densità non appartengono a **nessun cluster**: vengono etichettati come **rumore**.
+
+Ne derivano due conseguenze che k-means e il legame di Ward non condividono. I cluster possono avere **qualsiasi forma** (un anello, una banana, un serpente), e il metodo può dire "questa osservazione non appartiene a nessun gruppo", che spesso è proprio ciò che vogliamo per i valori anomali.
+
+Il metodo basato sulla densità più diffuso è **DBSCAN** (*Density-Based Spatial Clustering of Applications with Noise*; Ester, Kriegel, Sander & Xu, 1996).
+
+## 2. Punti core, di confine e di rumore
+
+DBSCAN richiede due numeri:
+
+- **`eps`** ($\varepsilon$) — un raggio. L'**intorno $\varepsilon$** di un punto è l'insieme dei punti a distanza al massimo $\varepsilon$ da esso.
+- **`minPts`** — quanti punti (il punto stesso incluso) deve contenere il suo intorno perché sia considerato "denso".
+
+Ogni osservazione appartiene allora a uno dei tre tipi:
+
+| Tipo | Definizione | Intuizione |
+|---|---|---|
+| **Core** | almeno `minPts` punti (se stesso incluso) a distanza al massimo `eps` | in mezzo alla folla |
+| **Di confine (border)** | non core, ma a distanza al massimo `eps` da un punto core | ai margini della folla |
+| **Rumore (noise)** | né core né di confine | solo nel buio |
+
+I cluster si costruiscono **concatenando punti core**: due punti core più vicini di `eps` appartengono allo stesso cluster, così come tutti i punti core raggiungibili attraverso tali catene. Ogni punto di confine entra nel cluster di un punto core vicino. I punti di rumore ricevono l'etichetta **0**.
+
+Classifichiamo a mano sei punti, con `eps = 1` e `minPts = 3`.
+
+```{r}
+#| label: toy-points
+pts <- data.frame(
+  x = c(1, 1.5, 2, 1.3, 2.9, 5),
+  y = c(1, 1, 1.2, 1.6, 1.4, 4),
+  row.names = c("A", "B", "C", "D", "E", "F")
+)
+eps_toy    <- 1
+minpts_toy <- 3
+
+D <- as.matrix(dist(pts))
+round(D, 2)
+```
+
+```{r}
+#| label: toy-types
+n_neigh   <- rowSums(D <= eps_toy)          # include il punto stesso
+core      <- n_neigh >= minpts_toy
+near_core <- apply(D[, core, drop = FALSE] <= eps_toy, 1, any)
+type <- ifelse(core, "core", ifelse(near_core, "border", "noise"))
+data.frame(n_neigh, type)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `n_neigh` conta i punti a distanza al massimo 1, **incluso il punto stesso** (la sua distanza da sé è 0).
+- A, B, C e D hanno almeno 3 punti di questo tipo: sono punti **core** e, attraverso catene, sono tutti a distanza al massimo 1 gli uni dagli altri, quindi formano un unico cluster.
+- E ha solo `r n_neigh["E"]` punti nel suo intorno (se stesso e C), quindi non è core; ma C è un punto core a distanza al massimo 1, quindi E è un punto **di confine** dello stesso cluster.
+- F è lontano da tutti: **rumore**.
+:::
+
+```{r}
+#| label: toy-dbscan
+dbscan(pts, eps = eps_toy, minPts = minpts_toy)$cluster
+```
+
+`dbscan()` è d'accordo: A–E stanno nel cluster 1 e F riceve l'etichetta di rumore 0.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: le definizioni formali
+
+Sia $N_\varepsilon(x) = \{y : d(x, y) \le \varepsilon\}$ (contiene $x$ stesso).
+
+- $x$ è un **punto core** se $|N_\varepsilon(x)| \ge \text{minPts}$.
+- $y$ è **direttamente raggiungibile per densità** da $x$ se $x$ è un punto core e $y \in N_\varepsilon(x)$.
+- $y$ è **raggiungibile per densità** da $x$ se esiste una catena $x = p_1, p_2, \dots, p_m = y$ in cui ogni $p_{j+1}$ è direttamente raggiungibile per densità da $p_j$.
+- $x$ e $y$ sono **connessi per densità** se entrambi sono raggiungibili per densità da uno stesso punto $o$.
+
+Un **cluster** è un insieme massimale di punti connessi per densità. I punti core finiscono sempre in un unico cluster. Un punto di confine può trovarsi a distanza al massimo `eps` da punti core di due cluster diversi; DBSCAN lo assegna allora al cluster che lo raggiunge per primo, quindi solo i punti di confine possono dipendere dall'ordine dei dati. I punti di rumore non sono raggiungibili per densità da alcun punto core.
+
+Il numero di cluster **non** è un input: è una conseguenza di `eps` e `minPts`.
+:::
+
+## 3. Una forma che k-means non sa gestire: le due lune
+
+Simuliamo i classici dati "a due lune": due semicerchi intrecciati, più 20 punti di rumore di fondo sparsi a caso.
+
+```{r}
+#| label: moons-data
+make_moons <- function(n = 400, noise = 0.06) {
+  t1 <- runif(n / 2, 0, pi)
+  t2 <- runif(n / 2, 0, pi)
+  tibble(
+    x = c(cos(t1), 1 - cos(t2)) + rnorm(n, 0, noise),
+    y = c(sin(t1), 0.5 - sin(t2)) + rnorm(n, 0, noise),
+    truth = rep(c("moon 1", "moon 2"), each = n / 2)
+  )
+}
+
+set.seed(1)
+moons <- bind_rows(
+  make_moons(),
+  tibble(x = runif(20, -1.5, 2.5), y = runif(20, -1, 1.5),
+         truth = "background")
+)
+X_moons <- as.matrix(moons[, c("x", "y")])
+in_moon <- moons$truth != "background"
+```
+
+Entrambe le coordinate hanno la stessa scala, quindi qui non standardizziamo. (Con dati reali quasi sempre devi farlo: vedi [l'introduzione](55-clustering-intro.qmd).)
+
+Per prima cosa, k-means con $k = 2$:
+
+```{r}
+#| label: moons-kmeans
+set.seed(1)
+km_moons <- kmeans(X_moons, centers = 2, nstart = 25)
+adjustedRandIndex(km_moons$cluster[in_moon], moons$truth[in_moon])
+```
+
+Un ARI di `r round(adjustedRandIndex(km_moons$cluster[in_moon], moons$truth[in_moon]), 2)` sui punti delle lune: k-means taglia il grafico con una retta, perché ciascuno dei suoi cluster è "i punti più vicini a un centro", cioè una regione convessa. Due lune intrecciate non si possono separare così.
+
+## 4. Scegliere minPts ed eps
+
+### minPts: una regola pratica
+
+`minPts` controlla quanta "folla" richiediamo. Valori piccoli rendono DBSCAN sensibile a piccoli grumi casuali; valori grandi lisciano di più e dichiarano rumore più punti. Regole pratiche comuni:
+
+- `minPts` almeno $p + 1$, dove $p$ è il numero di variabili;
+- `minPts` $= 2p$ come valore predefinito per dati con poco rumore (Sander et al., 1998), più grande per dati rumorosi o molto numerosi.
+
+Per le lune, $p = 2$, quindi prendiamo `minPts = 4`.
+
+### eps: il grafico delle distanze dai k vicini più prossimi
+
+Per ogni punto calcola la distanza dal suo $k$-esimo vicino più prossimo, con $k = \text{minPts} - 1$ (il punto stesso è il primo membro del suo intorno). Un punto è core esattamente quando questa distanza è al massimo `eps`. Ordinando queste distanze e rappresentandole graficamente si ottiene il **grafico delle distanze kNN**:
+
+- i punti dentro i cluster hanno distanze kNN **piccole**: la lunga parte piatta della curva;
+- i punti di rumore hanno distanze kNN **grandi**: la parte ripida all'estremità destra.
+
+Un buon valore di `eps` si trova nel **gomito** dove la curva si piega verso l'alto: sotto di esso la maggior parte dei punti è core; sopra, iniziamo ad assorbire il rumore.
+
+```{r}
+#| label: fig-knn-moons
+#| fig-cap: "Distanze ordinate dal 3° vicino più prossimo (k = minPts − 1) per le lune. La linea tratteggiata indica il gomito scelto con la regola qui sotto."
+minpts_moons <- 4
+knn_moons <- kNNdist(X_moons, k = minpts_moons - 1)
+
+# gomito: il punto della curva ordinata più distante sotto la retta
+# che congiunge il primo e l'ultimo punto (entrambi gli assi riscalati in [0, 1])
+knee_point <- function(d) {
+  d <- sort(d)
+  u <- (seq_along(d) - 1) / (length(d) - 1)
+  v <- (d - d[1]) / (d[length(d)] - d[1])
+  d[which.max(u - v)]
+}
+eps_moons <- round(knee_point(knn_moons), 2)
+
+kNNdistplot(X_moons, k = minpts_moons - 1)
+abline(h = eps_moons, lty = 2, col = "#D55E00")
+```
+
+La regola del gomito dà `eps =` `r eps_moons`. Non è magia: è un modo riproducibile di scrivere "dove la curva si piega". Leggere il grafico a occhio darebbe un valore simile e (come vedremo) DBSCAN non è molto sensibile alla scelta esatta quando i cluster sono ben separati.
+
+::: {.callout-important}
+## Perché non provare molti eps e tenere quello che "sembra migliore"?
+
+Perché con dati reali non conosci la risposta giusta. Il grafico kNN lega `eps` a una **proprietà dei dati** (la distanza tipica tra vicini nelle regioni dense) e rende la scelta trasparente e ripetibile. Dopo aver scelto, *verifica* quanto il risultato sia sensibile (sezione 6).
+:::
+
+## 5. Eseguire DBSCAN
+
+```{r}
+#| label: moons-dbscan
+db_moons <- dbscan(X_moons, eps = eps_moons, minPts = minpts_moons)
+db_moons
+table(cluster = db_moons$cluster, truth = moons$truth)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Il riepilogo stampato riporta i parametri, il numero di cluster trovati e il numero di **punti di rumore**; poi le dimensioni dei cluster, con il rumore elencato sotto **0**.
+- La tabella di contingenza confronta con la verità, che DBSCAN non ha mai visto. Ogni luna è (quasi interamente) un cluster, e la maggior parte dei punti di fondo è etichettata come rumore. Alcuni punti di fondo che per caso cadono vicino a una luna vengono assorbiti come punti di confine: è il comportamento corretto, perché *sono* in una regione densa.
+- `db_moons$cluster` contiene le etichette; `0` non è un cluster ma "nessun cluster".
+:::
+
+```{r}
+#| label: moons-ari
+c(kmeans = adjustedRandIndex(km_moons$cluster[in_moon],
+                             moons$truth[in_moon]),
+  dbscan = adjustedRandIndex(db_moons$cluster[in_moon],
+                             moons$truth[in_moon]))
+```
+
+Possiamo anche ricavare i tre tipi di punto. Un punto è core quando la sua distanza kNN è al massimo `eps`:
+
+```{r}
+#| label: moons-types
+moons <- moons |>
+  mutate(
+    cluster_km = factor(km_moons$cluster),
+    cluster_db = if_else(db_moons$cluster == 0, "noise",
+                         paste("cluster", db_moons$cluster)),
+    type = case_when(
+      knn_moons <= eps_moons  ~ "core",
+      db_moons$cluster > 0    ~ "border",
+      .default = "noise"
+    )
+  )
+dplyr::count(moons, type)   # anche mclust ha una funzione count()
+```
+
+```{r}
+#| label: fig-moons
+#| fig-cap: "Due lune con rumore di fondo. A sinistra: k-means (k = 2) divide i dati con un confine rettilineo. A destra: DBSCAN recupera entrambe le lune ed etichetta i punti isolati come rumore (grigio); i simboli piccoli sono punti di confine."
+#| fig-height: 4.5
+bind_rows(
+  moons |> transmute(x, y, method = "k-means (k = 2)",
+                     group = paste("cluster", cluster_km), type = "core"),
+  moons |> transmute(x, y, method = "DBSCAN", group = cluster_db, type)
+) |>
+  ggplot(aes(x, y, colour = group, size = type)) +
+  geom_point(alpha = 0.7) +
+  scale_colour_manual(values = c("cluster 1" = "#E69F00",
+                                 "cluster 2" = "#0072B2",
+                                 "noise" = "grey60")) +
+  scale_size_manual(values = c(core = 1.6, border = 0.8, noise = 1.6)) +
+  facet_wrap(~ method) +
+  coord_equal() +
+  labs(colour = NULL, size = "Tipo di punto")
+```
+
+## 6. Quanto è sensibile il risultato a eps?
+
+```{r}
+#| label: moons-sensitivity
+eps_grid <- c(0.05, 0.08, 0.10, eps_moons, 0.20, 0.30, 0.50)
+tibble(eps = eps_grid) |>
+  mutate(
+    fit        = lapply(eps, \(e) dbscan(X_moons, eps = e,
+                                         minPts = minpts_moons)$cluster),
+    n_clusters = sapply(fit, max),
+    pct_noise  = sapply(fit, \(cl) round(100 * mean(cl == 0), 1)),
+    ari_moons  = sapply(fit, \(cl) round(adjustedRandIndex(
+      cl[in_moon], moons$truth[in_moon]), 2))
+  ) |>
+  select(-fit)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **eps troppo piccolo**: pochi punti sono core; le lune si spezzano in molti piccoli cluster e una grande quota di punti viene chiamata rumore.
+- **eps intorno al gomito**: due cluster e una piccola quantità di rumore.
+- **eps troppo grande**: gli intorni colmano lo spazio tra le lune, le due lune si fondono in un unico grande cluster (ARI 0) e il rumore quasi scompare; ogni "cluster" in più è solo un piccolo grumo di punti di fondo.
+
+Una buona scelta sta su un **plateau**, cioè un intervallo di valori di `eps` che danno tutti essenzialmente la stessa risposta. Se non c'è un plateau, i dati non hanno una struttura di densità chiara a quella scala.
+:::
+
+## 7. Dati reali: i clienti all'ingrosso
+
+Usiamo lo stesso pre-trattamento delle lezioni precedenti: `log1p()` delle sei categorie di spesa, poi standardizzazione.
+
+```{r}
+#| label: wholesale-prep
+wholesale <- read_csv(data_path("wholesale_customers.csv"),
+                      show_col_types = FALSE)
+spend_vars <- c("Fresh", "Milk", "Grocery", "Frozen",
+                "Detergents_Paper", "Delicassen")
+
+X <- wholesale |>
+  select(all_of(spend_vars)) |>
+  mutate(across(everything(), log1p)) |>
+  scale()
+```
+
+Con $p = 6$ variabili la regola $2p$ dà `minPts = 12`.
+
+```{r}
+#| label: fig-knn-wholesale
+#| fig-cap: "Grafico delle distanze kNN per i dati wholesale (k = minPts − 1 = 11). La linea tratteggiata è il gomito."
+minpts <- 2 * ncol(X)
+knn_w  <- kNNdist(X, k = minpts - 1)
+eps_w  <- round(knee_point(knn_w), 2)
+
+kNNdistplot(X, k = minpts - 1)
+abline(h = eps_w, lty = 2, col = "#D55E00")
+```
+
+```{r}
+#| label: wholesale-dbscan
+db_w <- dbscan(X, eps = eps_w, minPts = minpts)
+db_w
+```
+
+Con `eps =` `r eps_w`, DBSCAN trova `r max(db_w$cluster)` cluster ed etichetta come rumore `r sum(db_w$cluster == 0)` clienti (`r round(100 * mean(db_w$cluster == 0))`%). In altre parole: **la maggior parte dei clienti vive in un'unica regione densa connessa**, e il contributo principale del metodo è segnalare un piccolo insieme di clienti atipici. È un risultato legittimo e utile, ma non è una segmentazione.
+
+Chi sono i clienti "rumore"? Confrontali con gli altri **nelle unità originali**:
+
+```{r}
+#| label: wholesale-noise-profile
+wholesale |>
+  mutate(group = if_else(db_w$cluster == 0, "noise", "dense region")) |>
+  summarise(n = n(), across(all_of(spend_vars), median), .by = group)
+```
+
+Tipicamente sono clienti con un importo insolitamente **piccolo** in una o più categorie. Sulla scala logaritmica, spendere 3 invece di 1.000 è una distanza enorme, quindi questi clienti risultano isolati. Prima di presentarli come "clienti speciali", verifica se quei valori minuscoli sono reali o artefatti di inserimento dei dati.
+
+### Esiste una struttura di densità a una scala più piccola?
+
+Facciamo variare `eps` e registriamo il numero di cluster e la quota di rumore.
+
+```{r}
+#| label: wholesale-scan
+scan_w <- tibble(eps = seq(0.6, 2.4, by = 0.1)) |>
+  mutate(
+    cl         = lapply(eps, \(e) dbscan(X, eps = e, minPts = minpts)$cluster),
+    n_clusters = sapply(cl, max),
+    pct_noise  = sapply(cl, \(x) round(100 * mean(x == 0)))
+  )
+scan_w |> select(-cl) |> print(n = Inf)
+```
+
+Più di un cluster compare solo per `eps` piccoli, dove la maggioranza dei clienti è dichiarata rumore. Guardiamo il più grande di questi `eps`:
+
+```{r}
+#| label: wholesale-two
+eps_two <- max(scan_w$eps[scan_w$n_clusters >= 2])
+db_two  <- dbscan(X, eps = eps_two, minPts = minpts)
+table(cluster = db_two$cluster, channel = wholesale$Channel)
+```
+
+Con `eps =` `r eps_two` ci sono `r max(db_two$cluster)` piccoli nuclei densi, e il `r round(100 * mean(db_two$cluster == 0))`% dei clienti è rumore. La tabella di contingenza con `Channel` (1 = Horeca, 2 = Retail; non usato per il clustering) mostra che i nuclei sono legati al canale di vendita: c'è un profilo denso di "ristorante tipico" e uno di "negozio tipico", collegati da un continuum di clienti intermedi.
+
+### Silhouette e k-means sul sottoinsieme senza rumore
+
+La silhouette non è definita per i punti di rumore, quindi la calcoliamo solo sui clienti assegnati a un cluster e confrontiamo con k-means sullo stesso sottoinsieme.
+
+```{r}
+#| label: wholesale-subset
+idx    <- which(db_two$cluster > 0)
+cl_sub <- db_two$cluster[idx]
+d_sub  <- dist(X[idx, ])
+
+summary(silhouette(cl_sub, d_sub))$avg.width
+
+set.seed(123)
+km_sub <- kmeans(X[idx, ], centers = max(cl_sub), nstart = 50)
+adjustedRandIndex(cl_sub, km_sub$cluster)
+```
+
+Sui soli nuclei densi i cluster sono ben separati (silhouette media `r round(summary(silhouette(cl_sub, d_sub))$avg.width, 2)`) e k-means trova `r if (adjustedRandIndex(cl_sub, km_sub$cluster) > 0.95) "la stessa" else "una simile"` partizione (ARI `r round(adjustedRandIndex(cl_sub, km_sub$cluster), 2)`). Ovviamente: una volta rimossi i clienti intermedi, *qualsiasi* metodo separa due nuvole distanti. Questa silhouette non va confrontata con quelle calcolate su tutti i 440 clienti.
+
+```{r}
+#| label: fig-wholesale-pca
+#| fig-cap: "Clienti wholesale sulle prime due componenti principali. A sinistra: l'eps basato sul gomito (una regione densa più rumore). A destra: l'eps più piccolo che produce due nuclei densi, con la maggior parte dei clienti etichettata come rumore."
+#| fig-height: 4.5
+pc <- prcomp(X)$x
+lab <- \(cl) if_else(cl == 0, "noise", paste("cluster", cl))
+bind_rows(
+  tibble(PC1 = pc[, 1], PC2 = pc[, 2], group = lab(db_w$cluster),
+         fit = paste("eps =", eps_w)),
+  tibble(PC1 = pc[, 1], PC2 = pc[, 2], group = lab(db_two$cluster),
+         fit = paste("eps =", eps_two))
+) |>
+  ggplot(aes(PC1, PC2, colour = group)) +
+  geom_point(alpha = 0.7) +
+  scale_colour_manual(values = c("cluster 1" = "#E69F00",
+                                 "cluster 2" = "#0072B2",
+                                 "cluster 3" = "#009E73",
+                                 "noise" = "grey60")) +
+  facet_wrap(~ fit) +
+  labs(colour = NULL)
+```
+
+::: {.callout-important}
+## Una conclusione onesta per i dati wholesale
+
+DBSCAN ci dice che i clienti **non** formano gruppi densi ben separati: alla scala suggerita dai dati c'è una regione densa più pochi clienti atipici. Esistono due nuclei più densi (grosso modo Horeca e Retail), ma solo se lasciamo non assegnata la maggior parte dei clienti. Per una **segmentazione** di tutti i clienti è più adatto un metodo di partizione (k-means, Ward, una mistura gaussiana); l'output più utile di DBSCAN qui è l'elenco dei **clienti anomali**.
+:::
+
+## 8. HDBSCAN: quando un solo eps non basta
+
+Un solo `eps` significa una sola soglia di densità. Se un cluster è molto più denso di un altro, nessun `eps` va bene per entrambi: un valore che separa il cluster denso trasforma quello rado in rumore. **HDBSCAN** (Campello, Moulavi & Sander, 2013) esegue DBSCAN per **tutti** i valori di `eps` contemporaneamente, costruisce una gerarchia di cluster e tiene quelli che persistono su un ampio intervallo di densità. Richiede solo `minPts` (la dimensione minima del cluster).
+
+```{r}
+#| label: hdbscan-moons
+hdb_moons <- hdbscan(X_moons, minPts = 10)
+hdb_moons
+adjustedRandIndex(hdb_moons$cluster[in_moon], moons$truth[in_moon])
+```
+
+```{r}
+#| label: hdbscan-wholesale
+hdb_w <- hdbscan(X, minPts = minpts)
+table(hdb_w$cluster)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `hdb$cluster` usa la stessa convenzione di DBSCAN: 0 è rumore.
+- `hdb$membership_prob` indica, per ogni punto, quanto fortemente appartiene al suo cluster (0 per il rumore), e `hdb$outlier_scores` un punteggio di quanto è anomalo.
+- Sulle lune, HDBSCAN trova `r max(hdb_moons$cluster)` cluster (ARI sui punti delle lune `r round(adjustedRandIndex(hdb_moons$cluster[in_moon], moons$truth[in_moon]), 2)`) senza che gli sia indicato alcun `eps`. Sui dati wholesale trova `r max(hdb_w$cluster)` cluster ed etichetta come rumore il `r round(100 * mean(hdb_w$cluster == 0))`% dei clienti: confronta con quanto ci ha detto DBSCAN.
+:::
+
+HDBSCAN è spesso un'impostazione predefinita migliore di DBSCAN quando le densità variano, ma i suoi risultati dipendono comunque da `minPts`, e non ha nulla da dire quando i dati formano un continuum.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Dimenticare di scalare.** `eps` è una distanza; se una variabile è nell'ordine delle migliaia e un'altra delle unità, gli intorni sono determinati solo dalla prima.
+2. **Usare `k = minPts` nel grafico kNN.** Nel pacchetto `dbscan`, `minPts` conta il punto stesso, quindi il vicino corrispondente è il `(minPts − 1)`-esimo: usa `kNNdist(x, k = minPts - 1)`.
+3. **Trattare 0 come un cluster.** L'etichetta 0 significa "rumore". Eliminala (o riportala a parte) prima di calcolare profili dei cluster o silhouette.
+4. **Regolare eps finché il grafico non sembra bello.** Sceglilo dal grafico kNN, poi riporta quanto il risultato è sensibile.
+5. **Confrontare una silhouette sul sottoinsieme senza rumore con una su tutti i dati.** Rimuovere i punti più difficili fa sempre sembrare i cluster rimanenti meglio separati.
+6. **Usare DBSCAN in molte dimensioni senza riflettere.** In alta dimensione tutte le distanze diventano simili e la "densità" perde significato; riduci prima la dimensione (ad esempio con la [PCA](../11-dimred/50-pca.qmd)) o usa un metodo diverso.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Con `eps = 1` e `minPts = 3`, un punto ha esattamente un altro punto a distanza al massimo 1, e quell'altro punto è core. Di che tipo è?
+
+Un punto **di confine**. Il suo intorno contiene 2 punti (se stesso e il vicino), meno di `minPts = 3`, quindi non è core; ma è a distanza al massimo `eps` da un punto core, quindi entra in quel cluster.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Raddoppi `eps`. Che cosa succede di solito al numero di punti di rumore e al numero di cluster?
+
+I punti di rumore diminuiscono (gli intorni sono più grandi, quindi più punti sono core o di confine). I cluster tendono a **fondersi**, quindi il loro numero di solito diminuisce, anche se per `eps` molto piccoli aumentarlo può dapprima creare cluster a partire dal rumore.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Perché DBSCAN non richiede il numero di cluster, e perché non è un pranzo gratis?
+
+Il numero di cluster discende dalla soglia di densità fissata da `eps` e `minPts`. La scelta non è sparita: si è spostata da "quanti gruppi?" a "quanto deve essere denso un gruppo?". Soglie diverse danno numeri di cluster diversi (sezione 6).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Un collega dice: "DBSCAN ha trovato un cluster e il 6% di rumore, quindi il metodo ha fallito." Sei d'accordo?
+
+Non necessariamente. DBSCAN ha risposto alla propria domanda: a questa scala non ci sono regioni dense separate. Questa è un'informazione sui dati: i clienti formano un continuum. Suggerisce che un'eventuale segmentazione vada presentata come una partizione di comodo, non come gruppi naturali.
+:::
+
+## 10. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — classifica a mano.** Punti su una retta: 0, 0.4, 0.9, 1.3, 3, 3.3, 7. Con `eps = 0.6` e `minPts = 3`, classifica ogni punto come core, di confine o rumore e indica i cluster. Verifica con `dbscan()`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Intorni (distanza ≤ 0.6, punto incluso): 0 → {0, 0.4}; 0.4 → {0, 0.4, 0.9}; 0.9 → {0.4, 0.9, 1.3}; 1.3 → {0.9, 1.3}; 3 → {3, 3.3}; 3.3 → {3, 3.3}; 7 → {7}.
+
+- **Core** (almeno 3 punti): 0.4 e 0.9.
+- **Di confine**: 0 (vicino al punto core 0.4) e 1.3 (vicino a 0.9).
+- **Rumore**: 3 e 3.3 — sono vicini tra loro, ma una coppia non è abbastanza densa con `minPts = 3`, e nessuno dei due è vicino a un punto core — e 7.
+
+Quindi c'è un solo cluster, {0, 0.4, 0.9, 1.3}.
+```r
+x <- matrix(c(0, 0.4, 0.9, 1.3, 3, 3.3, 7))
+dbscan(x, eps = 0.6, minPts = 3)$cluster   # 1 1 1 1 0 0 0
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — prevedi, poi verifica.** Per le lune, prevedi che cosa succede con `minPts = 4` ed `eps = 0.6`. Poi eseguilo e guarda la tabella di contingenza con `moons$truth`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+`eps = 0.6` è diverse volte più grande del gomito: gli intorni colmano lo spazio tra le lune, quindi ci aspettiamo **un** cluster contenente entrambe le lune e quasi nessun rumore.
+```r
+db_big <- dbscan(X_moons, eps = 0.6, minPts = 4)
+table(db_big$cluster, moons$truth)
+```
+In effetti tutto (tranne al più un paio di punti di fondo molto lontani) finisce nel cluster 1.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — debug.** Uno studente esegue DBSCAN sulla spesa wholesale grezza e scopre che **tutti** i clienti sono etichettati come rumore, per ogni `eps` che prova tra 1 e 5. Che cosa non va?
+
+```r
+db_raw <- dbscan(wholesale[, spend_vars], eps = 2, minPts = 12)
+```
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+La spesa grezza è in unità monetarie: le distanze tipiche tra clienti sono nell'ordine delle **migliaia**. Un `eps` tra 1 e 5 è minuscolo su quella scala, quindi nessun cliente ha 11 altri clienti così vicini, non ci sono punti core e tutto è rumore. Inoltre, senza scalare, le categorie con la spesa maggiore (Fresh, Grocery) dominerebbero le distanze. Trasforma e scala prima, poi guarda il grafico kNN per portare `eps` sulla scala giusta:
+```r
+X <- wholesale |>
+  select(all_of(spend_vars)) |>
+  mutate(across(everything(), log1p)) |>
+  scale()
+kNNdistplot(X, k = 11)
+```
+La lezione generale: `eps` ha significato solo rispetto alle distanze presenti nei dati, e il grafico kNN te ne mostra la scala.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — interpreta.** Su alcuni dati di clientela DBSCAN riporta: *"3 cluster, dimensioni 210, 35, 12; 143 punti di rumore"*. Scrivi tre frasi per un dirigente.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Circa un terzo dei clienti (143 su 400) non appartiene ad alcun gruppo denso: il loro comportamento è disperso o atipico, e non vanno forzati in un segmento. Tra gli altri, un grande gruppo (210) domina, con due nicchie molto più piccole ma ben definite (35 e 12). Prima di agire sulle nicchie, dovremmo verificare che siano stabili al variare leggermente di `eps` e descriverle nelle unità originali (ad esempio la spesa mediana).
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi: pinguini.** Standardizza le quattro misure numeriche di `penguins` (casi completi). Scegli `minPts` ed `eps` come in questa lezione, esegui DBSCAN e confronta con le specie usando una tabella di contingenza e l'ARI. Poi esegui `hdbscan()` con lo stesso `minPts`. Quale metodo recupera meglio le specie, e perché?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+peng <- penguins |>
+  select(species, bill_len, bill_dep, flipper_len, body_mass) |>
+  na.omit()
+Xp <- scale(select(peng, -species))
+mp <- 2 * ncol(Xp)                                  # 8
+eps_p <- round(knee_point(kNNdist(Xp, k = mp - 1)), 2)
+db_p <- dbscan(Xp, eps = eps_p, minPts = mp)
+table(db_p$cluster, peng$species)
+adjustedRandIndex(db_p$cluster, peng$species)
+
+hdb_p <- hdbscan(Xp, minPts = mp)
+table(hdb_p$cluster, peng$species)
+adjustedRandIndex(hdb_p$cluster, peng$species)
+```
+Ci si aspetta che DBSCAN separi i Gentoo dal resto ma fonda Adelie e Chinstrap: queste due specie si sovrappongono e sono collegate da una fascia continua di individui, quindi non c'è alcun vuoto di bassa densità tra loro. HDBSCAN può separarle o no, a seconda di `minPts`. I metodi basati sulla densità trovano gruppi separati da **vuoti**; quando i gruppi si toccano, i metodi basati sui centroidi o su modelli (vedi [Clustering basato su modelli](59-model-based.qmd)) sono di solito migliori.
+:::
+:::
+
+## Riepilogo
+
+| Idea | R | Da ricordare |
+|---|---|---|
+| Core / confine / rumore | `rowSums(as.matrix(dist(x)) <= eps)` | l'intorno include il punto stesso |
+| Distanze kNN | `kNNdist(x, k = minPts - 1)` | punto core ⇔ distanza kNN ≤ eps |
+| Grafico kNN | `kNNdistplot(x, k = minPts - 1)`; `abline(h = eps)` | scegli eps nel gomito |
+| minPts | $\ge p + 1$; $2p$ come valore predefinito | più grande per dati rumorosi |
+| Adattamento | `dbscan(x, eps, minPts)` | `$cluster`, 0 = rumore |
+| Sensibilità | riadatta su una griglia di eps | cerca un plateau |
+| Densità variabili | `hdbscan(x, minPts)` | niente eps; `$membership_prob`, `$outlier_scores` |
+
+- DBSCAN definisce i cluster come **regioni dense** separate da regioni rade; i punti nelle regioni rade sono **rumore**.
+- Trova cluster di **forma arbitraria**, cosa che k-means non sa fare.
+- Scegli `minPts` con una regola pratica, `eps` dal **grafico delle distanze kNN**, e riporta la **sensibilità**.
+- Su dati che formano un **continuum**, DBSCAN restituisce onestamente un grande cluster più i valori anomali; è un risultato, non un fallimento.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Hahsler, M., Piekenbrock, M. & Doran, D. (2019). dbscan: Fast density-based clustering with R. *Journal of Statistical Software*, 91(1). <https://doi.org/10.18637/jss.v091.i01>
+- Documentazione del pacchetto `dbscan`, <https://cran.r-project.org/package=dbscan>
+- Schubert, E., Sander, J., Ester, M., Kriegel, H.-P. & Xu, X. (2017). DBSCAN revisited, revisited: why and how you should (still) use DBSCAN. *ACM Transactions on Database Systems*, 42(3).
+:::
+

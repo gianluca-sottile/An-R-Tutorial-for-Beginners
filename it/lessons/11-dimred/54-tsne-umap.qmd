@@ -1,0 +1,700 @@
+---
+title: "t-SNE e UMAP"
+subtitle: "Mappe non lineari di dati ad alta dimensione, e come non leggerle troppo"
+description: "Capisci perché i metodi lineari falliscono sulle strutture curve, come t-SNE e UMAP costruiscono mappe che tengono vicini i vicini, come perplessità, n_neighbors, min_dist e seme cambiano l'immagine, che cosa queste mappe possono e non possono dirti, e come usare UMAP come variabili senza fuga di informazione."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~90 min]{} [Prerequisiti: [Analisi delle componenti principali](50-pca.qmd), [Scaling multidimensionale](53-mds.qmd), [Il flusso di lavoro del machine learning](../10-ml/44-ml-workflow.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare perché una proiezione **lineare** come la PCA non può "srotolare" una struttura curva;
+- descrivere a parole semplici come **t-SNE** e **UMAP** costruiscono una mappa che tiene vicini i **vicini**;
+- eseguire `Rtsne::Rtsne()` e `uwot::umap()`, e valutare come **perplessità**, **`n_neighbors`**, **`min_dist`** e **seme** cambiano il risultato;
+- dire che cosa **puoi** e **non puoi** leggere da un grafico t-SNE o UMAP, e misurare **quanti vicini** una mappa conserva;
+- usare le coordinate UMAP come variabili di un modello **senza fuga di informazione** (`ret_model = TRUE` + `umap_transform()`).
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(Rtsne)   # t-SNE
+library(uwot)    # UMAP
+```
+
+## 1. Perché le rappresentazioni non lineari?
+
+La PCA e lo scaling multidimensionale classico disegnano una mappa **proiettando** i dati su un piano: guardano la nuvola di punti dall'angolazione migliore possibile. Funziona quando la struttura interessante è più o meno piatta. Fallisce quando i dati giacciono su una **superficie curva** ripiegata nello spazio ad alta dimensione.
+
+L'esempio classico è lo **swiss roll** (il rotolo svizzero): un foglio piatto di carta arrotolato come un rotolo di pasta. Due punti su strati vicini del rotolo possono essere vicini in linea retta, ma lontani se si cammina lungo la carta. Una buona mappa 2-D dovrebbe **srotolare** il foglio. Costruiamone uno in R base. Ogni punto ha una posizione `t` lungo il rotolo e un'altezza `h`; il rotolo vive in tre dimensioni.
+
+```{r}
+#| label: swiss-roll
+set.seed(1)
+n_roll <- 800
+t <- runif(n_roll, 1.5 * pi, 4.5 * pi)   # posizione lungo il rotolo
+h <- runif(n_roll, 0, 20)                # altezza del foglio
+roll <- cbind(x = t * cos(t), y = h, z = t * sin(t)) +
+  matrix(rnorm(3 * n_roll, sd = 0.2), ncol = 3)   # un po' di rumore
+
+# il foglio piatto "vero": distanza percorsa lungo la carta, e altezza
+arc <- 0.5 * (t * sqrt(1 + t^2) + asinh(t))
+sheet <- cbind(arc, h)
+```
+
+`arc` è la lunghezza della spirale dal centro fino a ciascun punto, quindi `sheet` è ciò che otterremmo srotolando perfettamente la carta. Ora la PCA:
+
+```{r}
+#| label: fig-roll-pca
+#| fig-cap: "A sinistra: PCA dello swiss roll 3-D, colorato in base alla posizione lungo il rotolo. A destra: il foglio srotolato che vorremmo recuperare."
+pca_roll <- prcomp(roll)
+
+bind_rows(
+  data.frame(pca_roll$x[, 1:2], position = arc, map = "PCA (PC1, PC2)"),
+  data.frame(PC1 = arc, PC2 = h, position = arc, map = "Foglio srotolato reale")
+) |>
+  ggplot(aes(PC1, PC2, colour = position)) +
+  geom_point(size = 0.8) +
+  scale_colour_viridis_c() +
+  facet_wrap(~ map, scales = "free") +
+  labs(x = "Dimensione 1", y = "Dimensione 2", colour = "Posizione sul rotolo")
+```
+
+La PCA mantiene le due direzioni con la maggiore varianza — qui i due assi che attraversano la spirale — e scarta l'altezza. Vediamo il rotolo da un'estremità: i colori si avvolgono a spirale invece di procedere in un'unica direzione, i punti su strati vicini distano solo poche unità pur essendo lontani lungo la carta, e i punti di tutte le altezze sono schiacciati l'uno sull'altro. **Nessuna rotazione di una proiezione piatta può srotolare il foglio**, perché il problema è la curvatura, non l'orientamento.
+
+I metodi di rappresentazione (*embedding*) non lineari adottano un approccio diverso: invece di conservare *tutte* le distanze, cercano di conservare **chi è vicino di chi**. Se due punti sono vicini sulla carta devono esserlo sulla mappa; quanto distino i punti lontani conta molto meno.
+
+## 2. Misurare i "vicini conservati"
+
+Prima di provare i nuovi metodi, scriviamo un metro di misura. Per ogni punto troviamo i suoi $k$ vicini più prossimi nello spazio originale e i suoi $k$ vicini più prossimi sulla mappa, e contiamo quanti sono in comune. La frazione media è la **conservazione del vicinato** (detta anche *k-NN recall*). Vale 1 se la mappa conserva ogni vicinato, ed è vicina a $k/(n-1)$ — quasi 0 — per una mappa casuale.
+
+```{r}
+#| label: knn-preserved
+knn_preserved <- function(high, low, k = 10) {
+  d_high <- as.matrix(dist(high))
+  d_low  <- as.matrix(dist(low))
+  diag(d_high) <- Inf                      # un punto non è vicino di se stesso
+  diag(d_low)  <- Inf
+  shared <- vapply(seq_len(nrow(d_high)), \(i) {
+    nn_high <- order(d_high[i, ])[1:k]
+    nn_low  <- order(d_low[i, ])[1:k]
+    length(intersect(nn_high, nn_low))
+  }, numeric(1))
+  mean(shared) / k
+}
+
+knn_preserved(roll, pca_roll$x[, 1:2])   # mappa PCA
+knn_preserved(roll, sheet)               # foglio perfettamente srotolato
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Sulla mappa PCA, in media solo il `r round(100 * knn_preserved(roll, pca_roll$x[, 1:2]))`% dei 10 vicini più prossimi di ciascun punto è ancora tra i suoi 10 vicini più prossimi.
+- Il foglio srotolato ne conserva il `r round(100 * knn_preserved(roll, sheet))`% (non il 100% solo a causa del rumore che abbiamo aggiunto).
+- Una mappa 2-D casuale ne conserverebbe circa il `r round(100 * 10 / (n_roll - 1), 1)`%.
+:::
+
+`dist()` su $n$ punti costruisce una tabella $n \times n$, quindi questa funzione va bene per qualche migliaio di punti; per dati più grandi, calcolala su un sottocampione casuale.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: trustworthiness e continuity
+
+La nostra misura conta i vicini in comune. Due raffinamenti classici, basati sui ranghi, si devono a Venna e Kaski. Sia $r(i, j)$ il rango di $j$ tra i vicini di $i$ nello spazio originale, e $U_k(i)$ l'insieme dei punti che sono tra i $k$ vicini più prossimi di $i$ **sulla mappa ma non nello spazio originale** ("intrusi"). Allora
+
+$$
+T(k) = 1 - \frac{2}{nk(2n - 3k - 1)} \sum_{i=1}^n \sum_{j \in U_k(i)} \big(r(i, j) - k\big).
+$$
+
+La **trustworthiness** $T(k)$ penalizza i falsi vicini sulla mappa, tanto più quanto più sono davvero lontani. La **continuity** è l'immagine speculare: penalizza i veri vicini che la mappa ha allontanato. Entrambe valgono 1 per una mappa perfetta. La nostra `knn_preserved()`, più semplice, tratta insieme i due tipi di errore e ignora la gravità di ciascuno.
+:::
+
+## 3. L'idea alla base di t-SNE
+
+**t-SNE** (t-distributed Stochastic Neighbour Embedding) funziona in tre passi.
+
+1. **Probabilità di vicinato nello spazio originale.** Per ogni punto $i$, immagina che scelga a caso un vicino, preferendo i punti vicini. I punti vicini ricevono una probabilità alta, quelli lontani quasi zero. La rapidità con cui la probabilità decade con la distanza viene regolata separatamente per ogni punto.
+2. **Probabilità di vicinato sulla mappa.** Su una mappa 2-D si calcolano probabilità dello stesso tipo a partire dalle distanze sulla mappa, ma con una curva a **code pesanti** (la distribuzione t di Student con un grado di libertà).
+3. **Spostare i punti.** Partendo da una disposizione casuale, t-SNE sposta i punti passo dopo passo per rendere i due insiemi di probabilità il più simili possibile. La discrepanza è misurata dalla **divergenza di Kullback–Leibler (KL)**.
+
+### Perplessità: il numero effettivo di vicini
+
+L'impostazione principale è la **perplessità** (*perplexity*). In breve, è il **numero di vicini** a cui ciascun punto presta attenzione. Per ogni punto, t-SNE sceglie l'ampiezza $\sigma_i$ di una "campana" gaussiana in modo che le probabilità di vicinato abbiano la perplessità richiesta. Facciamolo noi per un pinguino.
+
+```{r}
+#| label: peng-data
+num_vars <- c("bill_len", "bill_dep", "flipper_len", "body_mass")
+
+peng <- penguins |>
+  select(species, all_of(num_vars)) |>
+  na.omit()
+
+peng_x <- scale(peng[, num_vars])   # standardizza, come per la PCA
+dim(peng_x)
+```
+
+```{r}
+#| label: perplexity
+neighbour_probs <- function(d, sigma) {
+  w <- exp(-d^2 / (2 * sigma^2))
+  w / sum(w)
+}
+perplexity_of <- function(p) {
+  p <- p[p > 0]
+  2^(-sum(p * log2(p)))           # 2 elevato all'entropia
+}
+
+perplexity_of(rep(1 / 30, 30))    # stesso peso su 30 punti
+
+d1 <- as.matrix(dist(peng_x))[1, -1]   # distanze dal pinguino 1
+sapply(c(0.1, 0.3, 0.5, 1), \(s) perplexity_of(neighbour_probs(d1, s)))
+```
+
+Se un punto distribuisce la sua attenzione **in modo uniforme** su 30 vicini, la perplessità è esattamente 30: per questo la si legge come "numero effettivo di vicini". Per il pinguino 1, una campana stretta ($\sigma = 0.1$) dà una perplessità di circa `r round(perplexity_of(neighbour_probs(d1, 0.1)), 1)`, una larga ($\sigma = 1$) di circa `r round(perplexity_of(neighbour_probs(d1, 1)))`. t-SNE trova il $\sigma_i$ giusto con una semplice ricerca:
+
+```{r}
+#| label: find-sigma
+find_sigma <- function(d, target, lower = 1e-3, upper = 10) {
+  for (iter in 1:50) {                     # bisezione
+    mid <- (lower + upper) / 2
+    too_wide <- perplexity_of(neighbour_probs(d, mid)) > target
+    if (too_wide) upper <- mid else lower <- mid
+  }
+  mid
+}
+
+sigma_30 <- find_sigma(d1, target = 30)
+sigma_30
+perplexity_of(neighbour_probs(d1, sigma_30))
+```
+
+I punti nelle regioni **dense** ottengono un $\sigma_i$ piccolo, quelli nelle regioni **rade** uno grande, in modo che ogni punto abbia circa lo stesso numero di vicini effettivi. Questo è uno dei motivi per cui t-SNE tende a far sembrare tutti i gruppi ugualmente dispersi, qualunque sia la loro densità reale.
+
+Le perplessità tipiche sono tra 5 e 50. `Rtsne()` richiede che la perplessità sia al massimo $(n - 1)/3$, quindi con pochi dati anche la perplessità deve essere piccola. Non esiste una regola universale del tipo "x% di $n$": prova alcuni valori e tieni ciò che è stabile.
+
+### Perché una curva a code pesanti sulla mappa?
+
+```{r}
+#| label: fig-kernels
+#| fig-cap: "Similarità in funzione della distanza: curva gaussiana (usata nello spazio originale) e curva t di Student (usata sulla mappa)."
+data.frame(distance = seq(0, 5, by = 0.05)) |>
+  mutate(Gaussian = exp(-distance^2 / 2),
+         `Student t (1 df)` = 1 / (1 + distance^2)) |>
+  tidyr::pivot_longer(-distance, names_to = "curve",
+                      values_to = "similarity") |>
+  ggplot(aes(distance, similarity, colour = curve)) +
+  geom_line(linewidth = 1) +
+  labs(x = "Distanza", y = "Similarità (non normalizzata)", colour = NULL)
+```
+
+In molte dimensioni c'è molto spazio; su un piano no. Se la mappa usasse la stessa curva gaussiana, i punti a distanza moderata verrebbero ammassati l'uno sull'altro (il *crowding problem*, problema dell'affollamento). La curva t decade molto più lentamente, quindi i punti a distanza moderata possono essere collocati **più lontani** sulla mappa a basso costo. Il risultato: gruppi compatti e ben separati.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la funzione obiettivo di t-SNE
+
+Nello spazio originale, per il punto $i$,
+
+$$
+p_{j \mid i} = \frac{\exp\!\big(-\lVert x_i - x_j \rVert^2 / 2\sigma_i^2\big)}{\sum_{k \ne i} \exp\!\big(-\lVert x_i - x_k \rVert^2 / 2\sigma_i^2\big)},
+\qquad
+\text{Perp}(P_i) = 2^{H(P_i)},\quad H(P_i) = -\sum_j p_{j \mid i} \log_2 p_{j \mid i},
+$$
+
+con $\sigma_i$ scelto in modo che $\text{Perp}(P_i)$ sia uguale alla perplessità richiesta. Le probabilità sono simmetrizzate: $p_{ij} = (p_{j \mid i} + p_{i \mid j}) / 2n$. Sulla mappa, con coordinate $y_i$,
+
+$$
+q_{ij} = \frac{\big(1 + \lVert y_i - y_j \rVert^2\big)^{-1}}{\sum_{k \ne l} \big(1 + \lVert y_k - y_l \rVert^2\big)^{-1}} .
+$$
+
+La mappa si ottiene con la discesa del gradiente su
+
+$$
+\text{KL}(P \,\Vert\, Q) = \sum_{i \ne j} p_{ij} \log \frac{p_{ij}}{q_{ij}} .
+$$
+
+La divergenza KL è **asimmetrica**. Collocare veri vicini (grande $p_{ij}$) lontani (piccolo $q_{ij}$) è molto costoso; collocare punti distanti (minuscolo $p_{ij}$) a una distanza qualsiasi costa quasi nulla. Questa è la ragione matematica per cui t-SNE conserva i vicinati ma **non si cura delle grandi distanze**. `Rtsne()` usa l'approssimazione di Barnes–Hut (`theta = 0.5`) per velocizzare il gradiente; `theta = 0` lo calcola esattamente.
+:::
+
+## 4. t-SNE in R con `Rtsne`
+
+### Duplicati
+
+`Rtsne()` si ferma con un errore se i dati contengono **righe duplicate** (punti identici hanno distanza 0 e nulla li separa). Controlla prima:
+
+```{r}
+#| label: duplicates
+anyDuplicated(peng_x)    # 0 significa: nessuna riga duplicata
+```
+
+I pinguini non ne hanno. Se i tuoi dati ne hanno (le misure di `iris`, per esempio, contengono un fiore ripetuto), hai due opzioni:
+
+- **rimuoverli** prima dell'analisi, ad esempio con `df[!duplicated(df[, num_vars]), ]` oppure con `distinct()` sulle colonne delle misure e `.keep_all = TRUE` (vedi Esercizio 3), così che le etichette restino associate alle righe che conservi; di solito è la scelta più pulita;
+- se li hai già rimossi, o vuoi che i punti identici restino nei dati, imposta `check_duplicates = FALSE`. Il controllo è anche lento su dati grandi, quindi la documentazione del pacchetto suggerisce di rimuovere i duplicati da soli e di disattivarlo.
+
+### Una prima mappa
+
+```{r}
+#| label: tsne-fit
+set.seed(42)
+tsne_peng <- Rtsne(peng_x, dims = 2, perplexity = 30)
+names(tsne_peng)
+head(tsne_peng$Y, 3)
+```
+
+`Y` contiene le coordinate 2-D (una riga per pinguino, nello stesso ordine di `peng_x`). `itercosts` registra la divergenza KL durante l'ottimizzazione. Per impostazione predefinita `Rtsne()` esegue prima una PCA (`pca = TRUE`, mantenendo fino a `initial_dims = 50` componenti); con quattro variabili questo si limita a ruotare i dati e non cambia alcuna distanza. `dims = 3` darebbe una mappa 3-D.
+
+```{r}
+#| label: fig-tsne-peng
+#| fig-cap: "Mappa t-SNE dei 342 pinguini (perplessità 30), colorata per specie."
+data.frame(tsne_peng$Y, species = peng$species) |>
+  ggplot(aes(X1, X2, colour = species)) +
+  geom_point(alpha = 0.7) +
+  labs(x = "t-SNE 1", y = "t-SNE 2", colour = "Specie")
+```
+
+Le specie **non** sono state usate per costruire la mappa; colorare i punti in base a esse a posteriori mostra che i pinguini della stessa specie tendono ad essere vicini l'uno dell'altro nelle quattro misure.
+
+### Sensibilità alla perplessità e al seme
+
+t-SNE è **stocastico**: parte da una disposizione casuale e il risultato dipende dal seme. Dipende anche dalla perplessità.
+
+```{r}
+#| label: fig-tsne-perp
+#| fig-cap: "Mappe t-SNE dei pinguini con tre perplessità (in alto) e con la stessa perplessità ma due semi diversi (in basso)."
+run_tsne <- function(perp, seed) {
+  set.seed(seed)
+  Y <- Rtsne(peng_x, perplexity = perp)$Y
+  data.frame(Y, species = peng$species,
+             setting = paste0("perplessità ", perp, ", seme ", seed))
+}
+
+bind_rows(run_tsne(5, 42), run_tsne(30, 42), run_tsne(100, 42),
+          run_tsne(30, 1), run_tsne(30, 2)) |>
+  ggplot(aes(X1, X2, colour = species)) +
+  geom_point(size = 0.8, alpha = 0.7) +
+  facet_wrap(~ setting, scales = "free", ncol = 3) +
+  labs(x = "t-SNE 1", y = "t-SNE 2", colour = "Specie")
+```
+
+Osserva che cosa cambia e che cosa no. Con una perplessità **piccola** ogni punto guarda solo una manciata di vicini, e la mappa tende a frammentarsi in tanti piccoli pezzi. Con una perplessità **grande** la mappa appare più liscia e più "globale". Cambiare il **seme** ruota, riflette e riorganizza i gruppi. Le caratteristiche che sopravvivono a tutti questi cambiamenti — qui, in linea di massima, quali pinguini finiscono insieme — sono quelle che vale la pena interpretare.
+
+### Che cosa puoi e non puoi leggere da un grafico t-SNE
+
+::: {.callout-important}
+## Leggere le mappe t-SNE (e UMAP)
+
+**Puoi leggere:** quali punti sono **vicini**; se ci sono **gruppi** di punti che restano uniti al variare di perplessità e semi.
+
+**Non puoi leggere:**
+
+- **le dimensioni dei cluster** — t-SNE adatta $\sigma_i$ alla densità locale, quindi un gruppo compatto e uno diffuso possono sembrare ugualmente dispersi;
+- **le distanze tra i cluster** — due gruppi lontani sulla mappa non sono necessariamente più diversi di due gruppi vicini;
+- **gli assi** — "t-SNE 1" non ha significato, unità né segno; non ci sono pesi (*loadings*);
+- **pochi punti in un angolo come valori anomali, o cluster apparenti in campioni piccoli** — t-SNE può creare ammassi anche dal puro rumore casuale, soprattutto con una perplessità bassa.
+:::
+
+Nota inoltre che `Rtsne()` **non ha modo di collocare nuovi punti** su una mappa esistente: rieseguirlo su più dati dà una mappa diversa. t-SNE è uno strumento per **guardare**, non per costruire variabili.
+
+## 5. UMAP
+
+**UMAP** (Uniform Manifold Approximation and Projection) ha lo stesso obiettivo — tenere vicini i vicini — con una ricetta diversa:
+
+1. **Costruire un grafo dei k vicini più prossimi.** Ogni punto è collegato ai suoi `n_neighbors` punti più vicini, con pesi che decadono con la distanza (adattati alla densità locale, come in t-SNE).
+2. **Disporre il grafo in 2-D.** Partendo da una disposizione iniziale, i punti vengono spostati in modo che quelli collegati si attraggano e quelli non collegati si respingano. L'impostazione **`min_dist`** stabilisce quanto strettamente i punti possono essere ammassati sulla mappa.
+
+Le due impostazioni hanno un ruolo simile alla perplessità:
+
+- **`n_neighbors`** (predefinito 15): valori piccoli si concentrano sulla struttura molto locale (più gruppi, più piccoli); valori grandi danno un quadro più globale e più liscio;
+- **`min_dist`** (predefinito 0.01 in `uwot`): valori piccoli compattano i gruppi; valori grandi distribuiscono i punti in modo più uniforme.
+
+```{r}
+#| label: umap-fit
+set.seed(42)
+umap_peng <- umap(peng_x, n_neighbors = 15, min_dist = 0.1,
+                  n_sgd_threads = 1)
+dim(umap_peng)
+```
+
+`umap()` restituisce una matrice con una riga per pinguino e due colonne.
+
+::: {.callout-warning}
+## Anche UMAP è stocastico
+
+UMAP **non** è deterministico: la disposizione è ottimizzata con un campionamento casuale, quindi semi diversi danno mappe diverse (una versione precedente di questo corso affermava il contrario). Per risultati **esattamente** riproducibili con `uwot` servono sia `set.seed()` sia `n_sgd_threads = 1`: con più thread l'ottimizzazione procede in un ordine imprevedibile e i risultati differiscono leggermente da un'esecuzione all'altra anche con lo stesso seme.
+:::
+
+```{r}
+#| label: fig-umap-grid
+#| fig-cap: "Mappe UMAP dei pinguini per due valori di n_neighbors (righe) e due valori di min_dist (colonne)."
+run_umap <- function(nn, md) {
+  set.seed(42)
+  Y <- umap(peng_x, n_neighbors = nn, min_dist = md, n_sgd_threads = 1)
+  data.frame(Y, species = peng$species,
+             n_neighbors = paste("n_neighbors =", nn),
+             min_dist = paste("min_dist =", md))
+}
+
+bind_rows(run_umap(5, 0.01), run_umap(5, 0.5),
+          run_umap(50, 0.01), run_umap(50, 0.5)) |>
+  ggplot(aes(X1, X2, colour = species)) +
+  geom_point(size = 0.8, alpha = 0.7) +
+  facet_grid(n_neighbors ~ min_dist, scales = "free") +
+  labs(x = "UMAP 1", y = "UMAP 2", colour = "Specie")
+```
+
+Tutto ciò che abbiamo detto sulla lettura dei grafici t-SNE vale anche per UMAP. Le disposizioni UMAP spesso conservano un po' meglio la **disposizione reciproca** dei gruppi rispetto a t-SNE, ma **nessuno dei due metodi conserva in modo affidabile le distanze globali**: la distanza tra due gruppi su una mappa UMAP, o la dimensione di un gruppo, non va interpretata (una versione precedente di questo corso sosteneva il contrario). Altre opzioni utili sono `n_components = 3` per una mappa 3-D e `metric = "cosine"` per dati come i conteggi di parole, dove la direzione di un vettore conta più della sua lunghezza.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la funzione obiettivo di UMAP
+
+Per ogni punto $i$ con vicini più prossimi $j$, sia $\rho_i$ la distanza dal suo vicino più vicino. UMAP pone
+
+$$
+w_{j \mid i} = \exp\!\left(-\frac{\max(0, d_{ij} - \rho_i)}{\sigma_i}\right),
+\qquad \sum_{j} w_{j \mid i} = \log_2(\texttt{n\_neighbors}),
+$$
+
+così che ogni punto sia collegato almeno al suo vicino più prossimo con peso 1, e $\sigma_i$ svolge il ruolo dell'ampiezza per punto in t-SNE. Il grafo è simmetrizzato con $v_{ij} = w_{j \mid i} + w_{i \mid j} - w_{j \mid i} w_{i \mid j}$. Sulla mappa, le similarità sono $u_{ij} = \big(1 + a \lVert y_i - y_j \rVert^{2b}\big)^{-1}$, dove $a$ e $b$ derivano da `min_dist`. La disposizione minimizza l'entropia incrociata
+
+$$
+\sum_{i \ne j} \left[ v_{ij} \log\frac{v_{ij}}{u_{ij}} + (1 - v_{ij}) \log\frac{1 - v_{ij}}{1 - u_{ij}} \right]
+$$
+
+mediante discesa stocastica del gradiente con **campionamento negativo** (*negative sampling*: coppie casuali vengono allontanate) — la fonte della casualità di UMAP. Il secondo termine fa sì che UMAP si curi un poco dei non vicini, a differenza di t-SNE, ma solo tramite coppie casuali, per cui le grandi distanze non vengono comunque riprodotte fedelmente.
+:::
+
+## 6. PCA, t-SNE e UMAP a confronto
+
+Confrontiamo le tre mappe su entrambi i dataset con due numeri: la **conservazione del vicinato** (struttura locale) e la **correlazione di rango tra tutte le distanze a coppie** prima e dopo (struttura globale; 1 = la mappa conserva l'ordine di tutte le distanze).
+
+```{r}
+#| label: compare-fun
+dist_cor <- function(high, low) {
+  cor(as.vector(dist(high)), as.vector(dist(low)), method = "spearman")
+}
+
+embed_scores <- function(high, maps, k = 10) {
+  data.frame(
+    method      = names(maps),
+    knn_kept    = sapply(maps, \(m) knn_preserved(high, m, k = k)),
+    dist_rank_r = sapply(maps, \(m) dist_cor(high, m))
+  )
+}
+```
+
+```{r}
+#| label: compare-peng
+pca_peng <- prcomp(peng_x)$x[, 1:2]
+
+scores_peng <- embed_scores(peng_x, list(PCA = pca_peng,
+                                         `t-SNE` = tsne_peng$Y,
+                                         UMAP = umap_peng))
+scores_peng
+```
+
+```{r}
+#| label: compare-roll
+set.seed(42)
+tsne_roll <- Rtsne(roll, perplexity = 30)$Y
+set.seed(42)
+umap_roll <- umap(roll, n_neighbors = 15, min_dist = 0.1, n_sgd_threads = 1)
+
+scores_roll <- embed_scores(roll, list(PCA = pca_roll$x[, 1:2],
+                                       `t-SNE` = tsne_roll,
+                                       UMAP = umap_roll))
+scores_roll
+```
+
+```{r}
+#| label: fig-roll-compare
+#| fig-cap: "Lo swiss roll mappato con PCA, t-SNE e UMAP, colorato in base alla vera posizione lungo il rotolo."
+bind_rows(
+  data.frame(X1 = pca_roll$x[, 1], X2 = pca_roll$x[, 2], method = "PCA"),
+  data.frame(tsne_roll, method = "t-SNE"),
+  data.frame(umap_roll, method = "UMAP")
+) |>
+  mutate(position = rep(arc, 3)) |>
+  ggplot(aes(X1, X2, colour = position)) +
+  geom_point(size = 0.6) +
+  scale_colour_viridis_c() +
+  facet_wrap(~ method, scales = "free") +
+  labs(x = "Dimensione 1", y = "Dimensione 2", colour = "Posizione sul rotolo")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere il confronto
+
+- Sullo swiss roll, la PCA conserva il `r round(100 * scores_roll$knn_kept[1])`% dei 10 vicini più prossimi, t-SNE il `r round(100 * scores_roll$knn_kept[2])`% e UMAP il `r round(100 * scores_roll$knn_kept[3])`%. Nella figura, verifica se il colore scorre **in modo continuo** su ciascuna mappa (foglio srotolato) oppure salta (strati mescolati). I metodi non lineari a volte **strappano** il foglio in pezzi: i vicinati sono conservati, ma i pezzi possono essere disposti in un ordine arbitrario.
+- Sui pinguini la struttura è molto meno curva. La PCA conserva il `r round(100 * scores_peng$knn_kept[1])`% dei vicini, t-SNE il `r round(100 * scores_peng$knn_kept[2])`% e UMAP il `r round(100 * scores_peng$knn_kept[3])`%.
+- La colonna `dist_rank_r` misura il quadro globale, usando le distanze **in linea retta**. Sullo swiss roll anche il foglio perfettamente srotolato ottiene solo `r round(dist_cor(roll, sheet), 2)`, perché conserva le distanze lungo la carta, non attraverso l'aria: chiediti sempre *quali* distanze vuoi che una mappa conservi. Per i pinguini, la PCA raggiunge `r round(scores_peng$dist_rank_r[1], 2)`: con quattro variabili standardizzate, due componenti riproducono già l'ordine della maggior parte delle distanze. Le mappe non lineari sono ottimizzate per i vicini, non per questo.
+:::
+
+La lezione pratica: **parti dalla PCA**. È veloce, deterministica, ha pesi (*loadings*) interpretabili e conserva le distanze globali al meglio che una proiezione 2-D possa fare. Ricorri a t-SNE o UMAP quando ti interessa soprattutto la struttura **locale**, e giudica ogni mappa con numeri come questi, non solo a occhio.
+
+| | PCA | t-SNE | UMAP |
+|---|---|---|---|
+| Lineare? | sì | no | no |
+| Risultato casuale? | no (solo i segni sono arbitrari) | sì | sì |
+| Impostazioni principali | numero di componenti | perplessità | `n_neighbors`, `min_dist` |
+| Conserva i vicini locali | moderatamente | bene | bene |
+| Conserva le distanze globali | quanto può una proiezione | no | non in modo affidabile |
+| Assi interpretabili | sì (loadings) | no | no |
+| Può collocare nuovi punti | sì, `predict()` | no | sì, `umap_transform()` |
+| Velocità su dati grandi | veloce | lento | veloce |
+
+## 7. UMAP come variabili, senza fuga di informazione
+
+Come la PCA nella [lezione sulla PCA](50-pca.qmd), UMAP può essere un **passo di preprocessing** per un modello: sostituisci le quattro misure con due coordinate UMAP e addestra un classificatore su di esse. Vale la stessa regola: **tutto viene stimato solo sui dati di addestramento**. Eseguire UMAP su tutti i pinguini e poi dividere (come faceva una versione precedente di questo corso) permette ai pinguini di test di plasmare la mappa su cui il modello viene addestrato — l'accuratezza sul test diventa ottimistica.
+
+`uwot` rende facile l'approccio corretto: `ret_model = TRUE` conserva quanto serve per collocare nuovi punti, e `umap_transform()` aggiunge i punti di test alla mappa di addestramento **esistente** senza modificarla.
+
+```{r}
+#| label: umap-split
+set.seed(2024)
+peng_split <- rsample::initial_split(peng, prop = 0.75, strata = species)
+peng_train <- rsample::training(peng_split)
+peng_test  <- rsample::testing(peng_split)
+
+# standardizza con le medie e le DS del training
+train_x <- scale(peng_train[, num_vars])
+test_x  <- scale(peng_test[, num_vars],
+                 center = attr(train_x, "scaled:center"),
+                 scale  = attr(train_x, "scaled:scale"))
+```
+
+```{r}
+#| label: umap-transform
+set.seed(2024)
+umap_fit <- umap(train_x, n_neighbors = 15, min_dist = 0.1,
+                 ret_model = TRUE, n_sgd_threads = 1)
+emb_train <- umap_fit$embedding               # coordinate del training
+
+set.seed(2024)
+emb_test <- umap_transform(test_x, umap_fit, n_sgd_threads = 1)
+dim(emb_test)
+```
+
+Con `ret_model = TRUE`, `umap()` restituisce una lista; le coordinate sono in `$embedding`. Ora un classificatore a 5 vicini più prossimi sulle variabili UMAP, e lo stesso classificatore sulle quattro misure standardizzate per confronto:
+
+```{r}
+#| label: umap-knn
+pred_umap <- class::knn(train = emb_train, test = emb_test,
+                        cl = peng_train$species, k = 5)
+pred_raw  <- class::knn(train = train_x, test = test_x,
+                        cl = peng_train$species, k = 5)
+
+c(umap_features = mean(pred_umap == peng_test$species),
+  raw_features  = mean(pred_raw  == peng_test$species))
+```
+
+Sul test set il classificatore che usa le variabili UMAP ha un'accuratezza di `r round(mean(pred_umap == peng_test$species), 3)`, contro `r round(mean(pred_raw == peng_test$species), 3)` sulle variabili originali. Con sole quattro variabili informative c'è poco da guadagnare da UMAP; può aiutare di più con molte variabili rumorose. Se aiuti o meno va verificato su dati esclusi dall'addestramento, idealmente con la convalida incrociata, e le impostazioni di UMAP vanno ottimizzate come qualsiasi altro iperparametro.
+
+In un workflow tidymodels il pacchetto `embed` fornisce `step_umap()`, che fa la stessa cosa dentro una recipe (stimata sui dati di addestramento di ciascun ricampionamento):
+
+```{r}
+#| label: step-umap
+#| eval: false
+umap_rec <- recipes::recipe(species ~ ., data = peng_train) |>
+  recipes::step_normalize(recipes::all_numeric_predictors()) |>
+  embed::step_umap(recipes::all_numeric_predictors(),
+                   num_comp = 2, neighbors = 15, min_dist = 0.1)
+```
+
+(Questo chunk non viene eseguito qui perché richiede il pacchetto `embed`.) Un modello con `ret_model = TRUE` contiene un indice archiviato al di fuori di R; per salvarlo su disco usa `uwot::save_uwot()` e `uwot::load_uwot()`, non `saveRDS()`.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Leggere le dimensioni dei cluster e le distanze tra cluster** dalle mappe t-SNE o UMAP. Solo i vicinati sono (approssimativamente) conservati.
+2. **Fidarsi di una singola esecuzione.** Entrambi i metodi sono stocastici e sensibili alle loro impostazioni: prova più semi e impostazioni, e interpreta solo ciò che è stabile. Per la riproducibilità esatta in `uwot`, usa `set.seed()` **e** `n_sgd_threads = 1`.
+3. **Dimenticare di standardizzare** le variabili con unità diverse — esattamente come nella PCA, i numeri più grandi dominano le distanze.
+4. **Righe duplicate** in `Rtsne()`: rimuovile con `distinct()`, oppure imposta `check_duplicates = FALSE` se sai cosa stai facendo. E mantieni la perplessità al massimo `(n - 1) / 3`.
+5. **Stimare UMAP su tutti i dati prima di dividerli.** Stimalo sul training set con `ret_model = TRUE` e proietta il test set con `umap_transform()`. Non usare mai le coordinate t-SNE come variabili di un modello.
+6. **Considerare i cluster sulla mappa come prova di cluster nei dati.** Conferma con i [metodi di clustering](../12-clustering/55-clustering-intro.qmd) sulle variabili originali, e con la conoscenza del dominio.
+:::
+
+## 8. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Su una mappa t-SNE, il gruppo A è largo il doppio del gruppo B ed è lontano dal gruppo C. Che cosa puoi concludere?
+
+Ben poco su dimensioni e distanza: t-SNE si adatta alla densità locale, quindi le ampiezze non sono confrontabili, e le distanze tra gruppi non sono conservate. *Puoi* concludere che i punti all'interno di ciascun gruppo tendono ad essere vicini l'uno dell'altro nello spazio originale — a patto che i gruppi siano stabili al variare di semi e perplessità.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Che cosa significa una perplessità di 30, a parole semplici?
+
+Ogni punto distribuisce le sue probabilità di vicinato come se avesse circa **30 vicini ugualmente probabili**. L'ampiezza della campana gaussiana attorno a ciascun punto viene regolata finché questo risulta vero.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Un collega dice "UMAP, a differenza di t-SNE, è deterministico e conserva le distanze, quindi è sicuro per la modellazione". Correggi entrambe le affermazioni.
+
+UMAP è **stocastico** (la disposizione è ottimizzata con un campionamento negativo casuale); in `uwot` è esattamente riproducibile solo con `set.seed()` e `n_sgd_threads = 1`. Conserva i **vicinati**, non le distanze globali. *Può* essere usato per creare variabili di un modello, ma solo se stimato sui dati di addestramento e applicato ai nuovi dati con `umap_transform()`, e solo se le prestazioni su dati esclusi dall'addestramento mostrano che aiuta.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Perché non puoi usare le coordinate di `Rtsne()` come variabili in un modello predittivo?
+
+Perché `Rtsne()` non può collocare nuove osservazioni su una mappa esistente. Rieseguirlo includendo i dati di test dà una mappa completamente diversa (e fa filtrare i dati di test nelle variabili).
+:::
+
+## 9. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — prevedi.** Esegui `Rtsne()` due volte sugli stessi dati con la stessa perplessità, una volta dopo `set.seed(1)` e una dopo `set.seed(2)`. Le due mappe sembrano immagini speculari l'una dell'altra, e nella seconda due gruppi si sono scambiati di posto. (a) Una delle due esecuzioni è sbagliata? (b) Che cosa ti preoccuperebbe?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+(a) No. La disposizione iniziale è casuale e gli assi di t-SNE non hanno significato: immagini speculari e gruppi riorganizzati sono soluzioni ugualmente buone. (b) Sarebbe preoccupante se cambiasse molto l'**appartenenza** ai gruppi — ad esempio un gruppo presente in un'esecuzione che nell'altra si spezza in pezzi o si fonde con un altro. Ciò significherebbe che il raggruppamento non è una caratteristica stabile dei dati.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — perplessità a mano.** Usando `neighbour_probs()`, `perplexity_of()` e `find_sigma()` della sezione 3, trova l'ampiezza $\sigma$ che dà perplessità 5, 30 e 50 per il pinguino 1. Come cambia $\sigma$, e perché?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+sapply(c(5, 30, 50), \(p) find_sigma(d1, target = p))
+```
+Le ampiezze sono circa 0.14, 0.33 e 0.40. Una perplessità maggiore significa più vicini effettivi, quindi la campana gaussiana deve essere **più larga** per assegnare una probabilità non trascurabile a più punti. Ripeti per altri pinguini e vedrai che l'ampiezza necessaria per la stessa perplessità cambia da punto a punto, a seconda di quanto è affollata la sua regione.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi l'errore.** Questo codice si ferma con errori. Trova i due problemi e correggili.
+
+```r
+virginica_x <- scale(iris[101:150, 1:4])
+tsne_virginica <- Rtsne(virginica_x, perplexity = 30)
+```
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Primo, il fiore 143 ha esattamente le stesse quattro misure del fiore 102, quindi i dati contengono una **riga duplicata** (`anyDuplicated(virginica_x)` non è 0) e `Rtsne()` rifiuta di partire. Secondo, con 50 righe la perplessità è troppo grande: deve essere al massimo $(50 - 1)/3 \approx 16.3$. Rimuovi il duplicato e abbassa la perplessità (e imposta un seme):
+```r
+virginica <- iris[101:150, ] |>
+  distinct(Sepal.Length, Sepal.Width, Petal.Length, Petal.Width,
+           .keep_all = TRUE)                       # 49 fiori
+virginica_x <- scale(virginica[, 1:4])
+
+set.seed(1)
+tsne_virginica <- Rtsne(virginica_x, perplexity = 10)  # 10 <= 48 / 3
+```
+Usa le colonne di `virginica` (non di `iris`) per etichette o colori, così che etichette e righe restino allineate.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — quanto è "locale" il locale?** Calcola `knn_preserved()` per le mappe PCA, t-SNE e UMAP dei pinguini con `k = 5`, `10` e `50`. Come cambia la graduatoria dei metodi al variare di `k`? Che cosa concludi?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+ks <- c(5, 10, 50)
+kept <- sapply(ks, \(k) c(
+  PCA  = knn_preserved(peng_x, pca_peng, k),
+  tSNE = knn_preserved(peng_x, tsne_peng$Y, k),
+  UMAP = knn_preserved(peng_x, umap_peng, k)
+))
+colnames(kept) <- paste0("k = ", ks)
+round(kept, 2)
+```
+Per la PCA i valori sono circa 0.35, 0.45 e 0.74: più grande è il vicinato, più è facile conservarlo. t-SNE e UMAP sono progettati per vicinati piccoli (dell'ordine della perplessità o di `n_neighbors`), quindi confronta il loro vantaggio sulla PCA a `k = 5` con quello a `k = 50`: ci si aspetta che l'eventuale vantaggio sia massimo per `k` piccolo. La risposta alla domanda "quale mappa è la migliore?" dipende dalla scala della struttura che ti interessa.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — interpreta una silhouette.** Un rapporto confronta la **larghezza media della silhouette** (da `cluster::silhouette()`, una misura di quanto siano ben separati gruppi noti; vedi le [lezioni sul clustering](../12-clustering/55-clustering-intro.qmd)) delle tre specie su una mappa PCA e su una mappa t-SNE di `iris`, e trova un valore più alto per t-SNE. Conclude che "t-SNE rappresenta meglio i dati". Esegui tu stesso il confronto e spiega perché questa conclusione non segue.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+iris_u <- iris |>
+  distinct(Sepal.Length, Sepal.Width, Petal.Length, Petal.Width,
+           .keep_all = TRUE)
+iris_x <- scale(iris_u[, 1:4])
+set.seed(1)
+tsne_iris <- Rtsne(iris_x, perplexity = 30)$Y
+pca_iris  <- prcomp(iris_x)$x[, 1:2]
+
+sil <- function(map) {
+  mean(cluster::silhouette(as.integer(iris_u$Species), dist(map))[, 3])
+}
+c(PCA = sil(pca_iris), tSNE = sil(tsne_iris))
+```
+t-SNE (e UMAP) sono progettati per produrre **gruppi compatti e ben separati**: la curva a code pesanti allontana i punti a distanza moderata. Una silhouette più alta sulla mappa riflette in parte questa esagerazione, non una migliore rappresentazione dei dati. Le silhouette calcolate sulla mappa dipendono inoltre dal seme e dalla perplessità. Domande migliori sono "quanti vicini vengono conservati?" (`knn_preserved()`) e "il raggruppamento è stabile al variare delle impostazioni?".
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 6 — la fuga di informazione, misurata.** Usando la divisione dei pinguini della sezione 7, confronta l'accuratezza sul test del classificatore 5-NN su variabili UMAP ottenute in due modi: (a) il modo **sbagliato** — UMAP su tutti i 342 pinguini, poi divisione delle coordinate; (b) il modo **giusto** — `ret_model = TRUE` sul training set e `umap_transform()` sul test set. Ripeti per 20 divisioni diverse. La differenza è grande? Perché (a) è sbagliato anche quando la differenza è piccola?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+one_split <- function(seed) {
+  set.seed(seed)
+  idx <- sample(nrow(peng), round(0.75 * nrow(peng)))
+  tr  <- scale(peng[idx, num_vars])
+  te  <- scale(peng[-idx, num_vars], center = attr(tr, "scaled:center"),
+               scale = attr(tr, "scaled:scale"))
+  y_tr <- peng$species[idx]
+  y_te <- peng$species[-idx]
+
+  all_map <- umap(peng_x, min_dist = 0.1, n_sgd_threads = 1)   # (a) sbagliato
+  pred_a  <- class::knn(all_map[idx, ], all_map[-idx, ], y_tr, k = 5)
+
+  fit    <- umap(tr, min_dist = 0.1, ret_model = TRUE,          # (b) giusto
+                 n_sgd_threads = 1)
+  emb_te <- umap_transform(te, fit, n_sgd_threads = 1)
+  pred_b <- class::knn(fit$embedding, emb_te, y_tr, k = 5)
+
+  c(wrong = mean(pred_a == y_te), right = mean(pred_b == y_te))
+}
+res <- sapply(1:20, one_split)
+rowMeans(res)
+```
+Sui pinguini, le cui specie sono facili da separare, è probabile che le due medie siano vicine. L'approccio (a) resta comunque sbagliato: i pinguini di test hanno contribuito a costruire la mappa, quindi le loro coordinate "sanno" già dove sono i loro vicini nel training set. La stima dell'accuratezza non è allora una stima onesta delle prestazioni su pinguini davvero nuovi, e con problemi più difficili o più variabili l'ottimismo può essere grande.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| `knn_preserved(high, low, k)` | frazione dei $k$ vicini più prossimi conservata da una mappa (nostra funzione) |
+| perplessità | numero effettivo di vicini di t-SNE ($2^{\text{entropia}}$) |
+| `Rtsne(x, perplexity = 30)` | mappa t-SNE in `$Y`; richiede assenza di duplicati e perplessità ≤ (n − 1)/3 |
+| `umap(x, n_neighbors, min_dist)` | mappa UMAP (matrice) |
+| `set.seed()` + `n_sgd_threads = 1` | riproducibilità esatta in `uwot` |
+| `umap(..., ret_model = TRUE)` + `umap_transform()` | stima sui dati di addestramento, colloca nuovi punti senza fuga di informazione |
+| `embed::step_umap()` | UMAP dentro una recipe tidymodels |
+
+- I metodi lineari non possono **srotolare strutture curve**; t-SNE e UMAP mirano invece a tenere vicini i **vicini**, non a conservare tutte le distanze.
+- Entrambi i metodi sono **stocastici** e sensibili alle loro impostazioni: interpreta solo ciò che è stabile al variare di semi e impostazioni.
+- Nessuno dei due conserva in modo affidabile le **dimensioni dei cluster** o le **distanze tra cluster**; gli assi non hanno significato.
+- Giudica una mappa con dei numeri (vicini conservati, correlazione tra distanze) e parti dalla **PCA** come riferimento.
+- Per usare UMAP come variabili, **stimalo sui dati di addestramento** e proietta i nuovi dati con `umap_transform()`; non usare mai le coordinate t-SNE come variabili.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wattenberg, Viégas & Johnson, "How to Use t-SNE Effectively", *Distill* (2016), <https://distill.pub/2016/misread-tsne/>
+- Documentazione di `uwot`, comprese le note sulla riproducibilità, <https://jlmelville.github.io/uwot/>
+- McInnes, Healy & Melville, documentazione di UMAP, "How UMAP works", <https://umap-learn.readthedocs.io/en/latest/how_umap_works.html>
+- Manuale di riferimento di `Rtsne`, <https://cran.r-project.org/package=Rtsne>
+:::

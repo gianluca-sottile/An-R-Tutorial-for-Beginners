@@ -1,0 +1,668 @@
+---
+title: "Gradient boosting"
+subtitle: "Molti alberi piccoli, ciascuno dei quali corregge gli errori dei precedenti"
+description: "Il boosting costruito da zero con stump in R base, il ruolo del tasso di apprendimento, del numero di alberi, della profondità e dell'arresto anticipato, gli pseudo-residui come gradiente negativo della funzione di perdita, e l'ottimizzazione di XGBoost con tidymodels sui dati del Titanic."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~100 min]{} [Prerequisiti: [Alberi decisionali](45-decision-trees.qmd), [Foreste casuali (random forest)](46-random-forests.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare il **boosting** come addestramento **sequenziale** di piccoli alberi sui residui del modello corrente, e implementarlo da zero con gli stump;
+- descrivere come interagiscono **tasso di apprendimento**, **numero di alberi**, **profondità degli alberi** e **arresto anticipato** (*early stopping*);
+- definire gli **pseudo-residui** come **gradiente negativo** della funzione di perdita, e calcolarli per l'errore quadratico e per la log-loss;
+- specificare e ottimizzare un modello XGBoost con `boost_tree()` in tidymodels, e leggerne l'importanza delle variabili;
+- riconoscere i principali iperparametri di XGBoost nell'interfaccia R nativa di `xgboost`.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(tidymodels)
+library(xgboost)   # motore per gli alberi potenziati (boosted)
+```
+
+## 1. Perché il boosting?
+
+Una [foresta casuale](46-random-forests.qmd) fa crescere centinaia di alberi grandi in modo **indipendente** e ne fa la media. Ogni albero è un modello completo, a bassa distorsione; la media elimina parte della loro varianza.
+
+Il boosting segue la strada opposta. Pensa a una studentessa che ripassa per un esame con una serie di domande di esercizio. Dopo il primo tentativo non ricomincia da capo: guarda le domande in cui ha **sbagliato** e studia quelle. Dopo il secondo tentativo fa lo stesso, concentrandosi su ciò che ancora non va. Ogni turno di studio è piccolo, ma è mirato agli errori rimasti.
+
+Un modello potenziato (*boosted*) è costruito allo stesso modo:
+
+1. si parte da una previsione molto semplice (ad esempio la media di $y$);
+2. si guardano i **residui** — ciò che il modello corrente ancora sbaglia;
+3. si addestra un **piccolo albero** su quei residui;
+4. si aggiunge al modello una **frazione** di quell'albero, e si torna al punto 2.
+
+Ogni albero da solo è un modello debole (spesso poche suddivisioni). Sommati, centinaia di alberi possono approssimare funzioni complicate. Gli alberi potenziati — in implementazioni come **XGBoost**, LightGBM e CatBoost — sono tra i metodi più usati per i dati tabellari.
+
+## 2. Il boosting da zero con gli stump
+
+### Un problema giocattolo
+
+Riutilizziamo il mondo simulato della [lezione sul flusso di lavoro del machine learning](44-ml-workflow.qmd): $y = \sin(2\pi x) + \varepsilon$ con deviazione standard del rumore pari a 0.3. Estraiamo un insieme di addestramento, uno di validazione (per scegliere il numero di alberi) e un grande insieme di test (per vedere la verità).
+
+```{r}
+#| label: toy-data
+f_true <- function(x) sin(2 * pi * x)
+sim_data <- function(n, sd = 0.3) {
+  x <- runif(n)
+  data.frame(x = x, y = f_true(x) + rnorm(n, sd = sd))
+}
+set.seed(47)
+train <- sim_data(100)
+valid <- sim_data(100)
+test  <- sim_data(2000)
+```
+
+### Il modello debole: uno stump
+
+Uno **stump** è un albero con una sola suddivisione: una soglia, due foglie, ciascuna delle quali prevede la media delle proprie osservazioni. È la stessa ricerca della suddivisione di regressione della [lezione sugli alberi decisionali](45-decision-trees.qmd), scritta come una funzione che restituisce la soglia e i due valori delle foglie.
+
+```{r}
+#| label: stump
+fit_stump <- function(x, r) {
+  xs <- sort(unique(x))
+  cuts <- (head(xs, -1) + tail(xs, -1)) / 2        # soglie candidate
+  sse <- vapply(cuts, \(s) {
+    left <- r[x < s]
+    right <- r[x >= s]
+    sum((left - mean(left))^2) + sum((right - mean(right))^2)
+  }, numeric(1))
+  s <- cuts[which.min(sse)]
+  list(cut = s, left = mean(r[x < s]), right = mean(r[x >= s]))
+}
+predict_stump <- function(stump, x) {
+  ifelse(x < stump$cut, stump$left, stump$right)
+}
+```
+
+Prima di usarlo, verifichiamolo. Uno stump con soglia $s$ equivale a una regressione lineare sull'indicatore $x \ge s$, quindi i suoi valori stimati devono coincidere con quelli di `lm()`:
+
+```{r}
+#| label: stump-check
+st <- fit_stump(train$x, train$y)
+st
+check <- lm(y ~ I(x >= st$cut), data = train)
+all.equal(unname(fitted(check)), predict_stump(st, train$x))
+```
+
+Il primo stump divide a $x \approx$ `r round(st$cut, 2)` — più o meno dove l'onda sinusoidale attraversa lo zero — e prevede `r round(st$left, 2)` a sinistra e `r round(st$right, 2)` a destra. È un modello molto rozzo di un'onda sinusoidale.
+
+### Il ciclo di boosting
+
+```{r}
+#| label: boost-functions
+boost_stumps <- function(x, y, n_trees, learn_rate) {
+  f0 <- mean(y)                                     # previsione iniziale
+  pred <- rep(f0, length(y))
+  stumps <- vector("list", n_trees)
+  for (m in seq_len(n_trees)) {
+    r <- y - pred                                   # residui correnti
+    stumps[[m]] <- fit_stump(x, r)                  # stump adattato ai residui
+    pred <- pred + learn_rate * predict_stump(stumps[[m]], x)
+  }
+  list(f0 = f0, stumps = stumps, learn_rate = learn_rate)
+}
+predict_boost <- function(model, x, n_trees = length(model$stumps)) {
+  pred <- rep(model$f0, length(x))
+  for (m in seq_len(n_trees)) {
+    pred <- pred + model$learn_rate * predict_stump(model$stumps[[m]], x)
+  }
+  pred
+}
+```
+
+L'intero algoritmo è il ciclo `for` in `boost_stumps()`: calcola i residui, adatta uno stump ai residui, aggiungi una frazione `learn_rate` dello stump. Il modello finale è il valore iniziale più la somma di tutti gli stump contratti:
+
+$$
+\hat f(x) = f_0 + \nu \sum_{m=1}^{M} T_m(x),
+$$
+
+dove $T_m$ è l'$m$-esimo stump, $M$ il numero di alberi e $\nu$ il **tasso di apprendimento** (*learning rate*).
+
+```{r}
+#| label: fig-boost-steps
+#| fig-cap: "Stump potenziati (tasso di apprendimento 0.1) dopo 1, 5, 25 e 200 alberi. Punti grigi: dati di addestramento; linea tratteggiata: la curva vera."
+#| fig-width: 9
+#| fig-height: 5
+boost_01 <- boost_stumps(train$x, train$y, n_trees = 200, learn_rate = 0.1)
+x_grid <- seq(0, 1, length.out = 400)
+steps <- do.call(rbind, lapply(c(1, 5, 25, 200), \(m) {
+  data.frame(trees = paste(m, ifelse(m == 1, "albero", "alberi")), x = x_grid,
+             pred = predict_boost(boost_01, x_grid, n_trees = m))
+}))
+steps$trees <- factor(steps$trees, levels = unique(steps$trees))
+
+ggplot(steps, aes(x, pred)) +
+  geom_point(data = train, aes(x, y), colour = "grey60", size = 1) +
+  geom_line(aes(y = f_true(x)), linetype = "dashed") +
+  geom_line(colour = "#D55E00", linewidth = 1) +
+  facet_wrap(~ trees) +
+  labs(x = "x", y = "Previsione")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Dopo **1 albero**, il modello è la media complessiva più un decimo del primo stump: quasi piatto. Con un tasso di apprendimento di 0.1 ogni albero sposta la previsione solo di poco.
+- Dopo **5 e 25 alberi**, la funzione a gradini comincia a seguire l'onda: ogni nuovo stump è stato collocato dove il modello precedente sbagliava di più.
+- Dopo **200 alberi**, la previsione è una scala con tanti piccoli gradini che segue da vicino la curva vera. Ogni gradino proviene da uno stump; la somma di molti pezzi rozzi è una funzione flessibile.
+:::
+
+## 3. Tasso di apprendimento, numero di alberi e arresto anticipato
+
+Due iperparametri lavorano insieme:
+
+- il **tasso di apprendimento** $\nu$ (detto anche *shrinkage* o `eta`): quanto di ogni nuovo albero aggiungiamo;
+- il **numero di alberi** $M$.
+
+Con un tasso di apprendimento grande, ogni albero fa una grande correzione e il modello si adatta rapidamente ai dati di addestramento — ma comincia anche rapidamente ad adattarsi al rumore. Con un tasso piccolo servono molti più alberi, ma il percorso è più regolare. Registriamo l'errore dopo ogni albero per quattro tassi di apprendimento:
+
+```{r}
+#| label: error-path
+rmse <- function(obs, pred) sqrt(mean((obs - pred)^2))
+error_path <- function(model, x, y) {
+  pred <- rep(model$f0, length(x))
+  err <- numeric(length(model$stumps))
+  for (m in seq_along(model$stumps)) {
+    pred <- pred + model$learn_rate * predict_stump(model$stumps[[m]], x)
+    err[m] <- rmse(y, pred)
+  }
+  err
+}
+
+paths <- do.call(rbind, lapply(c(1, 0.3, 0.1, 0.03), \(lr) {
+  mod <- boost_stumps(train$x, train$y, n_trees = 500, learn_rate = lr)
+  data.frame(learn_rate = lr, tree = 1:500,
+             train = error_path(mod, train$x, train$y),
+             valid = error_path(mod, valid$x, valid$y))
+}))
+```
+
+```{r}
+#| label: fig-learning-rate
+#| fig-cap: "RMSE di addestramento (puntinato) e di validazione (continuo) dopo ogni albero, per quattro tassi di apprendimento. La linea orizzontale tratteggiata è il livello del rumore, 0.3."
+paths |>
+  tidyr::pivot_longer(c(train, valid), names_to = "data",
+                      values_to = "rmse") |>
+  ggplot(aes(tree, rmse, colour = factor(learn_rate), linetype = data)) +
+  geom_line(linewidth = 0.8) +
+  geom_hline(yintercept = 0.3, linetype = "dashed") +
+  scale_x_log10() +
+  scale_linetype_manual(values = c(train = "dotted", valid = "solid")) +
+  coord_cartesian(ylim = c(0, 0.8)) +
+  labs(x = "Numero di alberi (scala logaritmica)", y = "RMSE",
+       colour = "Tasso di apprendimento", linetype = NULL)
+```
+
+```{r}
+#| label: best-trees
+best_by_rate <- do.call(rbind, lapply(split(paths, paths$learn_rate), \(d) {
+  data.frame(learn_rate = d$learn_rate[1],
+             best_trees = which.min(d$valid),
+             best_valid = min(d$valid),
+             valid_500 = d$valid[500],
+             train_500 = d$train[500])
+}))
+best_by_rate
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+Queste curve sono **curve di apprendimento**: l'errore in funzione di quanto a lungo il modello è stato addestrato.
+
+- L'errore di **addestramento** (puntinato) può solo diminuire. Con tasso di apprendimento 1 raggiunge `r round(best_by_rate$train_500[best_by_rate$learn_rate == 1], 2)` dopo 500 alberi — ben sotto il livello di rumore di 0.3, il che significa che il modello sta memorizzando il rumore.
+- L'errore di **validazione** (continuo) prima scende, raggiunge un minimo e poi risale lentamente: con più alberi si arriva prima o poi al **sovradattamento**. A differenza di una foresta casuale, un modello potenziato *può* andare in sovradattamento aggiungendo alberi.
+- Più piccolo è il tasso di apprendimento, più tardi arriva il minimo: `r best_by_rate$best_trees[best_by_rate$learn_rate == 1]` alberi per tasso 1, `r best_by_rate$best_trees[best_by_rate$learn_rate == 0.1]` per 0.1. Con 0.03, 500 alberi non bastano nemmeno per raggiungerlo.
+- I migliori errori di validazione (`best_valid`) sono simili tra i vari tassi; il tasso grande 1 va leggermente peggio (`r round(best_by_rate$best_valid[best_by_rate$learn_rate == 1], 3)` contro `r round(min(best_by_rate$best_valid), 3)` per il tasso migliore), perché ciascuno dei suoi passi è troppo grossolano. Una regola pratica comune: **usa un tasso di apprendimento piccolo (0.01–0.1) e abbastanza alberi**, e lascia che siano i dati a scegliere il numero di alberi.
+:::
+
+### Arresto anticipato (early stopping)
+
+Invece di fissare in anticipo il numero di alberi, possiamo continuare ad aggiungerne e **fermarci quando l'errore di validazione non migliora da un certo numero di round** (la *pazienza*). Il modello conserva gli alberi fino al round migliore.
+
+```{r}
+#| label: early-stop
+early_stop <- function(valid_error, patience) {
+  best <- 1
+  for (m in seq_along(valid_error)) {
+    if (valid_error[m] < valid_error[best]) best <- m
+    if (m - best >= patience) break             # nessun miglioramento da un po'
+  }
+  c(best = best, stopped_at = m)
+}
+early_stop(paths$valid[paths$learn_rate == 0.1], patience = 20)
+```
+
+Con tasso di apprendimento 0.1 e una pazienza di 20 round, l'addestramento si fermerebbe dopo `r early_stop(paths$valid[paths$learn_rate == 0.1], 20)["stopped_at"]` alberi e conserverebbe i primi `r early_stop(paths$valid[paths$learn_rate == 0.1], 20)["best"]`. L'arresto anticipato fa risparmiare tempo di calcolo e agisce da regolarizzatore. Nota che i dati di validazione sono ora usati per prendere una decisione: fanno parte del processo di costruzione del modello, e la prestazione finale va comunque misurata su dati di test separati.
+
+### Profondità degli alberi
+
+Abbiamo usato gli stump (profondità 1). Alberi più profondi catturano le **interazioni**: uno stump divide su una variabile alla volta, quindi una somma di stump è un modello *additivo*, $f(x) = f_1(x_1) + f_2(x_2) + \dots$. Un albero di profondità 2 può rappresentare "l'effetto dell'età dipende dal sesso"; la profondità $d$ consente interazioni tra al massimo $d$ variabili. Gli alberi potenziati sono di solito **poco profondi** (profondità 1–8): alberi profondi renderebbero ogni passo troppo grande e si adatterebbero al rumore. Con un solo predittore, come qui, la profondità cambia soltanto quanti gradini aggiunge ogni albero.
+
+## 4. Perché "gradient" boosting?
+
+Finora abbiamo adattato ogni albero ai residui ordinari $y_i - \hat f(x_i)$. Va bene per la perdita quadratica, ma per un esito 0/1 (il passeggero è sopravvissuto?) il modello prevede un **logit (log-odds)** $F(x)$, e $y - F$ non ha senso. Il gradient boosting generalizza l'idea.
+
+Sia $L(y, F)$ la **funzione di perdita** — quanto è sbagliata una previsione $F$ quando il valore vero è $y$. Per ogni osservazione chiediamoci: *in quale direzione devo spostare la previsione corrente $F_i$ per ridurre la perdita il più rapidamente possibile?* La risposta è il **gradiente negativo** (derivata cambiata di segno) della perdita rispetto alla previsione. Questi numeri sono gli **pseudo-residui**:
+
+$$
+r_{i} = -\left.\frac{\partial L(y_i, F)}{\partial F}\right|_{F = \hat F_{m-1}(x_i)} .
+$$
+
+Ogni nuovo albero è adattato agli pseudo-residui, quindi il boosting è una **discesa del gradiente nello spazio delle funzioni**: ogni albero è un piccolo passo in discesa.
+
+| Perdita | $L(y, F)$ | Pseudo-residuo $-\partial L / \partial F$ |
+|---|---|---|
+| Errore quadratico ($y$ numerica) | $\tfrac12 (y - F)^2$ | $y - F$ — il residuo ordinario |
+| Log-loss ($y \in \{0,1\}$, $p = 1/(1+e^{-F})$) | $-[y \log p + (1-y)\log(1-p)]$ | $y - p$ — osservato meno probabilità prevista |
+
+(La vecchia versione di questa lezione scriveva lo pseudo-residuo come meno la perdita stessa, $-L(y_i, F)$, dimenticando la derivata: quella quantità è sempre negativa e non indica alcuna direzione utile.)
+
+Possiamo verificare numericamente la riga della log-loss, approssimando la derivata con una piccola differenza finita:
+
+```{r}
+#| label: gradient-check
+log_loss <- function(y, f) {
+  p <- plogis(f)                                 # logit -> probabilità
+  -(y * log(p) + (1 - y) * log(1 - p))
+}
+y <- c(1, 0, 1)
+f <- c(-2, 0, 1.5)                               # logit correnti
+h <- 1e-6
+numeric_grad <- (log_loss(y, f + h) - log_loss(y, f - h)) / (2 * h)
+cbind(minus_gradient = -numeric_grad, y_minus_p = y - plogis(f))
+```
+
+Le due colonne coincidono. Per il primo passeggero (sopravvissuto, ma con logit previsto −2, cioè $p \approx$ `r round(plogis(-2), 2)`) lo pseudo-residuo è grande e positivo: il prossimo albero spingerà quella previsione verso l'alto.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: l'algoritmo e che cosa aggiunge XGBoost
+
+**Gradient boosting** (Friedman, 2001) con perdita $L$, $M$ alberi e tasso di apprendimento $\nu$:
+
+1. $\hat F_0(x) = \arg\min_c \sum_i L(y_i, c)$ (la media per l'errore quadratico, il logit della proporzione complessiva per la log-loss).
+2. Per $m = 1, \dots, M$:
+   a. $r_{im} = -\partial L(y_i, F)/\partial F$ in $F = \hat F_{m-1}(x_i)$;
+   b. adatta un albero di regressione con $J$ foglie a $(x_i, r_{im})$, ottenendo le regioni $R_{jm}$;
+   c. in ciascuna foglia scegli $\gamma_{jm} = \arg\min_\gamma \sum_{x_i \in R_{jm}} L(y_i, \hat F_{m-1}(x_i) + \gamma)$;
+   d. $\hat F_m(x) = \hat F_{m-1}(x) + \nu \sum_j \gamma_{jm} \mathbf 1(x \in R_{jm})$.
+
+Per l'errore quadratico, il passo (c) dà la media dei residui nella foglia — esattamente il nostro `fit_stump()`.
+
+**XGBoost** (Chen & Guestrin, 2016) usa un'approssimazione del secondo ordine (di Newton) della perdita, con gradienti $g_i$ e derivate seconde $h_i$ (per la log-loss, $h_i = p_i(1 - p_i)$), e aggiunge una penalità su ciascun albero,
+$$
+\Omega(T) = \gamma\, J + \tfrac12 \lambda \sum_{j=1}^J w_j^2 \;(+\, \alpha \textstyle\sum_j |w_j|),
+$$
+dove $w_j$ sono i valori delle foglie. Il valore ottimale di una foglia è $w_j = -\sum_{i \in j} g_i / (\sum_{i \in j} h_i + \lambda)$, e una suddivisione viene effettuata solo se riduce la perdita penalizzata di più di $\gamma$ (`loss_reduction` in tidymodels). Il sottocampionamento delle righe (`sample_size`) e delle colonne (`mtry`) aggiunge casualità, come in una foresta casuale, e di solito riduce ulteriormente la varianza (gradient boosting *stocastico*).
+:::
+
+## 5. Iperparametri di XGBoost
+
+La funzione `boost_tree()` di tidymodels usa gli stessi nomi di argomento per ogni motore. Con `set_engine("xgboost")` essi corrispondono ai parametri di XGBoost come segue:
+
+| Argomento di `boost_tree()` | Nome in XGBoost | Che cosa controlla | Intervallo tipico |
+|---|---|---|---|
+| `trees` | `nrounds` | Numero massimo di alberi $M$ | 100 – 2000 (con arresto anticipato) |
+| `learn_rate` | `eta` | Contrazione (*shrinkage*) $\nu$ di ciascun albero | 0.01 – 0.3 |
+| `tree_depth` | `max_depth` | Profondità di ciascun albero (ordine delle interazioni) | 1 – 8 |
+| `min_n` | `min_child_weight` | Dimensione minima (pesata con l'Hessiana) di una foglia | 1 – 40 |
+| `loss_reduction` | `gamma` | Riduzione minima della perdita necessaria per suddividere ($\gamma$) | 0 – 10 |
+| `sample_size` | `subsample` | Frazione di righe usata per ciascun albero | 0.5 – 1 |
+| `mtry` | `colsample_bynode` | Predittori considerati a ogni suddivisione | da pochi a tutti |
+| `stop_iter` | `early_stopping_rounds` | Pazienza per l'arresto anticipato | 10 – 50 |
+
+Altri parametri di XGBoost possono essere passati come **argomenti del motore**, ad es. `set_engine("xgboost", lambda = 1, alpha = 0)` per le penalità L2 e L1 sui valori delle foglie, `scale_pos_weight` per dare più peso a una classe positiva rara, oppure `device = "cuda"` per addestrare su una GPU NVIDIA (il vecchio `tree_method = "gpu_hist"` è deprecato).
+
+## 6. Potenziare il Titanic
+
+Usiamo la stessa preparazione dei dati del Titanic della [lezione sul flusso di lavoro del machine learning](44-ml-workflow.qmd):
+
+```{r}
+#| label: titanic-data
+titanic <- readr::read_csv(data_path("titanic_data.csv"),
+                           na = c("", "NA", "?"), show_col_types = FALSE) |>
+  select(survived, pclass, sex, age, sibsp, parch, fare, embarked) |>
+  mutate(
+    survived = factor(survived, levels = c(1, 0), labels = c("yes", "no")),
+    pclass   = factor(pclass, levels = 1:3, labels = c("1st", "2nd", "3rd")),
+    sex      = factor(sex),
+    embarked = factor(embarked)
+  )
+
+set.seed(2026)
+titanic_split <- initial_split(titanic, prop = 0.75, strata = survived)
+titanic_train <- training(titanic_split)
+titanic_test  <- testing(titanic_split)
+set.seed(2026)
+titanic_folds <- vfold_cv(titanic_train, v = 5, strata = survived)
+titanic_metrics <- metric_set(roc_auc, accuracy, sensitivity, specificity,
+                              brier_class, mn_log_loss)
+```
+
+### Recipe
+
+XGBoost richiede predittori **numerici**, quindi i fattori devono diventare variabili dummy. Gli alberi non sono influenzati dalle trasformazioni monotone, quindi non serve prendere il logaritmo di `fare` né normalizzare. (XGBoost sa gestire da solo i valori mancanti; imputiamo comunque, per mantenere la stessa pipeline degli altri modelli.)
+
+```{r}
+#| label: xgb-recipe
+xgb_rec <- recipe(survived ~ ., data = titanic_train) |>
+  step_impute_median(all_numeric_predictors()) |>
+  step_impute_mode(all_nominal_predictors()) |>
+  step_dummy(all_nominal_predictors())
+```
+
+A differenza della vecchia versione di questa lezione, non includiamo insieme `fare` e una sua copia trasformata in logaritmo (per gli alberi contengono esattamente la stessa informazione), e non inventiamo un indicatore "age < 18" chiamandolo interazione: gli alberi di profondità ≥ 2 trovano le interazioni da soli.
+
+### Specifica del modello e ottimizzazione
+
+```{r}
+#| label: xgb-spec
+xgb_spec <- boost_tree(
+  trees = 1000, tree_depth = tune(), learn_rate = tune(),
+  min_n = 5, loss_reduction = 0, sample_size = 0.8, mtry = 6,
+  stop_iter = 20
+) |>
+  set_engine("xgboost", validation = 0.2) |>
+  set_mode("classification")
+
+xgb_wf <- workflow() |>
+  add_recipe(xgb_rec) |>
+  add_model(xgb_spec)
+```
+
+- `trees = 1000` è solo un **limite superiore**: `stop_iter = 20` interrompe l'addestramento quando la log-loss su un insieme di validazione non migliora da 20 round.
+- `validation = 0.2` è un argomento del motore: all'interno di ogni addestramento, il 20% dei dati (di analisi) viene messo da parte per monitorare l'arresto anticipato. Senza di esso, il monitoraggio avverrebbe sugli stessi dati di addestramento, dove la perdita continua a diminuire, quindi l'arresto anticipato non scatterebbe quasi mai.
+- `sample_size = 0.8` usa un 80% casuale delle righe per ogni albero; `mtry = 6` considera 6 dei 9 predittori codificati con dummy a ogni suddivisione.
+
+Ottimizziamo solo profondità e tasso di apprendimento, su una griglia volutamente piccola:
+
+```{r}
+#| label: xgb-grid
+xgb_grid <- tidyr::expand_grid(tree_depth = c(1L, 3L, 6L),
+                               learn_rate = c(0.01, 0.05, 0.2))
+
+set.seed(2026)
+xgb_res <- tune_grid(xgb_wf, resamples = titanic_folds, grid = xgb_grid,
+                     metrics = titanic_metrics)
+```
+
+```{r}
+#| label: fig-xgb-tune
+#| fig-cap: "ROC AUC e Brier score in convalida incrociata degli alberi potenziati, per profondità e tasso di apprendimento."
+autoplot(xgb_res, metric = c("roc_auc", "brier_class"))
+```
+
+```{r}
+#| label: xgb-best
+show_best(xgb_res, metric = "roc_auc", n = 5)
+best_xgb <- select_best(xgb_res, metric = "roc_auc")
+best_xgb
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Ogni linea nel grafico corrisponde a una profondità dell'albero; l'asse x è il tasso di apprendimento (in scala logaritmica). Grazie all'arresto anticipato, un tasso di apprendimento piccolo è compensato da più alberi, quindi le curve sono spesso piuttosto piatte.
+- La combinazione migliore è profondità `r best_xgb$tree_depth` con tasso di apprendimento `r best_xgb$learn_rate`. Guarda `std_err` in `show_best()`: di solito diverse combinazioni sono entro un errore standard dalla migliore, quindi la scelta esatta conta poco.
+- Se la profondità 1 (stump, un modello additivo) è buona quanto alberi più profondi, nei dati c'è poca evidenza di interazioni che il modello possa sfruttare.
+:::
+
+```{r}
+#| label: xgb-final
+xgb_final <- xgb_wf |>
+  finalize_workflow(best_xgb) |>
+  last_fit(titanic_split, metrics = titanic_metrics)
+collect_metrics(xgb_final)
+```
+
+Come sempre, l'insieme di test viene usato **una sola volta**, per il workflow finalizzato. Confronta questi numeri con quelli della regressione logistica ([lezione 44](44-ml-workflow.qmd)), dell'albero ([lezione 45](45-decision-trees.qmd)) e della foresta ([lezione 46](46-random-forests.qmd)). Su un piccolo insieme di dati con pochi predittori forti come questo, le differenze tra modelli flessibili sono di solito piccole; un confronto equo sugli stessi ricampionamenti è l'argomento della [lezione 49](49-model-comparison.qmd).
+
+```{r}
+#| label: xgb-confmat
+collect_predictions(xgb_final) |>
+  conf_mat(truth = survived, estimate = .pred_class)
+```
+
+::: {.callout-note collapse="true" icon="false"}
+## Riquadro: ottimizzazione più veloce con il racing
+
+Una griglia completa valuta ogni combinazione su ogni fold. Il **racing** (pacchetto `finetune`) valuta tutte le combinazioni sui primi fold e poi scarta quelle chiaramente peggiori, così i fold rimanenti vengono usati solo per i candidati promettenti:
+
+```r
+library(finetune)
+set.seed(2026)
+xgb_race <- tune_race_anova(xgb_wf, resamples = titanic_folds,
+                            grid = xgb_grid, metrics = titanic_metrics,
+                            control = control_race(verbose_elim = TRUE))
+```
+
+L'interfaccia è la stessa di `tune_grid()`, e il risultato si può usare con `show_best()` e `select_best()` allo stesso modo.
+:::
+
+## 7. Importanza delle variabili
+
+```{r}
+#| label: fig-vip-xgb
+#| fig-cap: "Importanza (gain) di XGBoost per il modello ottimizzato."
+xgb_final |>
+  extract_fit_parsnip() |>
+  plot_importance(n = 9)
+```
+
+`plot_importance()` — una piccola funzione di supporto definita nel file del corso `_common.R` (il vecchio pacchetto `vip` è stato archiviato da CRAN nel 2025) — mostra per i modelli XGBoost il **gain**: il miglioramento totale della perdita dovuto alle suddivisioni su ciascuna variabile, rispetto al totale. È l'analogo, per il boosting, dell'importanza basata sull'impurità delle foreste casuali, e ha la stessa debolezza: le variabili con molti possibili punti di suddivisione (`age`, `fare`) possono sembrare più importanti di quanto siano. I nomi sono quelli delle variabili dummy (`sex_male`, `pclass_X3rd`, …), perché è ciò che vede il modello. L'**importanza per permutazione**, calcolata su dati non usati per l'addestramento e sulle variabili originali, è mostrata nella [lezione 49](49-model-comparison.qmd).
+
+Una spiegazione più dettagliata delle singole previsioni usa i **valori SHAP**, che scompongono ogni previsione in contributi additivi dei predittori. Vanno oltre gli scopi di questo corso; il pacchetto `shapviz` e *Interpretable Machine Learning* di Molnar (vedi Per saperne di più) sono buoni punti di partenza.
+
+::: {.callout-note collapse="true" icon="false"}
+## Riquadro: l'interfaccia R nativa di `xgboost` (versione ≥ 2)
+
+tidymodels chiama per te il pacchetto `xgboost`. Puoi anche incontrare codice che lo usa direttamente. Le versioni recenti del pacchetto R (2.x e 3.x) hanno cambiato diversi nomi: in particolare, l'elenco degli insiemi di dati monitorati durante l'addestramento ora si chiama **`evals`** (prima era `watchlist`), e i parametri si costruiscono preferibilmente con `xgb.params()`. Un esempio minimo, che usa la recipe per produrre matrici numeriche:
+
+```{r}
+#| label: xgb-native
+#| eval: false
+set.seed(2026)
+inner <- initial_split(titanic_train, prop = 0.8, strata = survived)
+rec_prep <- prep(xgb_rec, training = training(inner))
+to_dmatrix <- function(df) {
+  baked <- bake(rec_prep, new_data = df)
+  xgb.DMatrix(data = as.matrix(select(baked, -survived)),
+              label = as.integer(baked$survived == "yes"))
+}
+dtrain <- to_dmatrix(training(inner))
+dvalid <- to_dmatrix(testing(inner))
+
+bst <- xgb.train(
+  params = xgb.params(objective = "binary:logistic", eval_metric = "logloss",
+                      max_depth = 3, learning_rate = 0.05, subsample = 0.8),
+  data = dtrain,
+  nrounds = 1000,
+  evals = list(train = dtrain, valid = dvalid),
+  early_stopping_rounds = 20,
+  verbose = 0
+)
+```
+
+- L'etichetta deve essere numerica 0/1, e i predittori una matrice numerica: qui la recipe viene stimata solo sulla parte interna di addestramento, poi applicata a entrambe le parti.
+- `early_stopping_rounds` monitora l'**ultimo** insieme di dati in `evals` (qui `valid`).
+- `predict(bst, dvalid)` restituisce le probabilità previste dell'etichetta 1 (sopravvivenza).
+- `xgb.cv()` esegue la convalida incrociata k-fold con gli stessi argomenti più `nfold`.
+
+I dettagli cambiano tra le versioni del pacchetto; consulta `?xgb.train` e `?xgb.params` per la versione che hai installato. In questo corso l'interfaccia raccomandata è tidymodels.
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Usare troppi alberi senza arresto anticipato.** A differenza delle foreste, il boosting va in sovradattamento quando $M$ cresce. Usa un insieme di validazione o la convalida incrociata per scegliere $M$.
+2. **Ottimizzare separatamente tasso di apprendimento e numero di alberi.** Sono in compromesso: dimezzare il tasso di apprendimento raddoppia all'incirca il numero di alberi necessari. Fissa un tasso piccolo e lascia che sia l'arresto anticipato a scegliere $M$, oppure ottimizzali insieme.
+3. **Monitorare l'arresto anticipato sui dati di addestramento.** La perdita di addestramento diminuisce sempre, quindi l'addestramento non si ferma mai. In tidymodels, imposta l'argomento del motore `validation`.
+4. **Scrivere lo pseudo-residuo come la perdita.** È la **derivata negativa** della perdita rispetto alla previsione ($y - p$ per la log-loss), non la perdita stessa.
+5. **Leggere l'importanza gain come definitiva.** Come l'importanza basata sull'impurità, favorisce le variabili con molti punti di suddivisione. Usa l'importanza per permutazione su dati non usati per l'addestramento per l'interpretazione.
+6. **Usare codice xgboost obsoleto.** `watchlist` → `evals`, `tree_method = "gpu_hist"` → `device = "cuda"`.
+:::
+
+## 8. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. Qual è la differenza principale nel modo in cui una foresta casuale e un modello potenziato usano i loro alberi?
+
+Una foresta fa crescere alberi grandi **in modo indipendente** (in parallelo) e ne fa la **media** per ridurre la varianza. Il boosting fa crescere alberi piccoli **in sequenza**, ciascuno adattato agli pseudo-residui del modello corrente, e li **somma**; riduce soprattutto la distorsione, passo dopo passo.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. Il modello corrente prevede $p = 0.9$ per un passeggero che è morto ($y = 0$). Qual è lo pseudo-residuo con la log-loss, e che cosa farà il prossimo albero?
+
+$y - p = 0 - 0.9 = -0.9$. Il prossimo albero tenderà a spingere il logit di questo passeggero **verso il basso**, verso una probabilità di sopravvivenza più bassa.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. Perché una somma di stump non può rappresentare un'interazione tra età e sesso?
+
+Ogni stump dipende da una sola variabile, quindi una somma di stump è una somma di funzioni di una sola variabile, $f_1(\text{età}) + f_2(\text{sesso}) + \dots$. Un'interazione significa che l'effetto dell'età **dipende dal** sesso, il che richiede almeno un albero che suddivida su entrambe, cioè profondità ≥ 2.
+:::
+
+## 9. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — prevedi l'output.** Senza eseguirlo: che cosa prevede `boost_stumps(train$x, train$y, n_trees = 1, learn_rate = 1)`, rispetto a un singolo stump adattato a `y`? Poi verifica con `all.equal()`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Esattamente la stessa cosa. Il modello parte da $\bar y$; il primo stump è adattato a $y - \bar y$, quindi i valori delle sue foglie sono le medie di $y$ nelle foglie meno $\bar y$; sommandoli per intero (tasso di apprendimento 1) si ottengono di nuovo le medie di $y$ nelle foglie.
+```r
+m1 <- boost_stumps(train$x, train$y, n_trees = 1, learn_rate = 1)
+all.equal(predict_boost(m1, test$x),
+          predict_stump(fit_stump(train$x, train$y), test$x))   # TRUE
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — pazienza.** Addestra 500 stump potenziati con tasso di apprendimento 0.3 e calcola il percorso dell'errore di validazione. Applica `early_stop()` con pazienza 5, 20 e 50. Come cambiano il numero di alberi scelto e il corrispondente RMSE sul **test**?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+mod03 <- boost_stumps(train$x, train$y, n_trees = 500, learn_rate = 0.3)
+v03 <- error_path(mod03, valid$x, valid$y)
+t03 <- error_path(mod03, test$x, test$y)
+sapply(c(5, 20, 50), \(p) {
+  es <- early_stop(v03, p)
+  c(es, test_rmse = t03[es["best"]])
+})
+```
+Con pazienza 5, l'addestramento si ferma presto in un minimo locale (circa 83 alberi); con pazienza 20 e 50 si trova entrambe le volte il minimo intorno a 92 alberi, al prezzo di addestrare più alberi prima di fermarsi. L'RMSE sul test è circa 0.325 in tutti e tre i casi: una volta che il numero di alberi è in un intervallo ragionevole, il risultato non è molto sensibile alla pazienza.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi la vecchia lezione.** La vecchia versione di questa lezione scriveva gli pseudo-residui come $r_{im} = -L(y_i, F_{m-1}(x_i))$, e la sua "ricerca su griglia degli iperparametri" era
+
+```r
+param_grid <- expand.grid(max_depth = c(3, 4, 5), eta = c(0.05, 0.1, 0.15))
+best_params <- param_grid[1, ]
+```
+
+Spiega i due problemi.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+(1) Lo pseudo-residuo è la **derivata negativa** della perdita rispetto alla previsione corrente, $-\partial L/\partial F$, non meno la perdita. Meno la log-loss è sempre negativa e non dice nulla sulla direzione in cui la previsione dovrebbe muoversi; il valore corretto è $y_i - p_i$. (2) La "ricerca su griglia" non addestra nulla: costruisce una griglia e ne prende la prima riga. Una ricerca vera addestra ogni combinazione sui ricampionamenti e ne confronta le prestazioni, ad es. con `tune_grid()` come nella sezione 6.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — boosting per un esito 0/1.** Modifica `boost_stumps()` in `boost_logit()` per un esito 0/1: parti dal logit della proporzione complessiva (`qlogis(mean(y01))`), e adatta ogni stump agli pseudo-residui $y - p$, dove $p$ = `plogis()` del logit corrente. Provalo su dati simulati con `x <- runif(300)` e `y <- rbinom(300, 1, plogis(3 * sin(2 * pi * x)))`, con 200 alberi e tasso di apprendimento 0.1. Confronta le probabilità stimate con quelle vere per alcuni valori di $x$.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+boost_logit <- function(x, y01, n_trees, learn_rate) {
+  f0 <- qlogis(mean(y01))
+  f <- rep(f0, length(y01))
+  stumps <- vector("list", n_trees)
+  for (m in seq_len(n_trees)) {
+    r <- y01 - plogis(f)                  # gradiente negativo della log-loss
+    stumps[[m]] <- fit_stump(x, r)
+    f <- f + learn_rate * predict_stump(stumps[[m]], x)
+  }
+  list(f0 = f0, stumps = stumps, learn_rate = learn_rate)
+}
+set.seed(471)
+xc <- runif(300)
+yc <- rbinom(300, 1, plogis(3 * sin(2 * pi * xc)))
+mc <- boost_logit(xc, yc, n_trees = 200, learn_rate = 0.1)
+x0 <- c(0.1, 0.25, 0.5, 0.75, 0.9)
+round(cbind(x0, fitted = plogis(predict_boost(mc, x0)),
+            true = plogis(3 * sin(2 * pi * x0))), 2)
+```
+`predict_boost()` si può riutilizzare perché somma semplicemente gli stump contratti (ora sulla scala del logit). Le probabilità stimate seguono la curva vera: alte (circa 0.8) per $x < 0.5$, basse (circa 0.16) per $x > 0.5$, anche se meno estreme del vero vicino a 0.25 e 0.75 — con soli 300 esiti 0/1 rumorosi il modello è contratto verso il centro. Le implementazioni reali usano anche un passo di Newton per i valori delle foglie (vedi Per approfondire), che converge più rapidamente.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — ottimizza di più, con attenzione.** Estendi la griglia del Titanic in modo da ottimizzare anche `min_n` (valori 2 e 20) e `sample_size` (0.5 e 1). Quanti modelli vengono addestrati in totale da `tune_grid()` con 5 fold? Eseguilo e confronta la migliore ROC AUC con quella della sezione 6: il miglioramento è maggiore del suo errore standard?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+La griglia ha $3 \times 3 \times 2 \times 2 = 36$ combinazioni, quindi $36 \times 5 = 180$ modelli potenziati.
+```r
+xgb_spec2 <- xgb_spec |>
+  set_args(min_n = tune(), sample_size = tune())
+xgb_grid2 <- tidyr::expand_grid(tree_depth = c(1L, 3L, 6L),
+                                learn_rate = c(0.01, 0.05, 0.2),
+                                min_n = c(2L, 20L),
+                                sample_size = c(0.5, 1))
+set.seed(2026)
+xgb_res2 <- tune_grid(xgb_wf |> update_model(xgb_spec2),
+                      resamples = titanic_folds, grid = xgb_grid2,
+                      metrics = titanic_metrics)
+show_best(xgb_res2, metric = "roc_auc", n = 3)
+show_best(xgb_res, metric = "roc_auc", n = 1)
+```
+Di solito la migliore AUC cambia solo alla terza cifra decimale, ben entro un errore standard: su questo insieme di dati, profondità e tasso di apprendimento (con arresto anticipato) contano più degli altri parametri. Una griglia più grande aumenta anche il rischio di scegliere una combinazione fortunata su questi particolari fold.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| Boosting | Somma di piccoli alberi, ciascuno adattato agli pseudo-residui del modello corrente |
+| Pseudo-residuo $-\partial L/\partial F$ | $y - F$ per l'errore quadratico, $y - p$ per la log-loss |
+| Tasso di apprendimento $\nu$ (`learn_rate`) | Frazione di ogni albero che viene aggiunta; piccolo = più lento ma più regolare |
+| Numero di alberi (`trees`) + arresto anticipato (`stop_iter`) | Ci si ferma quando la perdita di validazione smette di migliorare |
+| Profondità (`tree_depth`) | Ordine delle interazioni; il boosting usa alberi poco profondi |
+| `boost_tree(...) \|> set_engine("xgboost", validation = 0.2)` | Specifica tidymodels di XGBoost con un insieme per l'arresto anticipato |
+| `tune_grid()`, `select_best()`, `last_fit()` | Ottimizzare sui fold di convalida incrociata, finalizzare, valutare una sola volta sul test |
+| `plot_importance()` (funzione di supporto del corso) | Importanza gain (distorta come l'importanza basata sull'impurità) |
+| `xgb.train(params = xgb.params(...), evals = ...)` | Interfaccia nativa di xgboost (≥ 2) |
+
+- Il boosting riduce la **distorsione** passo dopo passo; le foreste riducono la **varianza** facendo la media.
+- I modelli potenziati **possono andare in sovradattamento** aggiungendo alberi: scegli sempre $M$ su dati di validazione.
+- Tasso di apprendimento piccolo + arresto anticipato è un'impostazione predefinita robusta.
+- "Gradient" boosting significa che ogni albero è un passo lungo il **gradiente negativo** della perdita.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2e), sezione 8.2.3, <https://www.statlearning.com>
+- Hastie, Tibshirani & Friedman, *The Elements of Statistical Learning* (2e), capitolo 10, <https://hastie.su.domains/ElemStatLearn/>
+- Documentazione di XGBoost, "Introduction to Boosted Trees", <https://xgboost.readthedocs.io/en/stable/tutorials/model.html>
+- Molnar, *Interpretable Machine Learning* (capitoli sugli SHAP), <https://christophm.github.io/interpretable-ml-book/>
+:::

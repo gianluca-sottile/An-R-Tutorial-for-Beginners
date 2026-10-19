@@ -1,0 +1,494 @@
+---
+title: "Selezione e validazione del modello"
+subtitle: "Scegliere i predittori senza ingannare se stessi: test F, AIC, convalida incrociata"
+description: "Confronta modelli annidati con i test F, bilancia adattamento e complessità con AIC e BIC, scopri con una simulazione perché la selezione stepwise è pericolosa e stima onestamente l'errore di previsione con la suddivisione training/test e la convalida incrociata k-fold scritta a mano."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~90 min]{} [Prerequisiti: [Regressione multipla](39-multiple-regression.qmd), [Casualità e simulazione](../07-probability/28-randomness-simulation.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare la differenza tra un modello costruito per **spiegare** e uno costruito per **prevedere**;
+- confrontare modelli annidati con un **test F** e modelli qualsiasi con **AIC/BIC**;
+- mostrare con una simulazione perché la **selezione stepwise** produce risultati troppo ottimistici;
+- distinguere l'**errore di addestramento** (*training*) dall'**errore di test** e riconoscere il **sovradattamento** (*overfitting*);
+- scrivere a mano la **convalida incrociata k-fold** e usarla per scegliere tra modelli.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+```
+
+## 1. Perché scegliere un modello è difficile?
+
+`mtcars` ha 10 possibili predittori di `mpg`. Anche senza interazioni ci sono $2^{10} = 1024$ possibili sottoinsiemi. Quale usare? La risposta dipende dal **motivo** per cui costruiamo il modello.
+
+- **Spiegazione (inferenza).** Vogliamo capire come $y$ si relaziona a predittori specifici: "quanto conta il peso, a parità di cavalli?". Il modello va scelto sulla base di **conoscenze del dominio** *prima* di guardare i risultati, e ci interessano coefficienti non distorti, p-value e IC onesti.
+- **Previsione.** Vogliamo stime accurate di $y$ per **nuove** osservazioni. Non ci importa se un coefficiente è "significativo"; ci importa l'errore su dati che il modello non ha mai visto.
+
+Questi obiettivi richiedono strumenti diversi. I test F e l'AIC sono strumenti classici per confrontare modelli stimati sugli stessi dati. La convalida incrociata è il cavallo di battaglia della previsione. E alcune pratiche diffuse — come lasciare che un algoritmo scelga i predittori e poi riportare i p-value — non servono bene nessuno dei due obiettivi.
+
+## 2. Modelli annidati e test F
+
+Due modelli sono **annidati** quando uno è un caso particolare dell'altro (ottenuto ponendo alcuni coefficienti uguali a 0). Il test F chiede: *il modello più grande riduce la somma dei quadrati dei residui più di quanto ci aspetteremmo per caso?*
+
+```{r}
+#| label: nested
+m1 <- lm(mpg ~ wt, data = mtcars)
+m2 <- lm(mpg ~ wt + hp, data = mtcars)
+m3 <- lm(mpg ~ wt + hp + qsec + drat, data = mtcars)
+
+anova(m1, m2, m3)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `Res.Df` e `RSS`: gradi di libertà residui e somma dei quadrati dei residui di ciascun modello. L'RSS diminuisce sempre aggiungendo predittori.
+- La riga 2 confronta `m2` con `m1`: aggiungere `hp` riduce l'RSS di `r round(anova(m1, m2)[2, "Sum of Sq"], 1)` (1 parametro in più). F = `r round(anova(m1, m2)[2, "F"], 1)`, p = `r format.pval(anova(m1, m2)[2, "Pr(>F)"], digits = 2)`: un miglioramento netto.
+- La riga 3 confronta `m3` con `m2`: aggiungere `qsec` e `drat` (2 parametri) riduce l'RSS di poco; p = `r round(anova(m1, m2, m3)[3, "Pr(>F)"], 2)`. Nessuna evidenza che aiutino.
+:::
+
+Il test F funziona solo per modelli **annidati** stimati sulle **stesse righe**. Non può confrontare `mpg ~ wt + hp` con `mpg ~ disp + qsec`.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la statistica F
+
+Per un modello piccolo con $\text{RSS}_0$ e $p_0$ parametri, annidato in uno grande con $\text{RSS}_1$ e $p_1$ parametri,
+
+$$
+F = \frac{(\text{RSS}_0 - \text{RSS}_1)/(p_1 - p_0)}{\text{RSS}_1/(n - p_1)} \sim F_{p_1 - p_0,\; n - p_1} \quad \text{sotto } H_0 .
+$$
+
+Il numeratore è il miglioramento per parametro aggiunto; il denominatore è il livello di rumore stimato dal modello grande.
+:::
+
+## 3. AIC e BIC: adattamento contro complessità
+
+Aggiungere predittori migliora sempre l'adattamento ai dati a disposizione. I **criteri di informazione** aggiungono una penalità per ogni parametro, in modo che la complessità in più debba "ripagarsi":
+
+$$
+\text{AIC} = -2\log L + 2k, \qquad \text{BIC} = -2\log L + k \log n,
+$$
+
+dove $L$ è la verosimiglianza massimizzata (più alta = migliore adattamento), $k$ il numero di parametri stimati (inclusa la varianza residua) e $n$ la numerosità campionaria. **Più basso è meglio.** Possono confrontare modelli non annidati, purché la risposta e le righe siano le stesse.
+
+```{r}
+#| label: aic-bic
+AIC(m1, m2, m3)
+BIC(m1, m2, m3)
+```
+
+Entrambi preferiscono `m2`. I due criteri bilanciano in modo diverso:
+
+- L'**AIC** mira a una buona **previsione**: approssima quanto bene il modello prevedrebbe nuovi dati della stessa popolazione. La sua penalità (2 per parametro) è lieve.
+- Il **BIC** mira a trovare il modello "vero" se è tra i candidati. La sua penalità ($\log n$ per parametro, già `r round(log(32), 1)` con $n = 32$) è più forte, quindi sceglie modelli **più piccoli**.
+
+Contano solo le **differenze** di AIC; il valore assoluto non significa nulla. Una regola approssimativa: differenze inferiori a 2 sono trascurabili, superiori a 10 sono grandi.
+
+## 4. La selezione stepwise — e perché è pericolosa
+
+`step()` automatizza la ricerca: partendo da un modello, aggiunge o elimina ripetutamente il predittore che migliora di più l'AIC, finché nulla aiuta.
+
+```{r}
+#| label: step-mtcars
+m_full <- lm(mpg ~ ., data = mtcars)
+m_step <- step(m_full, direction = "both", trace = 0)
+formula(m_step)
+```
+
+Sembra comodo. Il problema è che cosa succede **dopo**: `summary(m_step)` riporta errori standard e p-value come se i tre predittori fossero stati scelti *prima* di vedere i dati. Non è così: sono stati scelti *perché* sembravano buoni in questi dati.
+
+### Una simulazione con puro rumore
+
+Generiamo una risposta e 40 predittori che sono tutti **puro rumore casuale**: nessun predittore ha alcuna relazione con `y`.
+
+```{r}
+#| label: noise-step
+set.seed(2026)
+n <- 100
+p <- 40
+noise <- as.data.frame(matrix(rnorm(n * p), nrow = n))
+noise$y <- rnorm(n)
+
+m_noise <- step(lm(y ~ ., data = noise), trace = 0)
+summary(m_noise)
+```
+
+```{r}
+#| label: noise-values
+#| include: false
+s_noise <- summary(m_noise)
+f_noise <- s_noise$fstatistic
+p_overall <- pf(f_noise[1], f_noise[2], f_noise[3], lower.tail = FALSE)
+```
+
+La selezione stepwise ha mantenuto `r length(coef(m_noise)) - 1` delle 40 variabili di rumore. Il modello finale ha R² = `r round(s_noise$r.squared, 2)` e un p-value del test F complessivo pari a `r format.pval(p_overall, digits = 2)`. Un lettore ingenuo concluderebbe che il modello spiega "significativamente" `y`. **Ognuna di queste relazioni è falsa.**
+
+Con che frequenza accade? Ripetiamo l'esperimento 20 volte e contiamo quanti predittori del modello selezionato hanno p < 0.05:
+
+```{r}
+#| label: noise-repeat
+set.seed(1)
+n_signif <- replicate(20, {
+  d <- as.data.frame(matrix(rnorm(n * p), nrow = n))
+  d$y <- rnorm(n)
+  sel <- step(lm(y ~ ., data = d), trace = 0)
+  sum(summary(sel)$coefficients[-1, "Pr(>|t|)"] < 0.05)
+})
+n_signif
+```
+
+In media `r round(mean(n_signif), 1)` predittori "significativi" per dataset, a partire da variabili che sono tutte rumore; solo `r sum(n_signif == 0)` delle 20 ripetizioni non hanno trovato nulla. I p-value dopo la selezione **non** sono p-value validi.
+
+::: {.callout-important}
+## Perché la selezione stepwise inganna
+
+- Esegue **molti test nascosti** e tiene i vincitori: un problema di test multipli sotto mentite spoglie.
+- I coefficienti selezionati sono **distorti verso l'esterno rispetto a zero** (sono stati tenuti *perché* erano grandi in questo campione).
+- La selezione è **instabile**: un campione leggermente diverso spesso produce un insieme diverso di predittori.
+
+Se l'obiettivo è la spiegazione, scegli il modello in base alla teoria. Se l'obiettivo è la previsione, valuta l'intera procedura con la convalida incrociata (Sezione 7), oppure usa la [regressione penalizzata](43-penalized-regression.qmd), che seleziona e contrae in modo più stabile.
+:::
+
+## 5. Sovradattamento: errore di addestramento contro errore di test
+
+Per vedere il lato previsivo del problema simuliamo dati di cui **conosciamo** la verità: $y = \sin(2\pi x) + \varepsilon$, con 30 punti di addestramento. Stimiamo polinomi di grado crescente e misuriamo la radice dell'errore quadratico medio (RMSE, la dimensione tipica di un errore di previsione) sui dati di addestramento e su 1000 nuovi punti di **test** generati dallo stesso processo.
+
+```{r}
+#| label: poly-sim
+set.seed(1)
+f_true <- function(x) sin(2 * pi * x)
+train <- tibble::tibble(x = runif(30), y = f_true(x) + rnorm(30, sd = 0.3))
+test  <- tibble::tibble(x = runif(1000), y = f_true(x) + rnorm(1000, sd = 0.3))
+
+rmse <- function(y, y_hat) sqrt(mean((y - y_hat)^2))
+
+errors <- lapply(1:12, \(d) {
+  fit <- lm(y ~ poly(x, d), data = train)
+  tibble::tibble(degree = d,
+                 train = rmse(train$y, fitted(fit)),
+                 test = rmse(test$y, predict(fit, newdata = test)))
+}) |>
+  bind_rows()
+```
+
+```{r}
+#| label: fig-overfit
+#| fig-cap: "L'RMSE di addestramento continua a diminuire al crescere del grado del polinomio; l'RMSE di test diminuisce, poi risale. La linea tratteggiata è il livello del rumore (0.3), il miglior errore che un qualsiasi modello potrebbe ottenere."
+errors |>
+  pivot_longer(c(train, test), names_to = "data", values_to = "rmse") |>
+  ggplot(aes(degree, rmse, colour = data)) +
+  geom_hline(yintercept = 0.3, linetype = 2) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  scale_x_continuous(breaks = 1:12) +
+  labs(x = "Grado del polinomio (complessità del modello)", y = "RMSE", colour = NULL)
+```
+
+Questo è il **sovradattamento** (*overfitting*): oltre una certa complessità, il modello comincia ad adattarsi al rumore del campione di addestramento. L'errore di addestramento continua a migliorare, ma l'errore sui nuovi dati peggiora. L'errore di addestramento è quindi una stima **distorta (ottimistica)** di come si comporterà il modello. La distanza tra le due curve è il prezzo della complessità — il compromesso distorsione–varianza che incontrerai di nuovo in [Il flusso di lavoro del machine learning](../10-ml/44-ml-workflow.qmd).
+
+```{r}
+#| label: fig-poly-fits
+#| fig-cap: "Adattamenti di grado 1 (sottoadattamento), 3 (circa giusto) e 12 (sovradattamento) agli stessi 30 punti; in grigio: la curva vera."
+grid <- tibble::tibble(x = seq(0, 1, length.out = 300))
+fits <- lapply(c(1, 3, 12), \(d) {
+  m <- lm(y ~ poly(x, d), data = train)
+  mutate(grid, degree = paste("grado", d), y = predict(m, newdata = grid))
+}) |>
+  bind_rows()
+
+ggplot(fits, aes(x, y)) +
+  geom_line(data = mutate(grid, y = f_true(x)), colour = "grey60",
+            linewidth = 1) +
+  geom_point(data = train) +
+  geom_line(colour = "#D55E00", linewidth = 1) +
+  facet_wrap(~ degree) +
+  coord_cartesian(ylim = c(-2, 2)) +
+  labs(x = "x", y = "y")
+```
+
+## 6. Suddivisione training/test
+
+Nella vita reale non abbiamo 1000 nuovi punti di test. Il sostituto più semplice è **mettere da parte** una porzione dei dati: stimare il modello sulla parte di addestramento e misurare l'errore sulla parte di test tenuta in disparte.
+
+```{r}
+#| label: split
+set.seed(5)
+idx <- sample(nrow(mtcars), size = 24)   # 75% per l'addestramento
+cars_train <- mtcars[idx, ]
+cars_test  <- mtcars[-idx, ]
+
+fit <- lm(mpg ~ wt + hp, data = cars_train)
+rmse(cars_test$mpg, predict(fit, newdata = cars_test))
+```
+
+Questo metodo è onesto, ma con pochi dati è **rumoroso**: il risultato dipende molto da quali 8 auto sono finite nell'insieme di test. Ripetendo la suddivisione 10 volte con semi diversi:
+
+```{r}
+#| label: split-variability
+set.seed(5)
+replicate(10, {
+  idx <- sample(nrow(mtcars), size = 24)
+  fit <- lm(mpg ~ wt + hp, data = mtcars[idx, ])
+  rmse(mtcars$mpg[-idx], predict(fit, newdata = mtcars[-idx, ]))
+}) |>
+  round(2)
+```
+
+Le stime variano molto. La convalida incrociata usa i dati in modo più efficiente.
+
+## 7. Convalida incrociata k-fold, a mano
+
+La **convalida incrociata k-fold** (CV) divide i dati a caso in $k$ gruppi ("fold") di dimensione simile. Ciascun fold fa a turno da insieme di test mentre il modello viene stimato sugli altri $k - 1$ fold. La stima CV è la media dei $k$ errori di test. Ogni osservazione viene usata per il test esattamente una volta.
+
+```{r}
+#| label: cv-function
+cv_rmse <- function(formula, data, k = 5) {
+  folds <- sample(rep(1:k, length.out = nrow(data)))   # etichette casuali dei fold
+  y_name <- all.vars(formula)[1]
+  fold_rmse <- numeric(k)
+  for (i in 1:k) {
+    fit <- lm(formula, data = data[folds != i, ])      # stima su k - 1 fold
+    hold_out <- data[folds == i, ]                     # test sul fold i
+    fold_rmse[i] <- rmse(hold_out[[y_name]], predict(fit, hold_out))
+  }
+  mean(fold_rmse)
+}
+```
+
+Poiché l'assegnazione ai fold è casuale, una singola esecuzione della CV è ancora un po' rumorosa. La **CV ripetuta** fa la media di più esecuzioni con assegnazioni diverse dei fold. Confrontiamo cinque modelli candidati per `mpg`:
+
+```{r}
+#| label: cv-mtcars
+candidates <- list(
+  "wt"                  = mpg ~ wt,
+  "wt + hp"             = mpg ~ wt + hp,
+  "wt + hp + qsec + drat" = mpg ~ wt + hp + qsec + drat,
+  "wt + qsec + am"      = mpg ~ wt + qsec + am,
+  "tutti e 10"          = mpg ~ .
+)
+
+set.seed(4)
+cv_results <- sapply(candidates, \(f) mean(replicate(20, cv_rmse(f, mtcars))))
+sort(round(cv_results, 2))
+```
+
+Il modello con tutti i 10 predittori ha l'errore CV **peggiore** (`r round(cv_results["tutti e 10"], 2)` mpg), pur avendo il miglior adattamento ai dati di addestramento (R² = `r round(summary(m_full)$r.squared, 2)`). I modelli piccoli prevedono le nuove auto più o meno altrettanto bene.
+
+::: {.callout-warning}
+## Convalida incrociata della *procedura*, non del risultato
+
+Il modello `wt + qsec + am` è stato trovato da `step()` su **tutti** i dati. Il suo errore CV qui sopra è ottimistico, perché i fold di test hanno contribuito a sceglierlo. Una stima onesta ripete la selezione **dentro** ciascun fold:
+
+```{r}
+#| label: cv-step-honest
+set.seed(6)
+folds <- sample(rep(1:5, length.out = nrow(mtcars)))
+honest <- sapply(1:5, \(i) {
+  sel <- step(lm(mpg ~ ., data = mtcars[folds != i, ]), trace = 0)
+  rmse(mtcars$mpg[folds == i], predict(sel, mtcars[folds == i, ]))
+})
+mean(honest)
+```
+
+L'errore onesto della "selezione stepwise" come procedura è circa `r round(mean(honest), 1)` mpg — peggiore del suo valore ottimistico. Qualsiasi scelta guidata dai dati (selezionare variabili, ottimizzare iperparametri, trasformazioni scelte guardando i dati) deve avvenire dentro il ciclo di ricampionamento. È l'idea di fondo delle *pipeline* in [Il flusso di lavoro del machine learning](../10-ml/44-ml-workflow.qmd).
+:::
+
+### Scegliere la complessità con la CV
+
+Torniamo all'esempio dei polinomi: usiamo solo i 30 punti di addestramento (facendo finta di non avere i 1000 punti di test) e scegliamo il grado con la CV a 5 fold ripetuta.
+
+```{r}
+#| label: cv-degree
+set.seed(2)
+cv_degree <- sapply(1:8, \(d) {
+  f <- as.formula(paste0("y ~ poly(x, ", d, ")"))
+  median(replicate(20, cv_rmse(f, train)))
+})
+round(cv_degree, 3)
+which.min(cv_degree)
+```
+
+La CV sceglie il grado `r which.min(cv_degree)`, vicino al grado con il più basso errore di test *vero* della Sezione 5 (`r which.min(errors$test)`). Abbiamo usato la **mediana** sulle ripetizioni perché alcuni fold producono errori enormi con gradi elevati: i polinomi di grado alto esplodono ai bordi dei dati quando un fold esclude i punti estremi.
+
+Un perfezionamento comune è la **regola dell'errore standard** (*one-standard-error rule*): tra i modelli il cui errore CV è entro un errore standard dal migliore, scegli il **più semplice**. Protegge dalla scelta di un modello complesso sulla base di una differenza che è solo rumore. La ritroverai con `lambda.1se` in [Regressione penalizzata](43-penalized-regression.qmd).
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la stessa cosa con rsample
+
+Scrivere la CV a mano mostra esattamente che cosa accade. In pratica, il pacchetto **rsample** (parte di tidymodels) crea i fold e ne tiene traccia:
+
+```r
+folds <- rsample::vfold_cv(mtcars, v = 5, repeats = 20)
+split_1 <- folds$splits[[1]]
+rsample::analysis(split_1)    # la parte di addestramento del primo ricampionamento
+rsample::assessment(split_1)  # la parte tenuta da parte
+```
+
+`vfold_cv(..., strata = y)` stratifica i fold, il che è importante per la classificazione con classi sbilanciate. Dalla [lezione 44](../10-ml/44-ml-workflow.qmd) in poi, `tune` e `workflows` eseguono per te l'intero ciclo (preprocessing incluso).
+
+**Quanti fold?** $k = 5$ o $k = 10$ sono standard. Un $k$ più grande significa che ogni insieme di addestramento è più vicino all'intero dataset (meno pessimistico), ma la stima è più variabile e più costosa. La CV leave-one-out ($k = n$) è un caso particolare; per i modelli lineari si può calcolare senza ristimare il modello.
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Riportare i p-value di un modello selezionato con stepwise come se il modello fosse stato fissato in anticipo.** Sono troppo piccoli, e gli effetti troppo grandi.
+2. **Giudicare un modello previsivo dal suo errore di addestramento o dall'R².** Più complessità li migliora sempre.
+3. **Usare l'insieme di test più di una volta.** Se guardi l'errore di test, cambi il modello e guardi di nuovo, l'insieme di test è diventato parte dell'addestramento. Scegli con la CV sui dati di addestramento; tocca l'insieme di test una sola volta, alla fine.
+4. **Selezionare le variabili (o ottimizzare, o scalare) su tutti i dati prima della CV.** L'informazione fuoriesce dai fold di test verso il modello (*data leakage*) e l'errore CV diventa ottimistico.
+5. **Confrontare l'AIC tra modelli stimati su righe diverse** (per esempio un modello elimina più `NA`) o su risposte diverse (`y` vs `log(y)`). I valori non sono confrontabili.
+:::
+
+## 8. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Puoi usare un test F per confrontare `y ~ a + b` con `y ~ a + c`?
+
+No: nessuno dei due modelli è un caso particolare dell'altro. Usa AIC/BIC o la convalida incrociata.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. L'AIC preferisce il modello A per 0.8 punti rispetto al modello B, che ha due predittori in meno. Quale sceglieresti?
+
+Una differenza inferiore a 2 è trascurabile; la maggior parte degli analisti sceglierebbe il modello B, più semplice (stessa logica della regola dell'errore standard).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Perché l'errore di addestramento continua a diminuire al crescere della complessità, mentre l'errore di test a un certo punto aumenta?
+
+La flessibilità in più permette sempre al modello di seguire più da vicino i punti di addestramento — compreso il loro rumore casuale. Quel rumore non si ripete nei nuovi dati, quindi le oscillazioni adattate diventano errori.
+:::
+
+## 9. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — test F.** Usando `penguins`, verifica se aggiungere `sex` a `body_mass ~ flipper_len + species` migliora il modello. Attenzione: entrambi i modelli devono essere stimati sulle stesse righe.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+peng <- penguins |> drop_na(body_mass, flipper_len, species, sex)
+m_a <- lm(body_mass ~ flipper_len + species, data = peng)
+m_b <- lm(body_mass ~ flipper_len + species + sex, data = peng)
+anova(m_a, m_b)
+```
+Sì: F è molto grande (circa 200) e p < 0.001. Senza `drop_na()`, i due modelli userebbero 342 e 333 righe e `anova()` si fermerebbe con un errore ("models were not all fitted to the same size of dataset").
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — AIC a mano.** Per `m2 <- lm(mpg ~ wt + hp, data = mtcars)`, calcola l'AIC a partire da `logLik(m2)` e confrontalo con `AIC(m2)`. Quanti parametri conta R?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+ll <- logLik(m2)
+attr(ll, "df")                   # 4: intercetta, wt, hp e sigma
+-2 * as.numeric(ll) + 2 * attr(ll, "df")
+AIC(m2)
+```
+Entrambi danno circa 156.7. La deviazione standard residua $\sigma$ conta come un parametro.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — prevedi l'output.** Nella simulazione con il rumore, che RMSE **convalidato incrociatamente** ti aspetti per il modello selezionato con stepwise, rispetto al semplice prevedere per tutti la media di `y`? Verificalo calcolando l'errore CV onesto (selezione dentro i fold) per `noise` e per il modello con sola intercetta `y ~ 1`. (Richiede qualche secondo.)
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+set.seed(10)
+folds <- sample(rep(1:5, length.out = nrow(noise)))
+cv_step <- sapply(1:5, \(i) {
+  sel <- step(lm(y ~ ., data = noise[folds != i, ]), trace = 0)
+  rmse(noise$y[folds == i], predict(sel, noise[folds == i, ]))
+})
+cv_null <- sapply(1:5, \(i) {
+  rmse(noise$y[folds == i], mean(noise$y[folds != i]))
+})
+c(step = mean(cv_step), mean_only = mean(cv_null))
+```
+Il modello stepwise prevede i nuovi dati **peggio** della semplice media (circa 1.2 contro 1.0 per questi dati): i suoi predittori "significativi" sono rumore, e adattarli aggiunge errore. La convalida incrociata smaschera ciò che i p-value nascondevano.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — correggi l'errore.** Questo tentativo di CV a 5 fold restituisce sempre 0. Trova l'errore.
+
+```r
+folds <- rep(1:5, length.out = nrow(mtcars))
+err <- numeric(5)
+for (i in 1:5) {
+  fit <- lm(mpg ~ wt, data = mtcars)
+  err[i] <- rmse(mtcars$mpg[folds == i],
+                 predict(fit, mtcars[folds == i, ])) - rmse(
+                   mtcars$mpg[folds == i], fitted(fit)[folds == i])
+}
+mean(err)
+```
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Il modello viene stimato su **tutto** `mtcars` (`data = mtcars`) a ogni iterazione, quindi il fold di "test" faceva parte dei dati di addestramento e le previsioni coincidono con i valori stimati: la differenza è sempre 0. Stima il modello su `mtcars[folds != i, ]` ed elimina il secondo termine. Inoltre, `folds` dovrebbe essere **rimescolato** (`sample(rep(...))`): `mtcars` non è in ordine casuale, quindi blocchi consecutivi non sono fold casuali.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi.** Usando `penguins` (casi completi), applica la CV a 5 fold ripetuta con `cv_rmse()` per confrontare quattro modelli per `body_mass`: `flipper_len`; `flipper_len + species`; `flipper_len + species + sex`; `flipper_len * species * sex`. Quale sceglieresti e perché?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+peng <- penguins |> drop_na(body_mass, flipper_len, species, sex)
+cands <- list(
+  a = body_mass ~ flipper_len,
+  b = body_mass ~ flipper_len + species,
+  c = body_mass ~ flipper_len + species + sex,
+  d = body_mass ~ flipper_len * species * sex
+)
+set.seed(7)
+sapply(cands, \(f) mean(replicate(10, cv_rmse(f, peng))))
+```
+L'RMSE della CV scende da circa 390 g (a) a circa 375 g (b) e circa 295 g (c); il modello completo con interazione a tre vie (d) è circa uguale a (c) o appena migliore. Secondo la logica dell'errore standard, (c) è una scelta sensata: molto più semplice, con un'accuratezza previsiva quasi identica.
+:::
+:::
+
+## Riepilogo
+
+| Strumento | A che cosa serve | Codice |
+|---|---|---|
+| Test F | modelli lineari annidati, stesse righe | `anova(m_small, m_big)` |
+| AIC / BIC | modelli qualsiasi, stessa risposta e stesse righe (più basso = meglio) | `AIC(m1, m2)`, `BIC(m1, m2)` |
+| Stepwise | solo esplorazione rapida — mai per l'inferenza | `step(m, trace = 0)` |
+| Suddivisione training/test | una stima onesta ma rumorosa dell'errore di previsione | `sample()`, poi `predict()` |
+| CV k-fold | una stima più stabile; scelta tra modelli | `cv_rmse()` qui sopra, `rsample::vfold_cv()` |
+
+- Decidi prima se vuoi **spiegare** o **prevedere**.
+- L'errore di addestramento è ottimistico; solo i dati **non usati per costruire il modello** ti dicono come si comporterà.
+- I p-value dopo una selezione guidata dai dati **non sono validi**: la selezione sul rumore produce risultati "significativi".
+- Ogni passo guidato dai dati deve stare **dentro** il ciclo di convalida incrociata.
+- Preferisci il modello **più semplice** il cui errore CV è vicino al migliore.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2a ed.), capitoli 5 (ricampionamento) e 6 (selezione del modello), <https://www.statlearning.com>
+- Kuhn & Silge, *Tidy Modeling with R*, capitolo 10 sul ricampionamento, <https://www.tmwr.org>
+- Harrell, *Regression Modeling Strategies*, capitolo 4 — sui problemi della selezione stepwise, <https://hbiostat.org/rmsc/>
+:::

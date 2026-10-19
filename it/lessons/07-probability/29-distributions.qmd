@@ -193,7 +193,7 @@ arrivals <- rpois(10000, lambda = 3)
 c(media = mean(arrivals), varianza = var(arrivals))
 ```
 
-I dati di conteggio reali hanno spesso una varianza *maggiore* della media (*sovradispersione*), un aspetto che verificheremo in [Regressione di Poisson](../../../lessons/09-regression/42-poisson-regression.qmd).
+I dati di conteggio reali hanno spesso una varianza *maggiore* della media (*sovradispersione*), un aspetto che verificheremo in [Regressione di Poisson](../09-regression/42-poisson-regression.qmd).
 
 ::: {.callout-note .deeper collapse="true"}
 ## Per approfondire: la Poisson come limite della binomiale

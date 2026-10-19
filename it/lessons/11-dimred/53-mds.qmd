@@ -1,0 +1,406 @@
+---
+title: "Scaling multidimensionale"
+subtitle: "Da una tabella di distanze di nuovo a una mappa"
+description: "Impara l'MDS classico (metrico) con cmdscale(), perché le distanze non euclidee producono autovalori negativi, come valutare l'adattamento con GOF e diagrammi di Shepard, l'MDS non metrico con isoMDS() e l'MDS su dissimilarità non geografiche."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~75 min]{} [Prerequisiti: [Analisi delle componenti principali](50-pca.qmd), [Matrici](../01-foundations/05-matrices.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare che cos'è una **matrice di dissimilarità** e che cosa cerca di fare l'MDS con essa;
+- eseguire l'**MDS classico** con `cmdscale()` e leggerne autovalori e bontà di adattamento;
+- riconoscere le dissimilarità **non euclidee** dagli **autovalori negativi**;
+- controllare una configurazione con un **diagramma di Shepard** ed eseguire l'**MDS non metrico** con `MASS::isoMDS()`;
+- applicare l'MDS a dissimilarità tra oggetti che non sono luoghi (variabili, osservazioni di tipo misto).
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(MASS, include.only = c("isoMDS", "Shepard"))   # evita di mascherare dplyr::select
+```
+
+## 1. Perché l'MDS?
+
+A volte per i nostri oggetti non abbiamo variabili, ma solo **quanto sono diversi l'uno dall'altro**: distanze stradali tra città, quanto spesso le persone confondono due suoni, quanto due prodotti sono giudicati dissimili, la distanza genetica tra specie. Una tabella di questo tipo è una **matrice di dissimilarità**: una tabella simmetrica con zeri sulla diagonale, in cui l'elemento $(i, j)$ dice quanto l'oggetto $i$ è lontano dall'oggetto $j$.
+
+Lo **scaling multidimensionale (MDS)** risponde: *posso collocare gli oggetti come punti su un piano (o in poche dimensioni) in modo che le distanze tra i punti riproducano le dissimilarità?* Se funziona, il grafico è una **mappa** degli oggetti, e possiamo osservarla per individuare gruppi, gradienti e valori anomali.
+
+## 2. Una tabella di distanze stradali
+
+`eurodist` contiene le **distanze stradali** (in km) tra 21 città europee — non distanze in linea d'aria, e non tutte capitali (sono incluse Calais, Cherbourg, Gibraltar, Hook of Holland, Lyons, Marseilles, Milan, Munich).
+
+```{r}
+#| label: eurodist
+class(eurodist)
+as.matrix(eurodist)[1:5, 1:5]
+```
+
+È memorizzata come oggetto `dist`: viene conservato solo il triangolo inferiore, perché la tabella è simmetrica.
+
+## 3. L'MDS classico con `cmdscale()`
+
+```{r}
+#| label: cmdscale
+mds_euro <- cmdscale(eurodist, k = 2, eig = TRUE)
+names(mds_euro)
+head(round(mds_euro$points), 4)
+```
+
+`points` sono le coordinate delle città in una configurazione bidimensionale. L'MDS classico (detto anche *analisi delle coordinate principali*, PCoA) è strettamente imparentato con la PCA: calcola autovalori e autovettori di una matrice derivata dalle distanze e tiene le prime `k` dimensioni.
+
+### Autovalori: alcuni sono negativi!
+
+```{r}
+#| label: eigen
+round(mds_euro$eig / 1e6, 2)          # in milioni, per leggibilità
+sum(mds_euro$eig < 0)
+```
+
+Se le distanze fossero **euclidee** (distanze in linea retta tra punti in un qualche spazio), tutti gli autovalori sarebbero $\ge 0$. Qui `r sum(mds_euro$eig < 0)` autovalori sono **negativi**, il più grande in valore assoluto è `r round(min(mds_euro$eig) / 1e6, 2)` milioni. Gli autovalori negativi sono la firma di dissimilarità **non euclidee**: nessuna configurazione di punti, in qualsiasi numero di dimensioni, riproduce esattamente le distanze stradali. Le strade aggirano montagne e mari, e la Terra non è piatta.
+
+Gli autovalori negativi sono piccoli rispetto ai primi due (`r round(mds_euro$eig[1] / 1e6, 1)` e `r round(mds_euro$eig[2] / 1e6, 1)` milioni), quindi una mappa 2-D è comunque un buon riassunto.
+
+### Bontà di adattamento
+
+`cmdscale()` restituisce due misure di bontà di adattamento (GOF, *goodness of fit*) per le `k` dimensioni tenute, con autovalori $\lambda_1, \lambda_2, \dots$:
+
+$$
+\text{GOF}_1 = \frac{\sum_{i=1}^{k} \lambda_i}{\sum_{i} |\lambda_i|}, \qquad
+\text{GOF}_2 = \frac{\sum_{i=1}^{k} \lambda_i}{\sum_{i} \max(\lambda_i, 0)} .
+$$
+
+```{r}
+#| label: gof
+mds_euro$GOF
+```
+
+::: {.callout-tip .read-output}
+## Come leggere il GOF
+
+- **GOF₂** = `r round(mds_euro$GOF[2], 3)`: le due dimensioni rappresentano il `r round(100 * mds_euro$GOF[2])`% della somma degli autovalori **positivi**.
+- **GOF₁** = `r round(mds_euro$GOF[1], 3)` è più piccolo perché il suo denominatore include anche i **valori assoluti degli autovalori negativi**: in altre parole penalizza la parte non euclidea dei dati.
+- Per distanze euclidee i due valori coincidono. Un grande divario tra loro è un altro segnale che le dissimilarità sono lontane dall'essere euclidee.
+:::
+
+## 4. Trasformare la configurazione in una mappa
+
+```{r}
+#| label: fig-raw
+#| fig-cap: "Configurazione grezza dell'MDS classico delle 21 città, prima di qualsiasi inversione di segno."
+cities <- data.frame(city = labels(eurodist),
+                     dim1 = mds_euro$points[, 1],
+                     dim2 = mds_euro$points[, 2])
+
+ggplot(cities, aes(dim1, dim2, label = city)) +
+  geom_point() +
+  geom_text(vjust = -0.6, size = 3) +
+  coord_equal() +
+  labs(x = "Dimensione 1 (km)", y = "Dimensione 2 (km)")
+```
+
+Le sole distanze non portano **alcuna informazione sull'orientamento**: ruotare o specchiare la mappa non cambia nessuna distanza. I segni degli assi dell'MDS, come quelli delle componenti della PCA, sono arbitrari. Perché la mappa somigli all'Europa vogliamo l'ovest a sinistra e il nord in alto. Invece di tirare a indovinare, lasciamo decidere ai dati usando tre città che conosciamo:
+
+```{r}
+#| label: flip
+if (cities$dim1[cities$city == "Lisbon"] > cities$dim1[cities$city == "Athens"]) {
+  cities$dim1 <- -cities$dim1        # Lisbon deve stare a ovest di Athens
+}
+if (cities$dim2[cities$city == "Stockholm"] < cities$dim2[cities$city == "Athens"]) {
+  cities$dim2 <- -cities$dim2        # Stockholm deve stare a nord di Athens
+}
+```
+
+Con la configurazione che R restituisce qui, l'asse 1 aveva già l'ovest a sinistra, mentre l'asse 2 andava invertito (il nord era in basso). Su un altro computer i segni possono essere diversi: è proprio per questo che verifichiamo invece di inserire a mano un'inversione fissa.
+
+```{r}
+#| label: fig-map
+#| fig-cap: "Mappa MDS classica di 21 città europee dalle distanze stradali, orientata con l'ovest a sinistra e il nord in alto."
+ggplot(cities, aes(dim1, dim2, label = city)) +
+  geom_point(colour = "#0072B2") +
+  geom_text(vjust = -0.6, size = 3) +
+  coord_equal() +
+  labs(x = "Ovest – Est (km)", y = "Sud – Nord (km)")
+```
+
+::: {.callout-tip .read-output}
+## Leggere la mappa
+
+- Le città **iberiche** (Lisbon, Madrid, Gibraltar e, più a est, Barcelona) sono all'estrema sinistra.
+- **Stockholm** e **Copenhagen** sono in alto (a nord), con **Hamburg** sotto di loro.
+- **Athens** è all'estremo sud-est e **Rome** a sud di **Milan**.
+- Le città del Mare del Nord e della Manica (**Calais**, **Brussels**, **Hook of Holland**, **Cherbourg**) e **Paris** formano un gruppo nel centro nord-ovest; **Geneva**, **Lyons** e **Marseilles** stanno tra questo gruppo e il Mediterraneo.
+
+La geografia è riconoscibile, ma non perfetta: la mappa è costruita da distanze stradali, non da coordinate.
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la doppia centratura
+
+Sia $D^{(2)}$ la matrice delle dissimilarità **al quadrato** e $J = I - \frac1n \mathbf 1 \mathbf 1^\top$ la matrice di centratura. L'MDS classico calcola
+
+$$
+B = -\tfrac12 \, J D^{(2)} J ,
+$$
+
+la matrice **doppiamente centrata** (righe e colonne centrate). Se le dissimilarità sono distanze euclidee tra punti $x_1, \dots, x_n$, allora $B$ è esattamente la matrice dei prodotti scalari dei punti centrati, $B = XX^\top$, che è semidefinita positiva. Scrivendo $B = V \Lambda V^\top$, le coordinate sono $X_k = V_k \Lambda_k^{1/2}$: è ciò che restituisce `cmdscale()`. Quando le dissimilarità non sono euclidee, $B$ ha autovalori negativi e $\Lambda^{1/2}$ esiste solo per quelli positivi.
+
+```{r}
+#| label: double-centre
+D2 <- as.matrix(eurodist)^2
+n  <- nrow(D2)
+J  <- diag(n) - matrix(1 / n, n, n)
+B  <- -0.5 * J %*% D2 %*% J
+e  <- eigen(B, symmetric = TRUE)
+
+X  <- e$vectors[, 1:2] %*% diag(sqrt(e$values[1:2]))
+all.equal(abs(X), abs(unname(mds_euro$points)))   # uguali a meno del segno
+```
+:::
+
+## 5. Quanto è buona la mappa? Il diagramma di Shepard
+
+Un **diagramma di Shepard** mette in grafico le dissimilarità originali contro le distanze sulla mappa. Se la mappa fosse perfetta, tutti i punti starebbero sulla diagonale.
+
+```{r}
+#| label: fig-shepard
+#| fig-cap: "Diagramma di Shepard: distanze stradali contro distanze sulla mappa MDS 2-D. Ogni punto è una coppia di città."
+fitted_d <- dist(mds_euro$points)
+
+shep <- data.frame(road = as.vector(eurodist),
+                   map  = as.vector(fitted_d))
+
+ggplot(shep, aes(road, map)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0, colour = "#D55E00") +
+  labs(x = "Distanza stradale (km)", y = "Distanza sulla mappa MDS (km)")
+
+cor(shep$road, shep$map)
+```
+
+La correlazione tra distanze stradali e distanze sulla mappa è `r round(cor(shep$road, shep$map), 3)`. La maggior parte delle coppie è vicina alla diagonale. Quali coppie sono le peggiori?
+
+```{r}
+#| label: worst-pairs
+pairs <- t(combn(labels(eurodist), 2))   # stesso ordine dell'oggetto dist
+shep |>
+  mutate(from = pairs[, 1], to = pairs[, 2], error = map - road) |>
+  arrange(desc(abs(error))) |>
+  head(4)
+```
+
+Alcuni valori non possono essere riprodotti da nessuna mappa piana. Per esempio la tabella riporta Athens–Rome come `r as.matrix(eurodist)["Athens", "Rome"]` km, che è *più corta* della distanza in linea d'aria tra le due città (circa 1.050 km). Alcuni valori di questa vecchia tabella sembrano incoerenti con la geografia, e l'MDS ne distribuisce l'errore su tutta la mappa.
+
+## 6. L'MDS non metrico
+
+L'MDS classico cerca di riprodurre le dissimilarità **come numeri**. Spesso ci fidiamo solo del loro **ordine**: "A è più simile a B che a C". Scale di valutazione, graduatorie e molte dissimilarità ecologiche sono di questo tipo. L'**MDS non metrico** cerca una configurazione le cui distanze abbiano **lo stesso ordine di rango** delle dissimilarità, per quanto possibile.
+
+Il disaccordo si misura con lo **stress di Kruskal** (0 = perfetto). `MASS::isoMDS()` lo riporta **in percentuale**. Guida approssimativa di Kruskal: sotto il 5% buono, 5–10% discreto, 10–20% scarso, oltre il 20% cattivo.
+
+```{r}
+#| label: isomds
+iso_euro <- isoMDS(eurodist, k = 2, trace = FALSE)  # parte da cmdscale()
+iso_euro$stress
+```
+
+```{r}
+#| label: fig-iso-shepard
+#| fig-cap: "Diagramma di Shepard per l'MDS non metrico: la linea a gradini è il miglior adattamento monotono (che preserva l'ordine)."
+sh <- Shepard(eurodist, iso_euro$points)
+plot(sh, pch = 20, col = "grey50",
+     xlab = "Distanza stradale (km)", ylab = "Distanza sulla mappa")
+lines(sh$x, sh$yf, type = "S", col = "#D55E00", lwd = 2)
+```
+
+Lo stress è `r round(iso_euro$stress, 1)`%. Per le distanze stradali, l'MDS metrico e quello non metrico danno mappe molto simili; l'MDS non metrico mostra il suo vero valore quando ha significato solo l'ordine delle dissimilarità.
+
+## 7. L'MDS oltre la geografia: una mappa delle variabili
+
+L'MDS funziona con **qualsiasi** dissimilarità. Disegniamo una mappa delle 11 **variabili** di `mtcars`, usando una distanza basata sulla loro correlazione: le variabili fortemente correlate in positivo devono essere vicine, quelle correlate in negativo lontane.
+
+$$
+d_{jk} = \sqrt{2(1 - r_{jk})}
+$$
+
+Questa è (a meno di una costante) la distanza euclidea tra le variabili standardizzate, quindi va da 0 ($r = 1$) a 2 ($r = -1$).
+
+```{r}
+#| label: mtcars-mds
+d_vars  <- as.dist(sqrt(2 * (1 - cor(mtcars))))
+mds_var <- cmdscale(d_vars, k = 2, eig = TRUE)
+
+round(mds_var$eig, 3)
+mds_var$GOF
+```
+
+Poiché questa distanza *è* euclidea, non ci sono autovalori negativi (in misura significativa) e i due valori di GOF coincidono: un bel contrasto con `eurodist`.
+
+```{r}
+#| label: fig-mtcars-mds
+#| fig-cap: "Mappa MDS delle variabili di mtcars, dalla distanza sqrt(2(1 - r))."
+data.frame(variable = rownames(mds_var$points), mds_var$points) |>
+  ggplot(aes(X1, X2, label = variable)) +
+  geom_point() +
+  geom_text(vjust = -0.7) +
+  coord_equal() +
+  labs(x = "Dimensione 1", y = "Dimensione 2")
+```
+
+`mpg` si trova sul lato opposto della mappa rispetto a `cyl`, `disp` e `wt` (forti correlazioni negative), e vicino a `drat` e `vs`. La seconda dimensione separa `qsec` da `am`, `gear` e `carb`. È la stessa struttura che la PCA di `mtcars` ha rivelato nella [lezione sulla PCA](50-pca.qmd), ma vista dal lato delle variabili.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Dare per scontato che ogni tabella di distanze sia euclidea.** Distanze stradali, distanze di Gower, dissimilarità basate su valutazioni di solito non lo sono; controlla gli autovalori.
+2. **Fraintendere il `GOF`.** È una coppia di rapporti tra somme di autovalori (con autovalori in valore assoluto o positivi al denominatore), non quadrati da sommare.
+3. **Interpretare l'orientamento o i segni degli assi dell'MDS.** Le distanze non cambiano con rotazioni e riflessioni; inverti pure gli assi per rendere leggibile la mappa, e decidi le inversioni dai dati, non inserendole a mano.
+4. **Dimenticare `coord_equal()` / `asp = 1`.** Scale degli assi diverse distorcono le distanze nel grafico.
+5. **Confrontare lo stress di `isoMDS()` con valori di stress riportati come proporzioni.** `isoMDS()` riporta percentuali.
+:::
+
+## 8. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. L'MDS classico su una matrice di dissimilarità restituisce alcuni autovalori negativi. Che cosa ti dice?
+
+Le dissimilarità **non sono euclidee**: nessuna configurazione di punti in qualsiasi dimensione le riproduce esattamente. Se gli autovalori negativi sono piccoli rispetto ai primi positivi, una mappa a poche dimensioni può comunque essere una buona approssimazione.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Due analisti ottengono mappe MDS speculari dalle stesse distanze. Chi ha ragione?
+
+Entrambi. Riflessioni (e rotazioni) lasciano invariate tutte le distanze, quindi le due configurazioni si adattano ugualmente bene.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Quando preferiresti l'MDS non metrico a quello classico?
+
+Quando solo l'**ordine di rango** delle dissimilarità è affidabile (valutazioni, graduatorie, molti giudizi di somiglianza), oppure quando ci si aspetta che la relazione tra dissimilarità e distanza non sia lineare.
+:::
+
+## 9. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — MDS di distanze euclidee = PCA.** Calcola le distanze euclidee tra i 150 fiori di `iris` dopo aver standardizzato le quattro misure (`dist(scale(iris[, 1:4]))`). Esegui `cmdscale(..., k = 2, eig = TRUE)` e confronta le coordinate con i primi due punteggi PCA di `prcomp(iris[, 1:4], scale. = TRUE)`. Ci sono autovalori negativi?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+d_iris <- dist(scale(iris[, 1:4]))
+mds_iris <- cmdscale(d_iris, k = 2, eig = TRUE)
+pca_iris <- prcomp(iris[, 1:4], scale. = TRUE)
+all.equal(abs(unname(mds_iris$points)), abs(unname(pca_iris$x[, 1:2])))
+range(mds_iris$eig)      # i valori più piccoli sono ~0 (arrotondamento), non davvero negativi
+```
+Le coordinate coincidono a meno del segno: l'MDS classico di distanze euclidee è la PCA. A parte l'arrotondamento numerico (valori minuscoli attorno a ±1e-13), non ci sono autovalori negativi.
+:::
+:::
+
+::: {.exercise}
+[★]{.stars} **Esercizio 2 — prevedi.** Moltiplichi tutti gli elementi di `eurodist` per 0.621 per convertire i chilometri in miglia e riesegui `cmdscale()`. Che cosa accade a (a) la forma della mappa, (b) gli autovalori, (c) il GOF?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+(a) Stessa forma, solo scalata di 0.621. (b) Gli autovalori sono moltiplicati per 0.621² (sono in unità al quadrato). (c) Il GOF non cambia: è un rapporto di autovalori.
+```r
+m_miles <- cmdscale(eurodist * 0.621, k = 2, eig = TRUE)
+m_miles$eig[1] / mds_euro$eig[1]    # 0.621^2
+m_miles$GOF
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — debug.** Questo codice dovrebbe disegnare la mappa con il nord in alto, ma sul computer di un collega Stockholm finisce in basso. Perché, e come lo renderesti robusto?
+
+```r
+pts <- cmdscale(eurodist)
+pts[, 2] <- -pts[, 2]
+plot(pts, type = "n", asp = 1); text(pts, labels(eurodist))
+```
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Il segno di ciascun asse dell'MDS è arbitrario e può cambiare tra computer o versioni di R/BLAS; il codice inverte l'asse 2 *incondizionatamente*. Decidi l'inversione dai dati:
+```r
+pts <- cmdscale(eurodist)
+if (pts["Stockholm", 2] < pts["Athens", 2]) pts[, 2] <- -pts[, 2]
+if (pts["Lisbon", 1] > pts["Athens", 1]) pts[, 1] <- -pts[, 1]
+plot(pts, type = "n", asp = 1); text(pts, labels(eurodist), cex = 0.7)
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — una terza dimensione.** Esegui l'MDS classico di `eurodist` con `k = 3`. Di quanto aumentano GOF₁ e GOF₂ rispetto a `k = 2`? Vale la pena tenere la terza dimensione?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+cmdscale(eurodist, k = 2, eig = TRUE)$GOF
+cmdscale(eurodist, k = 3, eig = TRUE)$GOF
+```
+Il terzo autovalore è molto più piccolo dei primi due (circa 1.5 milioni contro 19.5 e 11.9 milioni), quindi il GOF aumenta solo modestamente (GOF₂ da circa 0.87 a circa 0.91, GOF₁ da circa 0.75 a circa 0.79). Per una mappa geografica due dimensioni sono la scelta naturale; la dimensione in più assorbe soprattutto le distorsioni della rete stradale.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — dati misti con la distanza di Gower.** I pinguini sono descritti da misure numeriche *e* da variabili categoriali (isola, sesso). La dissimilarità di **Gower** gestisce entrambe: le differenze numeriche sono divise per il campo di variazione della variabile, le variabili categoriali contribuiscono 0 (uguali) o 1 (diverse), e il tutto viene mediato. (a) Calcola la dissimilarità di Gower con `cluster::daisy(..., metric = "gower")` su `island, sex, bill_len, bill_dep, flipper_len, body_mass` (casi completi). (b) Esegui l'MDS classico e colora i punti per specie. (c) Ci sono autovalori negativi? (d) Che cosa sembrano catturare le due dimensioni?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+peng <- penguins |>
+  select(species, island, sex, bill_len, bill_dep, flipper_len, body_mass) |>
+  na.omit()
+
+d_gower <- cluster::daisy(peng |> select(-species), metric = "gower")
+mds_g <- cmdscale(d_gower, k = 2, eig = TRUE)
+sum(mds_g$eig < 0)
+mds_g$GOF
+
+data.frame(mds_g$points, species = peng$species, sex = peng$sex) |>
+  ggplot(aes(X1, X2, colour = species, shape = sex)) +
+  geom_point(alpha = 0.7) +
+  coord_equal()
+```
+Ci sono molti autovalori negativi (la dissimilarità di Gower non è euclidea) e GOF₁ è nettamente più piccolo di GOF₂. Nella mappa, una dimensione separa i **Gentoo** (isola e forma del corpo diverse) da Adelie e Chinstrap, che in gran parte si sovrappongono; l'altra dimensione separa le **femmine dai maschi**: la variabile categoriale `sex` crea un salto 0/1 che domina un'intera dimensione. È una proprietà della distanza di Gower da ricordare: le variabili categoriali possono pesare molto.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| `dist()`, `as.dist()` | costruiscono un oggetto di dissimilarità |
+| `cmdscale(d, k, eig = TRUE)` | MDS classico (metrico): `points`, `eig`, `GOF` |
+| `eig` negativi | le dissimilarità non sono euclidee |
+| `GOF` | $\sum_{i \le k}\lambda_i$ su $\sum|\lambda_i|$ e su $\sum \max(\lambda_i, 0)$ |
+| diagramma di Shepard | distanze originali vs stimate |
+| `MASS::isoMDS()` | MDS non metrico; stress in percentuale |
+| `cluster::daisy(metric = "gower")` | dissimilarità per dati misti numerici/categoriali |
+
+- L'MDS trasforma una tabella di dissimilarità in una **mappa** le cui distanze le approssimano.
+- L'MDS classico di distanze euclidee **è la PCA**; input non euclidei danno **autovalori negativi**.
+- Orientamento e segni sono arbitrari: **inverti gli assi in base ai dati** per rendere leggibile la mappa.
+- Valuta la mappa con il **GOF**, un **diagramma di Shepard** e, per l'MDS non metrico, lo **stress**.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Borg, I. & Groenen, P., *Modern Multidimensional Scaling* (2a ed.), Springer.
+- Documentazione di R: `?cmdscale`, `?MASS::isoMDS`, `?cluster::daisy`.
+:::

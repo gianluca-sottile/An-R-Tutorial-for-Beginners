@@ -7,7 +7,7 @@ description: "Costruisci intervalli di confidenza per una media, una proporzione
 {{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
 
 ::: {.lesson-meta}
-[Livello 3 · Inferenza]{.level-3} [⏱ ~70 min]{} [Prerequisiti: [Distribuzioni campionarie](../07-probability/30-sampling-distributions.qmd), [Bootstrap](../07-probability/31-bootstrap.qmd)]{}
+[Livello 3 · Inferenza]{.level-3} [⏱ ~70 min]{} [Prerequisiti: [Distribuzioni campionarie](../07-probability/30-sampling-distributions.qmd), [Il bootstrap](../07-probability/31-bootstrap.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}

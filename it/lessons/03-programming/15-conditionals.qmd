@@ -17,7 +17,7 @@ library(dplyr)
 ```
 
 ::: {.lesson-meta}
-[Livello 1 · Fondamenti]{.level-1} [⏱ ~45 min]{} [Prerequisiti: [Tipi di dati](../01-foundations/03-data-types.qmd), [Scrivere funzioni](14-functions.qmd)]{}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~45 min]{} [Prerequisiti: [Tipi di dati e operatori](../01-foundations/03-data-types.qmd), [Scrivere funzioni](14-functions.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}

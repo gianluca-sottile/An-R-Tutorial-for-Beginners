@@ -68,7 +68,7 @@ Alcune osservazioni che spesso confondono gli studenti:
 
 - **Un numero non è sempre una variabile numerica.** I codici postali, i numeri di matricola e i codici delle isole 1/2/3 visti sopra sono *nominali*: sono nomi scritti con le cifre.
 - **Arrotondare non rende discreta una variabile.** `flipper_len` è memorizzata come numero intero di millimetri, ma la lunghezza della pinna è una grandezza continua che è stata semplicemente misurata al millimetro.
-- **Le variabili binarie** (due categorie, come `sex` o le risposte sì/no) sono un caso particolare di variabili nominali. Sono molto comuni, e nella [Regressione logistica](../../../lessons/09-regression/41-logistic-regression.qmd) diventano la variabile risposta di un modello.
+- **Le variabili binarie** (due categorie, come `sex` o le risposte sì/no) sono un caso particolare di variabili nominali. Sono molto comuni, e nella [Regressione logistica](../09-regression/41-logistic-regression.qmd) diventano la variabile risposta di un modello.
 - **`year`** in `penguins` è un istante temporale. Con soli tre valori (`r paste(sort(unique(penguins$year)), collapse = ", ")`) viene spesso trattato come una categoria nelle analisi.
 
 ::: {.callout-tip}
@@ -259,7 +259,7 @@ Adelie, il primo livello, è il riferimento: ha 0 in entrambe le colonne dummy. 
 coef(lm(body_mass ~ species, data = penguins))
 ```
 
-L'intercetta è la massa media dei pinguini Adelie, e `speciesGentoo` dice che i pinguini Gentoo sono in media `r round(coef(lm(body_mass ~ species, data = penguins))[3])` g più pesanti. Cambiare il riferimento con `relevel()` cambia ciò che i coefficienti confrontano, ma non le previsioni del modello. Studierai questo argomento in [Regressione multipla](../../../lessons/09-regression/39-multiple-regression.qmd).
+L'intercetta è la massa media dei pinguini Adelie, e `speciesGentoo` dice che i pinguini Gentoo sono in media `r round(coef(lm(body_mass ~ species, data = penguins))[3])` g più pesanti. Cambiare il riferimento con `relevel()` cambia ciò che i coefficienti confrontano, ma non le previsioni del modello. Studierai questo argomento in [Regressione multipla](../09-regression/39-multiple-regression.qmd).
 
 È anche per questo che i codici vanno memorizzati come fattori: `lm(mpg ~ cyl, data = mtcars)` tratta il numero di cilindri come un numero continuo (una sola pendenza), mentre `lm(mpg ~ factor(cyl), data = mtcars)` stima una media separata per 4, 6 e 8 cilindri.
 

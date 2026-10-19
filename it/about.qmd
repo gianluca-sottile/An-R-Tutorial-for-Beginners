@@ -7,7 +7,7 @@ description: "Finalità, prerequisiti, risultati di apprendimento, calendario in
 
 *From Data to Models with R* è un corso aperto e accessibile ai principianti di programmazione in R e statistica applicata. Parte dalla primissima riga di codice R e arriva ai modelli di regressione, al machine learning, alla riduzione della dimensionalità e al clustering, con un percorso facoltativo di deep learning. È pensato per studenti universitari — e per chiunque altro — che devono analizzare dati ma **non hanno una formazione statistica rigorosa**: ogni idea statistica viene introdotta attraverso un problema concreto, un grafico o una simulazione prima di qualsiasi formula. Il materiale può sostenere un modulo universitario fino a **9 CFU (circa 72 ore di lezione)** ed è liberamente disponibile su GitHub.
 
-La versione italiana copre attualmente i Livelli 1–3; le lezioni del Livello 4 e il percorso di deep learning sono disponibili in inglese.
+La versione italiana copre tutti i quattro livelli e il progetto finale; solo il percorso facoltativo di deep learning è disponibile in inglese.
 
 ## Prerequisiti
 
@@ -55,7 +55,7 @@ Il calendario è indicativo; i docenti possono adattarlo.
 
 - Ogni lezione è un documento [Quarto](https://quarto.org): testo, codice e risultati provengono dallo stesso sorgente, quindi l'output che vedi è quello che il codice produce.
 - Gli esercizi interattivi vengono eseguiti nel browser con [webR](https://docs.r-wasm.org/webr/latest/) tramite l'estensione [quarto-live](https://r-wasm.github.io/quarto-live/).
-- Il machine learning usa il framework [tidymodels](https://www.tidymodels.org); la [Lezione 44](../lessons/10-ml/44-ml-workflow.qmd) (in inglese) spiega perché in questo corso ha sostituito `caret`.
+- Il machine learning usa il framework [tidymodels](https://www.tidymodels.org); la [Lezione 44](lessons/10-ml/44-ml-workflow.qmd) spiega perché in questo corso ha sostituito `caret`.
 - Le figure usano una tavolozza di colori adatta a chi ha deficit nella percezione dei colori.
 
 ## Risorse gratuite consigliate

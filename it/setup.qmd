@@ -6,7 +6,7 @@ description: "Installa R e un editor, installa i pacchetti del corso e scopri co
 
 ::: {.callout-note}
 ## Versione italiana
-La versione italiana copre attualmente i Livelli 1–3. Le lezioni del Livello 4 (modelli e machine learning) e il percorso di deep learning sono disponibili in inglese: puoi raggiungerle con il pulsante "English" nella barra in alto oppure dalla barra laterale.
+La versione italiana copre tutti i quattro livelli e il progetto finale. Solo il percorso facoltativo di deep learning (lezioni 61–66) è disponibile esclusivamente in inglese: lo trovi nella barra laterale oppure passando all'inglese con il selettore **EN | IT** in alto.
 :::
 
 ## 1. Due modi di usare questo corso
@@ -21,7 +21,7 @@ Il primo esercizio di una pagina può richiedere qualche secondo, mentre R si av
 
 ::: {.g-col-12 .g-col-md-6}
 ### Sul tuo computer — consigliato
-Per seguire tutte le lezioni, lavorare sui tuoi dati e completare il [progetto finale](../lessons/67-capstone.qmd) (in inglese), installa R e un editor (vedi sotto). È gratuito e richiede pochi minuti.
+Per seguire tutte le lezioni, lavorare sui tuoi dati e completare il [progetto finale](lessons/67-capstone.qmd), installa R e un editor (vedi sotto). È gratuito e richiede pochi minuti.
 :::
 :::
 

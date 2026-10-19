@@ -218,7 +218,7 @@ $$
 \begin{pmatrix} 5 \\ 10 \end{pmatrix}
 \quad\Rightarrow\quad x = (1, 3).
 $$
-La regressione ai minimi quadrati ([Regressione semplice](../../../lessons/09-regression/38-simple-regression.qmd)) è, nella sostanza, la soluzione di un sistema di questo tipo: $\hat\beta = (X^\top X)^{-1} X^\top y$. La funzione `lm()` di R usa un metodo numericamente più stabile (una decomposizione QR) invece di calcolare esplicitamente l'inversa.
+La regressione ai minimi quadrati ([Regressione semplice](../09-regression/38-simple-regression.qmd)) è, nella sostanza, la soluzione di un sistema di questo tipo: $\hat\beta = (X^\top X)^{-1} X^\top y$. La funzione `lm()` di R usa un metodo numericamente più stabile (una decomposizione QR) invece di calcolare esplicitamente l'inversa.
 :::
 
 ## 6. Sintesi per riga e per colonna

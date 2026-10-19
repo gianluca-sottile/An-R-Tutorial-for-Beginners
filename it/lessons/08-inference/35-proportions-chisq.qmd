@@ -122,7 +122,7 @@ c(risk_diff = risk_diff, rel_risk = rel_risk, odds_ratio = odds_ratio)
 
 - **Differenza di rischio** (`r round(risk_diff, 2)`): la probabilità di sopravvivenza delle donne era più alta di `r round(100 * risk_diff)` punti percentuali.
 - **Rischio relativo** (`r round(rel_risk, 2)`): le donne avevano una probabilità di sopravvivere `r round(rel_risk, 1)` volte quella degli uomini.
-- **Odds ratio** (rapporto degli odds, `r round(odds_ratio, 1)`): gli *odds* di sopravvivenza (sopravvissuti per ogni non sopravvissuto) erano circa `r round(odds_ratio)` volte più alti per le donne. Quando l'esito è frequente, gli odds ratio sono sempre più lontani da 1 dei rischi relativi, quindi non leggere un odds ratio di 10 come "10 volte più probabile". Gli odds ratio ritornano in [Regressione logistica (EN)](../../../lessons/09-regression/41-logistic-regression.qmd).
+- **Odds ratio** (rapporto degli odds, `r round(odds_ratio, 1)`): gli *odds* di sopravvivenza (sopravvissuti per ogni non sopravvissuto) erano circa `r round(odds_ratio)` volte più alti per le donne. Quando l'esito è frequente, gli odds ratio sono sempre più lontani da 1 dei rischi relativi, quindi non leggere un odds ratio di 10 come "10 volte più probabile". Gli odds ratio ritornano in [Regressione logistica](../09-regression/41-logistic-regression.qmd).
 
 ::: {.callout-note .deeper collapse="true"}
 ## Per approfondire: un IC per l'odds ratio

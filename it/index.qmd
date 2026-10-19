@@ -44,7 +44,7 @@ Ogni lezione indica il suo livello, quanto tempo richiede e che cosa dovresti sa
 
 ::: {.callout-note}
 ## Versione italiana
-La versione italiana copre attualmente i Livelli 1–3. Le lezioni del Livello 4 (modelli e machine learning) e il percorso di deep learning sono disponibili in inglese: puoi raggiungerle con il pulsante "English" nella barra in alto oppure dalla barra laterale.
+La versione italiana copre tutti i quattro livelli e il progetto finale. Solo il percorso facoltativo di deep learning (lezioni 61–66) è disponibile esclusivamente in inglese: lo trovi nella barra laterale oppure passando all'inglese con il selettore **EN | IT** in alto.
 :::
 
 ```{=html}
@@ -71,7 +71,7 @@ La versione italiana copre attualmente i Livelli 1–3. Le lezioni del Livello 4
     <span class="num">Livello 4</span>
     <h3>Modelli e apprendimento</h3>
     <p>Modelli lineari e lineari generalizzati, tidymodels, alberi ed ensemble, PCA, clustering e un percorso facoltativo di deep learning (in inglese).</p>
-    <a class="stretched" href="../lessons/09-regression/38-simple-regression.html" aria-label="Inizia il Livello 4 (in inglese)"></a>
+    <a class="stretched" href="lessons/09-regression/38-simple-regression.html" aria-label="Inizia il Livello 4"></a>
   </div>
 </div>
 ```

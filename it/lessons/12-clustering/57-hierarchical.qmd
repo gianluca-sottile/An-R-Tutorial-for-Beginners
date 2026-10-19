@@ -1,0 +1,478 @@
+---
+title: "Clustering gerarchico"
+subtitle: "Costruire un albero di gruppi annidati, leggere il dendrogramma e tagliarlo dove ha senso"
+description: "Clustering agglomerativo a mano e in R: regole di legame e loro comportamento, lettura dei dendrogrammi, taglio con cutree(), correlazione cofenetica, silhouette, confronto con k-means e profili dei cluster."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~80 min]{} [Prerequisiti: [Clustering: il quadro generale](55-clustering-intro.qmd), [Clustering k-means](56-kmeans.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- eseguire a mano il clustering **agglomerativo** su pochi punti;
+- spiegare come differiscono i legami **singolo**, **completo**, **medio** e di **Ward**, e riconoscere il **chaining** (effetto a catena);
+- leggere un **dendrogramma** (che cosa significa l'altezza, che cosa *non* conta) e tagliarlo con `cutree()`;
+- valutare un albero con la **correlazione cofenetica** e una partizione con la **silhouette**;
+- confrontare una partizione gerarchica con k-means e **descrivere (profilare)** i cluster.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+#| message: false
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+library(cluster)   # silhouette()
+library(mclust)    # adjustedRandIndex()
+```
+
+## 1. Perché una gerarchia?
+
+k-means ti chiede $k$ *prima* di cominciare. Spesso preferiremmo vedere la struttura a **tutti** i livelli di dettaglio: quali osservazioni sono quasi identiche, quali piccoli gruppi si uniscono in gruppi più grandi e dove stanno le grandi divisioni. I biologi lo fanno da secoli con gli alberi genealogici delle specie; gli esperti di marketing lo fanno con i clienti (clienti premium → ristoranti premium vs negozi premium → …).
+
+Il **clustering gerarchico** produce proprio un albero di questo tipo, chiamato **dendrogramma**. Scegli il numero di cluster *dopo*, tagliando l'albero.
+
+Ci concentriamo sulla versione più comune, il clustering **agglomerativo** (dal basso verso l'alto):
+
+1. parti con ogni osservazione in un cluster a sé;
+2. fondi i due cluster **più vicini**;
+3. ripeti finché tutto è in un unico cluster.
+
+L'unica questione è che cosa significhi "più vicini" per *gruppi* di punti — questo è il **legame** (*linkage*).
+
+## 2. L'algoritmo a mano su cinque punti
+
+```{r}
+#| label: toy-points
+pts <- data.frame(
+  x = c(1, 2, 6, 7, 4),
+  y = c(1, 1.5, 5, 5.5, 3),
+  row.names = c("A", "B", "C", "D", "E")
+)
+d5 <- dist(pts)
+round(d5, 2)
+```
+
+```{r}
+#| label: fig-toy-points
+#| fig-cap: "Cinque punti: due coppie compatte (A–B e C–D) e un punto E in mezzo."
+#| fig-width: 4
+#| fig-height: 4
+ggplot(pts, aes(x, y, label = rownames(pts))) +
+  geom_point(size = 3) +
+  geom_text(nudge_x = 0.3, nudge_y = 0.3) +
+  coord_equal() +
+  labs(x = "x", y = "y")
+```
+
+Usiamo il **legame completo**: la distanza tra due cluster è la distanza tra i loro membri **più lontani**.
+
+**Passo 1.** La distanza più piccola nella matrice è `r round(min(d5), 2)` — un pareggio tra A–B e C–D. Fondiamo A e B.
+
+**Passo 2.** Fondiamo C e D, anch'essi all'altezza `r round(min(d5), 2)`.
+
+**Passo 3.** Ora abbiamo tre cluster: {A, B}, {C, D} e {E}. Le loro distanze con legame completo sono:
+
+```{r}
+#| label: complete-by-hand
+D <- as.matrix(d5)
+c(
+  E_AB  = max(D["E", c("A", "B")]),
+  E_CD  = max(D["E", c("C", "D")]),
+  AB_CD = max(D[c("A", "B"), c("C", "D")])
+)
+```
+
+La più piccola è E–{A, B}, quindi E si unisce ad A e B all'altezza `r round(max(D["E", c("A", "B")]), 2)`.
+
+**Passo 4.** L'ultima fusione unisce {A, B, E} e {C, D} all'altezza `r round(max(D[c("A", "B", "E"), c("C", "D")]), 2)`.
+
+`hclust()` registra esattamente questi passi:
+
+```{r}
+#| label: toy-hclust
+hc_toy <- hclust(d5, method = "complete")
+hc_toy$merge
+round(hc_toy$height, 2)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Ogni riga di `merge` è un passo. I numeri **negativi** sono singole osservazioni (−1 = A, −2 = B, …); i numeri **positivi** si riferiscono al cluster creato in quella riga precedente. La riga 3, `-5 1`, significa "l'osservazione E si unisce al cluster formato al passo 1".
+- `height` è la distanza di legame alla quale è avvenuta ciascuna fusione — i numeri che abbiamo calcolato a mano.
+:::
+
+```{r}
+#| label: fig-toy-dendrogram
+#| fig-cap: "Dendrogramma dei cinque punti (legame completo). L'altezza di ogni barra orizzontale è la distanza alla quale due cluster sono stati fusi."
+#| fig-width: 5
+#| fig-height: 4
+plot(hc_toy, hang = -1, main = "Legame completo", xlab = "", sub = "",
+     ylab = "Altezza di fusione")
+```
+
+### Leggere un dendrogramma
+
+- **Altezza = distanza di fusione.** Due osservazioni che si uniscono in basso sono simili; i gruppi che si uniscono solo vicino alla cima sono molto diversi.
+- L'**ordine da sinistra a destra** delle foglie porta poca informazione. Ogni fusione può essere ribaltata come un mobile senza cambiare l'albero: A non è "più vicino" a C solo perché sono disegnati uno accanto all'altro.
+- Rami verticali lunghi prima di una fusione indicano un gruppo **ben separato**.
+
+## 3. Tagliare l'albero
+
+`cutree()` trasforma l'albero in una partizione, con un numero di cluster `k` oppure a un'altezza `h`:
+
+```{r}
+#| label: cutree-toy
+cutree(hc_toy, k = 2)
+cutree(hc_toy, h = 3)
+```
+
+Tagliare all'altezza 3 attraversa tre rami verticali, quindi otteniamo tre cluster: {A, B}, {C, D} e {E}. Con `k = 2`, E va con A e B.
+
+## 4. Regole di legame e loro "personalità"
+
+| Legame | Distanza tra i cluster $G$ e $H$ | Comportamento tipico |
+|---|---|---|
+| **Singolo** | coppia più vicina: $\min_{i \in G, j \in H} d_{ij}$ | trova gruppi lunghi, a serpente; incline al **chaining** (i cluster crescono aggiungendo un punto vicino alla volta); isola i valori anomali come piccoli cluster |
+| **Completo** | coppia più lontana: $\max_{i \in G, j \in H} d_{ij}$ | cluster compatti di diametro simile; sensibile ai valori anomali |
+| **Medio** (UPGMA) | media di tutte le distanze a coppie | un compromesso tra singolo e completo |
+| **Ward** (`"ward.D2"`) | fonde la coppia che aumenta di meno la devianza totale entro i gruppi | cluster compatti e bilanciati, simile nello spirito a k-means |
+
+Sui nostri cinque punti tutti e quattro i legami fondono nello stesso ordine, ma ad altezze diverse:
+
+```{r}
+#| label: toy-linkages
+linkages <- c("single", "complete", "average", "ward.D2")
+sapply(linkages, \(m) round(hclust(d5, method = m)$height, 2))
+```
+
+Il legame singolo dà le altezze più basse (usa la coppia *più vicina*), il completo le più alte tra i tre legami "di distanza". Le altezze di Ward sono su un'altra scala (vedi "Per approfondire").
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: il criterio di Ward e i due metodi Ward in R
+
+Fondere i cluster $G$ e $H$, con numerosità $n_G, n_H$ e centroidi $\bar x_G, \bar x_H$, aumenta la devianza entro i gruppi di
+
+$$
+\Delta(G, H) = \frac{n_G\, n_H}{n_G + n_H}\, \lVert \bar x_G - \bar x_H \rVert^2 .
+$$
+
+Il metodo di Ward fonde la coppia con il $\Delta$ più piccolo. In R, `method = "ward.D2"` implementa questo criterio quando gli dai le ordinarie distanze euclidee (non al quadrato), e riporta come altezza di fusione $\sqrt{2\Delta}$. Il più vecchio `method = "ward.D"` implementa il criterio di Ward solo se gli passi distanze **al quadrato**; con l'output ordinario di `dist()` è un metodo diverso. Usa `"ward.D2"`.
+
+Poiché le altezze sono $\sqrt{2\Delta}$, le altezze al quadrato sommano al doppio della devianza totale:
+
+```{r}
+#| label: ward-check
+hw_toy <- hclust(d5, method = "ward.D2")
+sum(hw_toy$height^2) / 2
+sum(scale(pts, scale = FALSE)^2)   # devianza totale
+```
+:::
+
+## 5. Un dataset reale: i clienti all'ingrosso
+
+I dati wholesale (repository UCI) registrano la spesa annua, in unità monetarie, di 440 clienti di un distributore portoghese in sei categorie di prodotto. Come nell'[introduzione](55-clustering-intro.qmd), la spesa è asimmetrica a destra, quindi applichiamo `log1p()` e poi standardizziamo.
+
+```{r}
+#| label: wholesale-prep
+wholesale <- read_csv(data_path("wholesale_customers.csv"),
+                      show_col_types = FALSE)
+spend_vars <- c("Fresh", "Milk", "Grocery", "Frozen",
+                "Detergents_Paper", "Delicassen")
+
+X <- wholesale |>
+  select(all_of(spend_vars)) |>
+  mutate(across(everything(), log1p)) |>
+  scale()
+
+d <- dist(X)
+hcs <- lapply(linkages, \(m) hclust(d, method = m))
+names(hcs) <- linkages
+```
+
+```{r}
+#| label: fig-dendrograms
+#| fig-cap: "Dendrogrammi dei 440 clienti all'ingrosso con quattro legami. I legami singolo e medio mostrano lunghe catene con uno o due valori anomali che si uniscono in cima; Ward mostra due grandi gruppi chiaramente separati."
+#| fig-height: 7
+par(mfrow = c(2, 2), mar = c(1, 4, 3, 1))
+for (m in linkages) {
+  plot(hcs[[m]], labels = FALSE, hang = -1, main = m, xlab = "", sub = "",
+       ylab = "Altezza")
+}
+par(mfrow = c(1, 1))
+```
+
+Tagliare ciascun albero in 2–5 cluster mostra le loro "personalità" in numeri:
+
+```{r}
+#| label: cluster-sizes
+sapply(hcs, \(h) {
+  sapply(2:5, \(k) paste(sort(table(cutree(h, k)), decreasing = TRUE),
+                         collapse = "/"))
+}) |>
+  `rownames<-`(paste("k =", 2:5))
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Ogni cella elenca le dimensioni dei cluster, dalla più grande.
+- Il **legame singolo** stacca un cliente alla volta: quasi tutti restano in un unico cluster gigante. Questo è il **chaining**: il cluster gigante è cresciuto aggiungendo i vicini più prossimi uno per uno, e gli ultimi clienti a unirsi sono i valori anomali.
+- Il legame **medio** si comporta in modo simile su questi dati; il legame **completo** crea un gruppo grande e alcuni più piccoli.
+- **Ward** produce gruppi bilanciati di dimensioni confrontabili.
+:::
+
+## 6. Quanto è fedele l'albero? La correlazione cofenetica
+
+La **distanza cofenetica** tra due osservazioni è l'altezza alla quale finiscono per la prima volta nello stesso cluster. Se l'albero rappresenta bene i dati, le distanze cofenetiche dovrebbero essere vicine alle distanze originali. La loro correlazione è la **correlazione cofenetica**:
+
+```{r}
+#| label: cophenetic
+coph <- sapply(hcs, \(h) cor(cophenetic(h), d))
+round(coph, 3)
+```
+
+Il legame medio ha la correlazione cofenetica più alta (`r round(coph["average"], 2)`): il suo albero conserva meglio le distanze originali. Ward ha la più bassa (`r round(coph["ward.D2"], 2)`). È un risultato tipico — e istruttivo. Un albero può **riassumere fedelmente le distanze** e dare comunque **partizioni inutili** (il legame medio tagliato a $k = 2$ dà un gruppo di 2 clienti). La correlazione cofenetica risponde a "l'albero è una buona mappa delle distanze?", non a "i cluster sono utili?".
+
+## 7. Scegliere dove tagliare: silhouette per k
+
+```{r}
+#| label: silhouette-k
+k_grid <- 2:8
+sil_tab <- sapply(hcs, \(h) {
+  sapply(k_grid, \(k) mean(silhouette(cutree(h, k), d)[, "sil_width"]))
+})
+rownames(sil_tab) <- k_grid
+round(sil_tab, 3)
+```
+
+```{r}
+#| label: fig-silhouette-k
+#| fig-cap: "Silhouette media per numero di cluster, per ciascun legame."
+as_tibble(sil_tab) |>
+  mutate(k = k_grid) |>
+  pivot_longer(-k, names_to = "linkage", values_to = "silhouette") |>
+  ggplot(aes(k, silhouette, colour = linkage)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(x = "Numero di cluster (k)", y = "Silhouette media",
+       colour = "Legame")
+```
+
+A prima vista i legami singolo e medio "vincono": la loro silhouette media è la più alta. Ma guarda di nuovo le dimensioni dei cluster: vincono mettendo quasi tutti i clienti in un solo cluster (con legame singolo e $k = 2$, `r max(table(cutree(hcs$single, 2)))` su `r nrow(X)`) e uno o due valori anomali negli altri. Quei valori anomali sono lontani da tutti, quindi le loro silhouette — e quella del cluster gigante — sembrano buone. **Una silhouette alta non garantisce una partizione utile.** Guarda sempre anche le dimensioni dei cluster.
+
+Manteniamo quindi il legame di **Ward** e scegliamo $k$ dove *la sua* silhouette è più alta:
+
+```{r}
+#| label: k-final
+k_final <- k_grid[which.max(sil_tab[, "ward.D2"])]
+cl_hc <- cutree(hcs$ward.D2, k = k_final)
+table(cl_hc)
+```
+
+La silhouette di Ward è più alta per $k =$ `r k_final` (`r round(max(sil_tab[, "ward.D2"]), 2)`), ma i valori per $k = 2$ e $k = 3$ sono molto vicini (`r round(sil_tab["2", "ward.D2"], 3)` e `r round(sil_tab["3", "ward.D2"], 3)`). Entrambi sono difendibili; il dendrogramma mostra una grande divisione seguita da una più piccola. Proseguiamo con $k =$ `r k_final`.
+
+```{r}
+#| label: fig-ward-cut
+#| fig-cap: "Dendrogramma di Ward con i cluster scelti evidenziati da riquadri."
+plot(hcs$ward.D2, labels = FALSE, hang = -1, main = "Legame di Ward",
+     xlab = "", sub = "", ylab = "Altezza")
+rect.hclust(hcs$ward.D2, k = k_final, border = c("#E69F00", "#0072B2"))
+```
+
+## 8. Confronto con k-means
+
+```{r}
+#| label: compare-kmeans
+set.seed(123)
+km <- kmeans(X, centers = k_final, nstart = 50)
+table(hierarchical = cl_hc, kmeans = km$cluster)
+ari_hc_km <- adjustedRandIndex(cl_hc, km$cluster)
+ari_hc_km
+```
+
+L'ARI è `r round(ari_hc_km, 2)`: i due metodi trovano in grande linea la stessa divisione, e non concordano su circa `r sum(table(cl_hc, km$cluster)) - sum(apply(table(cl_hc, km$cluster), 1, max))` clienti (le celle fuori diagonale). È atteso: Ward e k-means ottimizzano lo stesso tipo di criterio (la devianza entro i gruppi), ma Ward lo fa in modo greedy — una volta fusi, due punti non possono più essere separati — mentre k-means può spostare i punti avanti e indietro.
+
+I dati contengono anche una variabile che **non** abbiamo usato: `Channel` (1 = Horeca — hotel, ristoranti, caffè; 2 = Retail, dettaglio). È un naturale controllo esterno:
+
+```{r}
+#| label: channel
+table(cluster = cl_hc, channel = wholesale$Channel)
+adjustedRandIndex(cl_hc, wholesale$Channel)
+```
+
+I cluster sono chiaramente legati al canale (ARI `r round(adjustedRandIndex(cl_hc, wholesale$Channel), 2)`), ma non identici ad esso: modelli di spesa e tipo di attività si sovrappongono.
+
+## 9. Profili
+
+```{r}
+#| label: profile-original
+wholesale |>
+  mutate(cluster = factor(cl_hc)) |>
+  summarise(n = n(), across(all_of(spend_vars), median), .by = cluster) |>
+  arrange(cluster)
+```
+
+```{r}
+#| label: fig-profile-z
+#| fig-cap: "Punteggio z medio (della spesa in scala logaritmica) di ciascun cluster di Ward nelle sei categorie."
+as_tibble(X) |>
+  mutate(cluster = factor(cl_hc)) |>
+  summarise(across(everything(), mean), .by = cluster) |>
+  pivot_longer(-cluster, names_to = "category", values_to = "z") |>
+  ggplot(aes(category, cluster, fill = z)) +
+  geom_tile(colour = "white") +
+  geom_text(aes(label = round(z, 1))) +
+  scale_fill_gradient2(low = "#0072B2", mid = "white", high = "#D55E00") +
+  labs(x = NULL, y = "Cluster", fill = "z medio") +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questi profili
+
+La tabella riporta le **mediane nelle unità monetarie originali** — che cosa spende in un anno un cliente tipico di ciascun cluster. La mappa di calore dà lo stesso confronto sulla scala logaritmica standardizzata, dove "+1" significa circa una deviazione standard sopra il cliente medio. Leggile insieme: un cluster spende molto di più in Milk, Grocery e Detergents_Paper (tipico dei negozi), l'altro relativamente di più in prodotti Fresh e Frozen (tipico di ristoranti e hotel), in accordo con la tabella a doppia entrata con `Channel`.
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Passare i dati invece delle distanze.** `hclust()` richiede un oggetto `dist`: `hclust(dist(X))`, non `hclust(X)`.
+2. **Usare `"ward.D"` con distanze ordinarie.** Non è il criterio di Ward; usa `"ward.D2"`.
+3. **Leggere l'ordine orizzontale delle foglie.** Contano solo le altezze di fusione; i rami possono essere ribaltati.
+4. **Fidarsi della silhouette (o della correlazione cofenetica) senza guardare le dimensioni dei cluster.** I legami singolo e medio possono ottenere buoni punteggi isolando un paio di valori anomali.
+5. **Dimenticare il costo.** Il clustering gerarchico memorizza tutte le $n(n-1)/2$ distanze; per decine di migliaia di osservazioni usa k-means o un sottocampione.
+6. **Supporre che le fusioni si possano annullare.** L'algoritmo è greedy: una cattiva fusione iniziale resta nell'albero per sempre.
+:::
+
+## 10. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. In un dendrogramma, le osservazioni 7 e 12 sono disegnate una accanto all'altra ma si uniscono solo in cima. Sono simili?
+
+No. La somiglianza si legge dall'**altezza** alla quale si uniscono, non dalla posizione orizzontale. Unirsi in cima significa che stanno in gruppi molto diversi.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Quale legame ti aspetti che produca un cluster gigante più alcuni singoletti su dati rumorosi, e perché?
+
+Il legame singolo. Fonde i cluster attraverso la coppia più vicina, quindi un grande cluster può continuare ad assorbire punti vicini (chaining), mentre i valori anomali isolati si uniscono solo alla fine.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Qual è la differenza tra `cutree(hc, k = 3)` e `cutree(hc, h = 3)`?
+
+`k = 3` chiede esattamente tre cluster, ovunque debba cadere il taglio. `h = 3` taglia l'albero all'altezza 3; il numero di cluster è quello dei rami che attraversano quell'altezza.
+:::
+
+## 11. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — legame singolo a mano.** Per i cinque punti A–E, ripeti i passi della sezione 2 con il legame **singolo**. A quali altezze avvengono le ultime due fusioni? Verifica con `hclust(d5, method = "single")$height`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+I passi 1–2 sono gli stessi (A–B e C–D a 1.12). Poi il legame singolo usa la coppia più vicina: $d(E, \{A,B\}) = \min(3.61, 2.50) = 2.50$, $d(E, \{C,D\}) = \min(2.83, 3.91) = 2.83$, $d(\{A,B\},\{C,D\}) = 5.32$. E si unisce a {A, B} a 2.50. Infine $d(\{A,B,E\}, \{C,D\}) = \min(5.32, 2.83, \dots) = 2.83$.
+```r
+round(hclust(d5, method = "single")$height, 2)   # 1.12 1.12 2.50 2.83
+```
+:::
+:::
+
+::: {.exercise}
+[★]{.stars} **Esercizio 2 — prevedi l'output.** Con `hc_toy` (legame completo, altezze 1.12, 1.12, 3.61, 7.50), che cosa restituiscono `cutree(hc_toy, h = 1)`, `cutree(hc_toy, h = 5)` e `cutree(hc_toy, h = 8)`?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+- `h = 1`: sotto ogni fusione, quindi cinque cluster singoletto: `1 2 3 4 5`.
+- `h = 5`: sopra 3.61 ma sotto 7.50, quindi due cluster: {A, B, E} e {C, D}.
+- `h = 8`: sopra l'ultima fusione, quindi un solo cluster: tutti `1`.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi l'errore.** Questo codice si ferma con l'enigmatico errore *"missing value where TRUE/FALSE needed"*. Perché, e come lo correggi?
+
+```r
+hc <- hclust(X, method = "ward.D2")
+```
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+`hclust()` si aspetta un oggetto di dissimilarità (classe `dist`), che porta un attributo `"Size"`; una matrice semplice non ce l'ha, e il controllo interno fallisce. Calcola prima le distanze:
+```r
+hc <- hclust(dist(X), method = "ward.D2")
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — interpreta.** Un collega riferisce: *"Il legame medio è il migliore: ha la correlazione cofenetica più alta, e a k = 2 la sua silhouette è più del doppio di quella di Ward."* Usando i risultati wholesale di questa lezione, scrivi due o tre frasi di risposta.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Entrambe le affermazioni sono numericamente vere, ma la soluzione a due cluster con legame medio mette 438 clienti in un cluster e 2 nell'altro: separa valori anomali, non segmenti di clientela. La correlazione cofenetica misura quanto bene l'albero riproduce le distanze, e la silhouette premia l'isolamento di punti lontani; nessuna delle due verifica che la partizione sia utile. La soluzione di Ward ha punteggi più bassi ma dà due gruppi consistenti che si collegano chiaramente al canale di vendita.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi sui pinguini.** Standardizza le quattro misure numeriche di `penguins` (casi completi). Costruisci gli alberi di Ward e con legame medio, tagliali entrambi a $k = 3$ e confrontali con `species` e con k-means ($k = 3$, `nstart = 25`) usando l'ARI. Quale metodo recupera meglio le specie?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+peng <- penguins |>
+  select(species, bill_len, bill_dep, flipper_len, body_mass) |>
+  na.omit()
+Xp <- scale(select(peng, -species))
+dp <- dist(Xp)
+cl_ward <- cutree(hclust(dp, method = "ward.D2"), k = 3)
+cl_avg  <- cutree(hclust(dp, method = "average"), k = 3)
+set.seed(1)
+cl_km <- kmeans(Xp, centers = 3, nstart = 25)$cluster
+
+table(cl_ward, peng$species)
+table(cl_avg,  peng$species)
+sapply(list(ward = cl_ward, average = cl_avg, kmeans = cl_km),
+       \(cl) adjustedRandIndex(cl, peng$species))
+```
+Ward recupera meglio le specie (ARI circa 0.92, solo pochi Chinstrap raggruppati con gli Adelie), meglio di k-means (circa 0.79). Il legame medio fonde Adelie e Chinstrap e stacca una manciata di Gentoo — un altro esempio di legame che isola un piccolo gruppo.
+:::
+:::
+
+## Riepilogo
+
+| Compito | Codice | Da ricordare |
+|---|---|---|
+| Distanze | `d <- dist(X)` | scala (e trasforma) prima |
+| Costruire l'albero | `hclust(d, method = "ward.D2")` | anche `"single"`, `"complete"`, `"average"` |
+| Grafico | `plot(hc, labels = FALSE, hang = -1)`; `rect.hclust(hc, k)` | altezza = distanza di fusione |
+| Tagliare | `cutree(hc, k = 3)` oppure `cutree(hc, h = 2)` | un albero, molte partizioni |
+| Fedeltà dell'albero | `cor(cophenetic(hc), d)` | buona mappa ≠ buoni cluster |
+| Qualità della partizione | `cluster::silhouette(cutree(hc, k), d)` | controlla anche le dimensioni dei cluster |
+| Confrontare partizioni | `mclust::adjustedRandIndex(a, b)` | ignora i nomi delle etichette |
+
+- Il clustering agglomerativo **fonde ripetutamente i due cluster più vicini**; il **legame** definisce "più vicini".
+- Il legame singolo crea catene e isola i valori anomali; completo e Ward danno gruppi compatti; il medio sta in mezzo.
+- Leggi i dendrogrammi dall'**altezza**, mai dall'ordine sinistra-destra; taglia con `cutree()`.
+- Scegli il legame e $k$ con gli indici **e** le dimensioni dei cluster **e** l'interpretabilità; confronta con k-means per la robustezza.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2a ed.), sezione 12.4.2, <https://www.statlearning.com>
+- Murtagh, F. & Legendre, P. (2014). Ward's hierarchical agglomerative clustering method: which algorithms implement Ward's criterion? *Journal of Classification*, 31, 274–295.
+- `?hclust` e `?cutree` in R.
+:::

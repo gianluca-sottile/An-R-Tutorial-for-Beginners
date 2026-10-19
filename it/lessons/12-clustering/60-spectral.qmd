@@ -1,0 +1,538 @@
+---
+title: "Clustering spettrale"
+subtitle: "Raggruppare per connettività, non per distanza da un centro — costruiscilo da te, poi usa kernlab"
+description: "Grafi di similarità, laplaciano di un grafo e suoi autovettori; un clustering spettrale completo in poche righe di R base che separa cerchi concentrici dove k-means fallisce; la scelta della scala del kernel e del numero di cluster con l'eigengap e la stabilità; kernlab::specc e uno sguardo onesto ai dati wholesale."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~90 min]{} [Prerequisiti: [Matrici](../01-foundations/05-matrices.qmd), [Analisi delle componenti principali](../11-dimred/50-pca.qmd), [Clustering k-means](56-kmeans.qmd), [DBSCAN: clustering basato sulla densità](58-dbscan.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare come il clustering spettrale trasforma i dati in un **grafo di similarità** e perché i suoi **autovettori** rivelano i cluster;
+- implementare in R base un clustering spettrale minimale (affinità RBF, affinità normalizzata, autovettori, k-means sulla rappresentazione con righe normalizzate) e verificare che funzioni;
+- scegliere la **scala del kernel** e il **numero di cluster** con l'eigengap e la stabilità, e spiegare perché la silhouette nello spazio originale è lo strumento sbagliato;
+- usare `kernlab::specc()`, passando correttamente tra il suo `sigma` e l'ampiezza del kernel;
+- valutare su dati reali se il clustering spettrale aggiunge qualcosa rispetto a k-means.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+#| message: false
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+library(kernlab)   # specc(), kernelf()
+library(cluster)   # silhouette()
+library(mclust)    # adjustedRandIndex()
+```
+
+## 1. Perché la connettività?
+
+Pensa a un gruppo di amici a una festa, disposti in un grande cerchio lungo le pareti della sala, e a un altro gruppo che balla al centro. Una persona nel cerchio può essere fisicamente più vicina a un ballerino che all'amico dalla parte opposta del cerchio. Eppure tutti vedono che ci sono due gruppi: all'interno di ciascun gruppo, le persone sono legate ai loro **vicini**, che sono legati ai *propri* vicini, e così via.
+
+k-means chiede: "a quale **centro** è più vicino ogni punto?" — e quindi può produrre solo cluster convessi, a forma di nuvola. Nella [lezione su k-means](56-kmeans.qmd) ha tagliato due anelli concentrici come una torta. Il **clustering spettrale** pone un'altra domanda: "quali punti sono **connessi** tra loro tramite catene di vicini prossimi?" Lo fa in tre passi:
+
+1. costruisce un **grafo di similarità**: ogni coppia di punti è collegata con un peso grande quando sono vicini e quasi nullo quando sono lontani;
+2. calcola alcuni **autovettori** di una matrice derivata da quel grafo; essi forniscono a ogni punto nuove coordinate (una **rappresentazione**, o *embedding*) in cui i gruppi connessi diventano nuvole compatte;
+3. esegue il normale **k-means** nella rappresentazione.
+
+Anche DBSCAN ([lezioni precedenti](58-dbscan.qmd)) usa la connettività, ma tramite una soglia rigida `eps`. Il clustering spettrale usa pesi graduali e restituisce sempre esattamente $k$ cluster, senza etichetta di rumore.
+
+## 2. I dati: anelli concentrici
+
+Riutilizziamo i due anelli della lezione su k-means.
+
+```{r}
+#| label: rings-data
+set.seed(5)
+r     <- c(rnorm(150, 1, 0.1), rnorm(150, 3, 0.1))
+theta <- runif(300, 0, 2 * pi)
+rings <- tibble(x = r * cos(theta), y = r * sin(theta),
+                truth = rep(1:2, each = 150))
+X_rings <- as.matrix(rings[, c("x", "y")])
+
+set.seed(1)
+km_rings <- kmeans(X_rings, centers = 2, nstart = 25)
+adjustedRandIndex(km_rings$cluster, rings$truth)
+```
+
+Come prima, k-means non fa meglio del caso (ARI `r round(adjustedRandIndex(km_rings$cluster, rings$truth), 3)`).
+
+## 3. Passo 1: il grafo di similarità
+
+La similarità più comune è l'**affinità gaussiana (RBF)**
+
+$$
+A_{ij} = \exp\!\left(-\frac{\lVert x_i - x_j \rVert^2}{2 s^2}\right), \qquad A_{ii} = 0 ,
+$$
+
+dove $s$ è una **scala** (una lunghezza, nelle unità dei dati). Due punti a distanza molto minore di $s$ ottengono un'affinità vicina a 1; due punti a distanza $3s$ ottengono $e^{-4.5} \approx 0.01$; oltre, il legame è praticamente assente. Quindi $s$ decide **quanto lontano arriva il "vicinato"**.
+
+```{r}
+#| label: affinity-function
+rbf_affinity <- function(x, s) {
+  A <- exp(-as.matrix(dist(x))^2 / (2 * s^2))
+  diag(A) <- 0
+  A
+}
+```
+
+Come scegliamo $s$? Un'euristica utile la lega ai dati: prendi, per ogni punto, la distanza dal suo 7° vicino più prossimo, e usa la **mediana** di queste distanze. In questo modo ogni punto è fortemente legato a una manciata di vicini, qualunque siano le unità.
+
+```{r}
+#| label: knn-scale
+knn_scale <- function(x, k = 7) {
+  D <- as.matrix(dist(x))
+  median(apply(D, 1, \(d) sort(d)[k + 1]))   # sort(d)[1] è il punto stesso
+}
+s_rings <- knn_scale(X_rings)
+s_rings
+```
+
+Con $s =$ `r round(s_rings, 2)`, i punti sullo stesso anello sono legati ai loro vicini lungo l'anello, mentre il vuoto di circa 2 unità tra gli anelli corrisponde a un'affinità di circa $e^{-2^2/(2 \cdot `r round(s_rings, 2)`^2)}$, che è essenzialmente 0. Il grafo è (quasi) **due pezzi separati**.
+
+## 4. Passi 2 e 3: autovettori e k-means
+
+Sia $D$ la matrice diagonale dei **gradi** $d_i = \sum_j A_{ij}$ (l'affinità totale del punto $i$). L'algoritmo di Ng, Jordan & Weiss (2002) calcola i $k$ autovettori principali dell'**affinità normalizzata** $M = D^{-1/2} A D^{-1/2}$, li affianca in una matrice $U$ di dimensione $n \times k$, riscala ogni **riga** di $U$ a lunghezza 1 ed esegue k-means su queste righe.
+
+```{r}
+#| label: spectral-functions
+spectral_embed <- function(x, s, k) {
+  A   <- rbf_affinity(x, s)
+  deg <- rowSums(A)
+  M   <- A / sqrt(outer(deg, deg))            # D^(-1/2) A D^(-1/2)
+  eig <- eigen(M, symmetric = TRUE)           # autovalori in ordine decrescente
+  U   <- eig$vectors[, 1:k, drop = FALSE]     # i k autovettori principali
+  list(embedding   = U / sqrt(rowSums(U^2)),  # ogni riga ha lunghezza 1
+       eigenvalues = 1 - eig$values)          # autovalori del laplaciano
+}
+
+spectral_cluster <- function(x, k, s, nstart = 25) {
+  emb <- spectral_embed(x, s, k)$embedding
+  kmeans(emb, centers = k, nstart = nstart)$cluster
+}
+```
+
+```{r}
+#| label: spectral-rings
+set.seed(1)
+cl_sp <- spectral_cluster(X_rings, k = 2, s = s_rings)
+table(spectral = cl_sp, truth = rings$truth)
+c(kmeans   = adjustedRandIndex(km_rings$cluster, rings$truth),
+  spectral = adjustedRandIndex(cl_sp, rings$truth))
+```
+
+Le nostre dodici righe di R base separano perfettamente i due anelli (ARI `r round(adjustedRandIndex(cl_sp, rings$truth), 2)`). Perché funziona? Guarda la rappresentazione:
+
+```{r}
+#| label: embedding-unique
+emb_rings <- spectral_embed(X_rings, s_rings, k = 2)
+unique(round(emb_rings$embedding, 4))
+```
+
+Tutti i 300 punti collassano in appena `r nrow(unique(round(emb_rings$embedding, 4)))` posizioni distinte nella rappresentazione — una per anello. In quello spazio i cluster non sono solo compatti, sono singoli punti, e k-means non può sbagliare.
+
+```{r}
+#| label: fig-rings-spectral
+#| fig-cap: "Anelli concentrici. A sinistra: k-means li taglia a fette. A destra: il clustering spettrale (la nostra implementazione in R base) segue gli anelli."
+#| fig-height: 4.5
+bind_rows(
+  rings |> mutate(cluster = factor(km_rings$cluster), method = "k-means"),
+  rings |> mutate(cluster = factor(cl_sp), method = "spettrale (R base)")
+) |>
+  ggplot(aes(x, y, colour = cluster)) +
+  geom_point(alpha = 0.7) +
+  facet_wrap(~ method) +
+  coord_equal() +
+  labs(colour = "Cluster")
+```
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: il laplaciano del grafo e perché gli autovettori trovano i cluster
+
+Per un grafo pesato con matrice di affinità $A$ e matrice dei gradi $D$, il **laplaciano del grafo** è $L = D - A$ e il **laplaciano normalizzato simmetrico** è
+
+$$
+L_{\text{sym}} = I - D^{-1/2} A D^{-1/2} = I - M .
+$$
+
+Quindi $M$ e $L_{\text{sym}}$ hanno gli **stessi autovettori**, e l'autovalore $\mu$ di $M$ corrisponde all'autovalore $\lambda = 1 - \mu$ di $L_{\text{sym}}$. Gli `eigenvalues` restituiti da `spectral_embed()` sono questi $\lambda$, in ordine crescente. Fatti chiave:
+
+- $L$ è semidefinito positivo: per ogni vettore $f$, $f^\top L f = \tfrac12 \sum_{i,j} A_{ij} (f_i - f_j)^2 \ge 0$. Un valore piccolo significa che $f$ cambia poco tra punti fortemente connessi.
+- L'autovalore $0$ di $L_{\text{sym}}$ ha **molteplicità uguale al numero di componenti connesse** del grafo; il suo autospazio è generato da $D^{1/2}\mathbf{1}_{C}$ per ciascuna componente $C$ (vettori indicatori, riponderati con $\sqrt{d_i}$).
+- Quindi, se il grafo ha $k$ pezzi separati, i $k$ autovettori principali di $M$ sono (a meno di una rotazione) vettori indicatori dei pezzi. Dopo aver normalizzato le righe, tutti i punti di un pezzo vengono mappati sullo **stesso punto** della sfera unitaria — esattamente ciò che abbiamo visto per gli anelli.
+- Quando i pezzi sono connessi *debolmente* (non completamente), la teoria delle perturbazioni dice che la rappresentazione è vicina a quella ideale, e k-means nella rappresentazione li separa comunque. Formalmente, il metodo risolve un rilassamento continuo del problema del **taglio normalizzato** (*normalized cut*): dividere il grafo in modo che il peso totale degli archi tagliati, rispetto al volume di ciascun lato, sia minimo (Shi & Malik, 2000; von Luxburg, 2007).
+
+Una rapida verifica numerica del secondo fatto sugli anelli: i primi due autovalori del laplaciano sono praticamente 0, il terzo no.
+
+```{r}
+#| label: laplacian-check
+signif(emb_rings$eigenvalues[1:4], 2)
+```
+:::
+
+## 5. Scegliere la scala s
+
+La scala è la scelta più importante nel clustering spettrale. Proviamo un intervallo di valori, da molto più piccoli a molto più grandi dell'euristica kNN.
+
+```{r}
+#| label: scale-grid
+s_grid <- s_rings * c(0.5, 0.75, 1, 1.5, 2, 4, 10)
+scale_res <- tibble(s = s_grid) |>
+  mutate(
+    cl  = lapply(s, \(v) { set.seed(1); spectral_cluster(X_rings, 2, v) }),
+    ari_truth = sapply(cl, \(c1) adjustedRandIndex(c1, rings$truth)),
+    lambda_2  = sapply(s, \(v) spectral_embed(X_rings, v, 2)$eigenvalues[2]),
+    lambda_3  = sapply(s, \(v) spectral_embed(X_rings, v, 2)$eigenvalues[3])
+  )
+scale_res |> select(-cl) |> mutate(across(everything(), \(v) signif(v, 2)))
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Per un **ampio intervallo** di scale attorno all'euristica (qui da metà al doppio di $s$), il risultato è lo stesso e corretto: il metodo è **stabile** rispetto a $s$. Quel plateau è ciò che vogliamo vedere.
+- Quando $s$ diventa paragonabile al vuoto tra gli anelli, i legami attraverso il vuoto acquistano peso reale, $\lambda_2$ non è più vicino a 0 e il risultato peggiora fino a tendere alla risposta di k-means.
+- Un'euristica alternativa molto comune, la **mediana di tutte le distanze a coppie** (`median(dist(x))` = `r round(median(dist(X_rings)), 2)` qui), è vicina all'ultima riga della tabella — decisamente troppo ampia per questi dati. Le distanze globali descrivono la dimensione dell'intera nuvola di dati, non quella di un vicinato.
+- (Scale molto piccole causano il problema opposto: il grafo si spezza in molti piccoli pezzi, diversi autovalori sono 0 e gli autovettori descrivono frammenti arbitrari.)
+:::
+
+### Non scegliere s con la silhouette
+
+È allettante provare molti valori di $s$ e tenere quello con la migliore silhouette media, come faceva la vecchia versione di questa lezione. Guarda che cosa succede:
+
+```{r}
+#| label: silhouette-trap
+d_rings <- dist(X_rings)
+scale_res |>
+  mutate(silhouette = sapply(cl, \(c1) mean(silhouette(c1, d_rings)[, 3]))) |>
+  select(s, ari_truth, silhouette) |>
+  mutate(across(everything(), \(v) round(v, 3)))
+```
+
+La silhouette, calcolata con le distanze euclidee nello spazio originale, è **più alta per la risposta sbagliata**. Premia cluster compatti, convessi e ben separati (vedi [l'introduzione](55-clustering-intro.qmd)) — proprio l'assunzione che il clustering spettrale dovrebbe abbandonare. Scegliere $s$ con la silhouette riporta il clustering spettrale verso k-means. Usa invece l'**eigengap** e la **stabilità**.
+
+## 6. Scegliere k: l'eigengap
+
+Gli autovalori del laplaciano suggeriscono anche il numero di cluster. Se il grafo è formato da $k$ pezzi quasi separati, i primi $k$ autovalori sono vicini a 0 e il $(k+1)$-esimo è nettamente più grande. Questo salto è l'**eigengap**.
+
+```{r}
+#| label: fig-eigengap-rings
+#| fig-cap: "Primi 10 autovalori del laplaciano normalizzato per gli anelli (scala logaritmica; i valori sotto 1e-12 sono disegnati a 1e-12). Due autovalori sono essenzialmente nulli, poi c'è un salto."
+tibble(index = 1:10, lambda = emb_rings$eigenvalues[1:10]) |>
+  ggplot(aes(index, pmax(lambda, 1e-12))) +
+  geom_point(size = 2.5, colour = "#0072B2") +
+  geom_line(colour = "#0072B2") +
+  scale_x_continuous(breaks = 1:10) +
+  scale_y_log10() +
+  labs(x = "Indice", y = "Autovalore del laplaciano (scala logaritmica)")
+```
+
+Per gli anelli il secondo autovalore è circa `r signif(emb_rings$eigenvalues[2], 1)` e il terzo circa `r signif(emb_rings$eigenvalues[3], 1)`: un salto di diversi ordini di grandezza dopo $k = 2$. Due osservazioni pratiche:
+
+- Guarda gli autovalori su **scala logaritmica** o come rapporti quando sono minuscoli. Cluster lunghi e sottili come gli anelli hanno molti autovalori piccoli (ma non nulli) *all'interno* di ciascun cluster; su scala lineare le differenze tra questi possono sembrare più grandi del salto cruciale da "zero" a "piccolo".
+- L'eigengap dipende da $s$. Leggilo per una scala in cui il clustering è stabile.
+
+## 7. kernlab::specc()
+
+Il pacchetto `kernlab` implementa lo stesso algoritmo in `specc()`. Il suo kernel RBF è parametrizzato in modo diverso:
+
+$$
+\texttt{rbfdot(sigma)}: \quad k(x, y) = \exp\!\left(-\sigma \lVert x - y\rVert^2\right),
+$$
+
+quindi `sigma` è un **inverso di un'ampiezza al quadrato**: un `sigma` *più grande* significa vicinati *più stretti*. Confrontando con la nostra affinità, $\sigma = 1/(2s^2)$.
+
+```{r}
+#| label: specc-rings
+sigma_rings <- 1 / (2 * s_rings^2)
+sigma_rings
+
+set.seed(1)
+sc_rings <- specc(X_rings, centers = 2, kernel = "rbfdot",
+                  kpar = list(sigma = sigma_rings))
+cl_specc <- as.vector(sc_rings@.Data)
+table(specc = cl_specc, ours = cl_sp)
+adjustedRandIndex(cl_specc, rings$truth)
+```
+
+`specc()` restituisce un oggetto che si comporta come un vettore di etichette dei cluster (`@.Data`), con informazioni aggiuntive disponibili tramite `size(sc)`, `centers(sc)` (centri nella rappresentazione) e `kernelf(sc)` (il kernel usato).
+
+Per impostazione predefinita, `kpar = "automatic"` lascia che `specc()` stimi `sigma` dai dati con una propria euristica:
+
+```{r}
+#| label: specc-auto
+set.seed(1)
+sc_auto <- specc(X_rings, centers = 2)
+kernelf(sc_auto)
+adjustedRandIndex(as.vector(sc_auto@.Data), rings$truth)
+```
+
+La scelta automatica dà qui un ARI di `r round(adjustedRandIndex(as.vector(sc_auto@.Data), rings$truth), 2)`. Qualunque valore venga usato, controllalo: riconvertilo in un'ampiezza, $s = 1/\sqrt{2\sigma}$, e confrontalo con le distanze nei tuoi dati. (`kpar = "local"` usa una scala *locale* diversa per ogni punto, seguendo Zelnik-Manor & Perona, 2004.)
+
+## 8. Dati reali: i clienti all'ingrosso
+
+Il clustering spettrale è pensato per forme non convesse ma connesse. I dati wholesale ne hanno? Stesso pre-trattamento di prima:
+
+```{r}
+#| label: wholesale-prep
+wholesale <- read_csv(data_path("wholesale_customers.csv"),
+                      show_col_types = FALSE)
+spend_vars <- c("Fresh", "Milk", "Grocery", "Frozen",
+                "Detergents_Paper", "Delicassen")
+
+X <- wholesale |>
+  select(all_of(spend_vars)) |>
+  mutate(across(everything(), log1p)) |>
+  scale()
+
+s_w <- knn_scale(X)
+emb_w <- spectral_embed(X, s_w, k = 2)
+round(emb_w$eigenvalues[1:8], 3)
+```
+
+```{r}
+#| label: fig-eigengap-wholesale
+#| fig-cap: "Primi 10 autovalori del laplaciano per i dati wholesale. Dopo il primo (sempre 0), crescono in modo graduale: non c'è un gruppo di autovalori quasi nulli né un eigengap chiaro."
+tibble(index = 1:10, lambda = emb_w$eigenvalues[1:10]) |>
+  ggplot(aes(index, lambda)) +
+  geom_point(size = 2.5, colour = "#0072B2") +
+  geom_line(colour = "#0072B2") +
+  scale_x_continuous(breaks = 1:10) +
+  labs(x = "Indice", y = "Autovalore del laplaciano")
+```
+
+Solo il primo autovalore è 0; il secondo è già `r round(emb_w$eigenvalues[2], 2)`. Il grafo di similarità è **un unico pezzo connesso**, senza parti debolmente legate: l'eigengap non fornisce evidenza di gruppi separati. Ciò concorda con quanto ci ha detto DBSCAN nelle [lezioni precedenti](58-dbscan.qmd). Se vogliamo comunque una segmentazione in due gruppi, possiamo calcolarla e confrontarla:
+
+```{r}
+#| label: wholesale-spectral
+set.seed(1)
+cl_w <- spectral_cluster(X, k = 2, s = s_w)
+
+set.seed(1)
+sc_w <- specc(X, centers = 2, kernel = "rbfdot",
+              kpar = list(sigma = 1 / (2 * s_w^2)))
+
+set.seed(123)
+km_w <- kmeans(X, centers = 2, nstart = 50)
+
+c(ours_vs_specc    = adjustedRandIndex(cl_w, as.vector(sc_w@.Data)),
+  ours_vs_kmeans   = adjustedRandIndex(cl_w, km_w$cluster),
+  ours_vs_channel  = adjustedRandIndex(cl_w, wholesale$Channel),
+  kmeans_vs_channel = adjustedRandIndex(km_w$cluster, wholesale$Channel))
+```
+
+### Stabilità al variare della scala
+
+```{r}
+#| label: wholesale-stability
+tibble(mult = c(0.5, 0.75, 1, 1.5, 2)) |>
+  mutate(
+    cl = lapply(mult, \(m) { set.seed(1); spectral_cluster(X, 2, m * s_w) }),
+    sizes = sapply(cl, \(c1) paste(sort(table(c1)), collapse = "/")),
+    ari_vs_s = sapply(cl, \(c1) round(adjustedRandIndex(c1, cl_w), 3))
+  ) |>
+  select(-cl)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questi output
+
+- Con la scala kNN, la nostra implementazione divide i clienti in gruppi di `r paste(sort(table(cl_w)), collapse = " e ")`, essenzialmente la stessa divisione di k-means (ARI `r round(adjustedRandIndex(cl_w, km_w$cluster), 2)`), e con la stessa relazione con il canale di vendita (ARI `r round(adjustedRandIndex(cl_w, wholesale$Channel), 2)` contro `r round(adjustedRandIndex(km_w$cluster, wholesale$Channel), 2)` per k-means).
+- La partizione è stabile per scale da circa 0.75 a 2 volte $s$. A metà scala il grafo comincia a sfaldarsi attorno ad alcuni clienti anomali, e i "due cluster" diventano "una manciata di valori anomali contro tutti gli altri" — un altro segnale che non esiste una struttura di gruppi forte e connessa.
+- `specc()` con lo stesso `sigma` dovrebbe concordare da vicino con la nostra implementazione (primo numero); le piccole differenze derivano dalle partenze casuali di k-means nella rappresentazione.
+:::
+
+```{r}
+#| label: fig-wholesale-pca
+#| fig-cap: "Partizioni spettrale (a sinistra) e k-means (a destra) dei clienti wholesale, sulle prime due componenti principali."
+#| fig-height: 4.5
+pc <- prcomp(X)$x
+bind_rows(
+  tibble(PC1 = pc[, 1], PC2 = pc[, 2], cluster = factor(cl_w),
+         method = "spettrale"),
+  tibble(PC1 = pc[, 1], PC2 = pc[, 2], cluster = factor(km_w$cluster),
+         method = "k-means")
+) |>
+  ggplot(aes(PC1, PC2, colour = cluster)) +
+  geom_point(alpha = 0.6) +
+  facet_wrap(~ method) +
+  labs(colour = "Cluster")
+```
+
+I profili nelle unità originali, come sempre:
+
+```{r}
+#| label: wholesale-profiles
+wholesale |>
+  mutate(cluster = factor(cl_w)) |>
+  summarise(n = n(), across(all_of(spend_vars), median), .by = cluster) |>
+  arrange(cluster)
+```
+
+::: {.callout-important}
+## Una conclusione onesta per i dati wholesale
+
+Qui il clustering spettrale **non** aggiunge nulla. Gli autovalori mostrano un'unica nuvola connessa, e la soluzione a due cluster riproduce la divisione di k-means (clienti tipo negozio contro tipo ristorante). Quando i gruppi sono grosso modo nuvole convesse — o quando non ci sono gruppi chiari — un metodo più semplice è più facile da spiegare e meno costoso da calcolare. Il clustering spettrale ripaga la sua complessità aggiuntiva quando i cluster sono **non convessi ma connessi**, come gli anelli.
+:::
+
+## 9. Note pratiche
+
+- **Costo.** La matrice di affinità ha $n^2$ elementi e una decomposizione spettrale completa costa circa $n^3$ operazioni: va bene per qualche migliaio di punti, troppo lenta oltre. Usa grafi sparsi dei $k$ vicini più prossimi, l'approssimazione di Nyström (`specc(..., nystrom.red = TRUE)`) o un sottocampione.
+- **Scalatura.** L'affinità usa le distanze euclidee, quindi standardizza le variabili misurate in unità diverse, esattamente come per k-means.
+- **Valori anomali.** Un punto lontano da tutti ha affinità minuscole e può formare un proprio "cluster"; controlla le dimensioni dei cluster.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Confondere il `sigma` di kernlab con un'ampiezza.** In `rbfdot(sigma)` il kernel è $\exp(-\sigma\lVert x-y\rVert^2)$: `sigma` è l'*inverso* di un'ampiezza al quadrato, $\sigma = 1/(2s^2)$. Raddoppiare `sigma` rende i vicinati *più stretti*.
+2. **Scegliere la scala o k con la silhouette nello spazio originale.** Favorisce i cluster convessi e riporta il clustering spettrale alla risposta di k-means. Usa l'eigengap e la stabilità.
+3. **Usare una scala globale come la mediana di tutte le distanze** per dati con strutture sottili o annidate. Lega la scala alla dimensione del vicinato (distanze kNN) e controlla un intervallo attorno ad essa.
+4. **Leggere l'eigengap solo su scala lineare.** Quando gli autovalori sono minuscoli, il salto decisivo è negli ordini di grandezza.
+5. **Dare per scontato che il clustering spettrale sia sempre migliore.** Su dati a forma di nuvola riproduce k-means a un costo molto più alto.
+6. **Dimenticare `set.seed()`.** Il passo finale di k-means (e `specc()`) usa partenze casuali.
+:::
+
+## 10. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. kernlab riporta `sigma = 2`. Qual è la scala s corrispondente nella nostra parametrizzazione?
+
+$s = 1/\sqrt{2\sigma} = 1/\sqrt{4} = 0.5$. I punti molto più vicini di 0.5 sono fortemente legati; i punti a più di circa 1.5 di distanza sono praticamente slegati.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. I primi cinque autovalori del laplaciano sono 0, 0, 0, 0.41, 0.47. Quanti cluster suggerisce l'eigengap?
+
+Tre: tre autovalori sono (essenzialmente) nulli, quindi il grafo ha tre pezzi quasi separati, e il salto viene dopo il terzo.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Perché un anello diventa un singolo punto nella rappresentazione spettrale?
+
+Perché, quando il grafo si divide in pezzi separati, gli autovettori principali sono costanti (a meno dei pesi $\sqrt{d_i}$) su ciascun pezzo. Dopo aver normalizzato ogni riga a lunghezza 1, tutti i punti dello stesso pezzo ottengono le stesse coordinate.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Il clustering spettrale e k-means danno ARI 0.95 sui tuoi dati. Che cosa riporti?
+
+Che la struttura dei cluster, qualunque essa sia, è catturata altrettanto bene da k-means. Preferisci il metodo più semplice per la comunicazione, e menziona che un metodo basato su grafi ha dato la stessa risposta — un utile controllo di robustezza.
+:::
+
+## 11. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — affinità a mano.** Con $s = 0.5$, calcola l'affinità RBF di due punti a distanza 0.25, 0.5, 1 e 2. Poi indica il `sigma` equivalente di kernlab.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+d <- c(0.25, 0.5, 1, 2)
+round(exp(-d^2 / (2 * 0.5^2)), 4)   # 0.8825 0.6065 0.1353 0.0003
+1 / (2 * 0.5^2)                     # sigma = 2
+```
+A distanza $s$ l'affinità è $e^{-1/2} \approx 0.61$; a $4s$ è praticamente zero.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — debug.** Uno studente vuole vicinati *più ampi* di quelli predefiniti e scrive `specc(X, centers = 2, kpar = list(sigma = 50))`, aspettandosi un risultato più liscio. Il clustering diventa irregolare, con cluster minuscoli. Perché?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+In kernlab, `sigma` moltiplica la distanza al quadrato: $\exp(-\sigma\lVert x-y\rVert^2)$. Un `sigma` **grande** significa un kernel **stretto** ($s = 1/\sqrt{2 \cdot 50} = 0.1$), quindi il grafo si sfalda in frammenti e compaiono cluster minuscoli. Per vicinati più ampi, *diminuisci* `sigma`.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — due lune.** Genera le due lune della [lezione su DBSCAN](58-dbscan.qmd) **senza** i punti di fondo (copia la funzione `make_moons()` da quella lezione, poi `set.seed(1); moons <- make_moons()`). Esegui `spectral_cluster()` con la scala kNN e k-means con $k = 2$, e confronta entrambi con la verità. Guarda i primi sei autovalori del laplaciano.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+set.seed(1)
+moons <- make_moons()
+X_m <- as.matrix(moons[, c("x", "y")])
+s_m <- knn_scale(X_m)
+set.seed(1)
+cl_m <- spectral_cluster(X_m, k = 2, s = s_m)
+set.seed(1)
+km_m <- kmeans(X_m, centers = 2, nstart = 25)
+c(spectral = adjustedRandIndex(cl_m, moons$truth),
+  kmeans   = adjustedRandIndex(km_m$cluster, moons$truth))
+signif(spectral_embed(X_m, s_m, 2)$eigenvalues[1:6], 2)
+```
+Il clustering spettrale recupera perfettamente le lune (ARI 1); k-means no (circa 0.29). Gli autovalori mostrano due valori vicini a zero (il secondo è circa $5 \times 10^{-6}$) e poi un salto all'ordine di $10^{-3}$.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — interpreta.** Un collega ha regolato `sigma` su una griglia massimizzando la silhouette media e riporta: "miglior `sigma` = 0.05, silhouette 0.41; il clustering spettrale concorda con k-means (ARI 0.97)". Qual è il tuo commento?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+L'accordo con k-means non sorprende: un `sigma` piccolo è un kernel **ampio**, che fa comportare il clustering spettrale come un metodo a centroidi, e la silhouette favorisce proprio le partizioni convesse, simili a quelle di k-means. La procedura di regolazione era orientata verso la risposta di k-means. Per sapere se il clustering spettrale trova una struttura diversa, connessa, guarda l'eigengap e la stabilità della partizione su un intervallo di scale legate alla dimensione del vicinato.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi: pinguini.** Standardizza le quattro misure numeriche di `penguins` (casi completi). Calcola la scala kNN e i primi 8 autovalori del laplaciano. Quanti cluster suggerisce l'eigengap? Adatta `spectral_cluster()` con quel $k$ e con $k = 3$, e confronta con le specie e con k-means ($k = 3$).
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+peng <- penguins |>
+  select(species, bill_len, bill_dep, flipper_len, body_mass) |>
+  na.omit()
+Xp <- scale(select(peng, -species))
+s_p <- knn_scale(Xp)
+round(spectral_embed(Xp, s_p, 2)$eigenvalues[1:8], 4)
+
+set.seed(1); cl_p2 <- spectral_cluster(Xp, k = 2, s = s_p)
+set.seed(1); cl_p3 <- spectral_cluster(Xp, k = 3, s = s_p)
+set.seed(1); km_p  <- kmeans(Xp, centers = 3, nstart = 25)$cluster
+table(cl_p2, peng$species)
+sapply(list(spectral_2 = cl_p2, spectral_3 = cl_p3, kmeans_3 = km_p),
+       \(cl) adjustedRandIndex(cl, peng$species))
+```
+C'è un gap netto dopo **due** autovalori (il secondo è circa 0.0005, il terzo circa 0.09): i pinguini Gentoo sono ben separati dagli altri, mentre Adelie e Chinstrap formano un'unica nuvola connessa. Con $k = 2$ la soluzione spettrale è esattamente "Gentoo contro il resto" (ARI circa 0.66). Forzare $k = 3$ divide la nuvola Adelie–Chinstrap, e qui la divisione segue abbastanza da vicino le specie (ARI circa 0.92, meglio di circa 0.79 di k-means). Quindi l'eigengap rileva i **vuoti**: quando due gruppi si toccano, non li vede, anche se il metodo può comunque separarli bene una volta che chiedi tre cluster per altre ragioni (qui, la conoscenza a priori di tre specie).
+:::
+:::
+
+## Riepilogo
+
+| Passo / idea | Codice | Da ricordare |
+|---|---|---|
+| Affinità RBF | `exp(-dist^2 / (2 * s^2))`, diagonale nulla | `s` è una lunghezza |
+| Euristica per la scala | distanza mediana dal 7° vicino | controlla un intervallo attorno ad essa |
+| Rappresentazione | autovettori principali di $D^{-1/2} A D^{-1/2}$, righe normalizzate | `eigen(M, symmetric = TRUE)` |
+| Clustering | `kmeans()` sulla rappresentazione | `set.seed()`, `nstart` |
+| Numero di cluster | eigengap degli autovalori del laplaciano | scala logaritmica per valori minuscoli |
+| kernlab | `specc(x, centers = k, kernel = "rbfdot", kpar = list(sigma = ...))` | $\sigma = 1/(2s^2)$, più grande = più stretto |
+| Ampiezza automatica | `specc(x, centers = k)`; `kernelf(sc)` | controlla il valore scelto |
+
+- Il clustering spettrale raggruppa i punti per **connettività** in un grafo di similarità, quindi può separare forme non convesse come anelli e lune.
+- Funziona trasformando il grafo in una **rappresentazione** con pochi autovettori, in cui i gruppi connessi diventano compatti, e poi eseguendo k-means in quello spazio.
+- La **scala** è la scelta critica: legala alla dimensione del vicinato, cerca un plateau stabile e leggi l'**eigengap** per scegliere $k$ — mai la silhouette nello spazio originale.
+- Su dati senza struttura connessa e non convessa (come i clienti wholesale), riproduce k-means: riportalo onestamente e preferisci il metodo più semplice.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- von Luxburg, U. (2007). A tutorial on spectral clustering. *Statistics and Computing*, 17(4), 395–416. <https://doi.org/10.1007/s11222-007-9033-z>
+- Ng, A., Jordan, M. & Weiss, Y. (2002). On spectral clustering: analysis and an algorithm. *Advances in Neural Information Processing Systems* 14.
+- Karatzoglou, A., Smola, A., Hornik, K. & Zeileis, A. (2004). kernlab — an S4 package for kernel methods in R. *Journal of Statistical Software*, 11(9). <https://doi.org/10.18637/jss.v011.i09>
+:::
+

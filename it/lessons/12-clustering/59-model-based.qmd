@@ -1,0 +1,581 @@
+---
+title: "Clustering basato su modelli: misture gaussiane"
+subtitle: "I cluster come distribuzioni di probabilità — con appartenenze soft, forme ellittiche e BIC"
+description: "Comprendi i modelli a misture finite attraverso un esempio unidimensionale, osserva l'algoritmo EM all'opera in poche righe di R base, adatta misture gaussiane con mclust, leggi i modelli di covarianza e il BIC, usa le assegnazioni probabilistiche e l'incertezza, e confronta con k-means."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~90 min]{} [Prerequisiti: [Distribuzioni di probabilità](../07-probability/29-distributions.qmd), [Clustering: il quadro generale](55-clustering-intro.qmd), [Clustering k-means](56-kmeans.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare un **modello a misture finite** e leggere le densità delle componenti stimate in un esempio unidimensionale;
+- descrivere l'**algoritmo EM** (E-step e M-step) ed eseguirne una piccola versione in R base;
+- adattare misture gaussiane con `mclust::Mclust()` e interpretare i **modelli di covarianza** (EII … VVV) e il **BIC** (in `mclust`, più alto è meglio);
+- usare le **assegnazioni probabilistiche** (soft: probabilità a posteriori) e l'**incertezza** di ciascuna osservazione;
+- confrontare una mistura con k-means tramite l'ARI e **descrivere i profili** dei cluster nelle unità originali.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+#| message: false
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+library(mclust)    # Mclust(), mclustBIC(), mclustICL(), adjustedRandIndex()
+```
+
+## 1. Perché un modello?
+
+k-means e il clustering gerarchico sono **algoritmi**: seguono una ricetta e restituiscono dei gruppi. Non dicono *quanto sono sicuri* di ogni assegnazione, non possono esprimere che un gruppo è più ampio o più allungato di un altro, e non offrono un modo rigoroso di scegliere il numero di gruppi.
+
+Il **clustering basato su modelli** parte da una domanda diversa: *che tipo di processo può aver generato questi dati?* La sua risposta è una **mistura**: la popolazione è composta da poche sottopopolazioni (i cluster), ciascuna con una propria distribuzione di probabilità, di solito normale (gaussiana). Una volta adattato un modello di questo tipo:
+
+- ogni osservazione ottiene una **probabilità** di appartenere a ciascun cluster (un'assegnazione *soft*);
+- i cluster possono avere **dimensioni, dispersioni e orientamenti** diversi;
+- il numero di cluster e la forma dei cluster possono essere scelti confrontando i modelli con un **criterio basato sulla verosimiglianza** (BIC).
+
+## 2. Una mistura in una dimensione: Old Faithful
+
+I dati incorporati `faithful` registrano 272 eruzioni del geyser Old Faithful a Yellowstone. La durata dell'eruzione (`eruptions`, in minuti) è chiaramente **bimodale**: ci sono eruzioni brevi e lunghe.
+
+```{r}
+#| label: fig-faithful-hist
+#| fig-cap: "Durate di 272 eruzioni di Old Faithful: due gobbe, breve e lunga."
+ggplot(faithful, aes(eruptions)) +
+  geom_histogram(bins = 30, fill = "grey75", colour = "white") +
+  labs(x = "Durata dell'eruzione (minuti)", y = "Numero di eruzioni")
+```
+
+Una **mistura gaussiana a due componenti** dice che ogni eruzione è generata in due fasi:
+
+1. la natura sceglie prima un tipo: *breve* con probabilità $\pi_1$, *lunga* con probabilità $\pi_2 = 1 - \pi_1$;
+2. poi estrae la durata da una distribuzione normale con la media $\mu_g$ e la deviazione standard $\sigma_g$ di quel tipo.
+
+Quindi la densità di una durata $x$ è una somma pesata di due curve a campana:
+
+$$
+f(x) = \pi_1\, \phi(x \mid \mu_1, \sigma_1) + \pi_2\, \phi(x \mid \mu_2, \sigma_2),
+$$
+
+dove $\phi(x \mid \mu, \sigma)$ è la densità normale (`dnorm(x, mu, sigma)` in R). Le **proporzioni di mistura** $\pi_g$ sono le dimensioni dei cluster nella popolazione. Non osserviamo mai il tipo, solo la durata: il tipo è una variabile **latente** (nascosta).
+
+## 3. Adattare una mistura: l'algoritmo EM
+
+Se conoscessimo il tipo di ogni eruzione, adattare il modello sarebbe facile: basterebbe calcolare proporzione, media e DS di ciascun tipo. Se conoscessimo i parametri, potremmo calcolare per ogni eruzione la probabilità di ciascun tipo. L'**algoritmo EM** (*expectation–maximisation*, attesa–massimizzazione) alterna questi due passi facili:
+
+- **E-step** — con i parametri correnti, calcola per ogni osservazione $i$ la **responsabilità** $\tau_{ig}$: la probabilità che appartenga alla componente $g$, dato il suo valore.
+- **M-step** — ristima proporzioni, medie e DS come medie **pesate**, in cui ogni osservazione conta per la componente $g$ con peso $\tau_{ig}$.
+
+È come k-means con assegnazioni *soft*: invece di mettere ogni punto interamente in un cluster, EM lo ripartisce secondo le probabilità. Ecco una versione completa per una variabile:
+
+```{r}
+#| label: em-function
+em_1d <- function(x, mu, sigma, prop, max_iter = 500, tol = 1e-8) {
+  loglik <- numeric(0)
+  for (it in seq_len(max_iter)) {
+    # E-step: densità pesate e responsabilità tau[i, g]
+    dens <- sapply(seq_along(mu), \(g) prop[g] * dnorm(x, mu[g], sigma[g]))
+    loglik[it] <- sum(log(rowSums(dens)))
+    tau <- dens / rowSums(dens)
+    # M-step: proporzioni, medie e deviazioni standard pesate
+    n_g   <- colSums(tau)
+    prop  <- n_g / length(x)
+    mu    <- colSums(tau * x) / n_g
+    sigma <- sqrt(colSums(tau * outer(x, mu, "-")^2) / n_g)
+    if (it > 1 && loglik[it] - loglik[it - 1] < tol) break
+  }
+  list(mu = mu, sigma = sigma, prop = prop, tau = tau, loglik = loglik)
+}
+```
+
+Partiamo da una stima grezza — medie 2 e 4, DS 1, proporzioni uguali — e lasciamo fare il resto a EM.
+
+```{r}
+#| label: em-fit
+em <- em_1d(faithful$eruptions, mu = c(2, 4), sigma = c(1, 1),
+            prop = c(0.5, 0.5))
+round(c(prop = em$prop, mu = em$mu, sigma = em$sigma), 3)
+length(em$loglik)
+round(em$loglik[c(1:4, length(em$loglik))], 2)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Circa il `r round(100 * em$prop[1])`% delle eruzioni è breve, con media `r round(em$mu[1], 2)` min e DS `r round(em$sigma[1], 2)`; quelle lunghe hanno media `r round(em$mu[2], 2)` min e una DS **più grande**, `r round(em$sigma[2], 2)`.
+- EM è arrivato a convergenza in `r length(em$loglik)` iterazioni. La **log-verosimiglianza** (quanto sono probabili i dati con i parametri correnti) è aumentata a ogni iterazione — cosa garantita per EM — da `r round(em$loglik[1], 1)` a `r round(tail(em$loglik, 1), 2)`.
+:::
+
+```{r}
+#| label: fig-faithful-mixture
+#| fig-cap: "La mistura a due componenti stimata. Tratteggiata: ciascuna componente, pesata per la sua proporzione; continua: la loro somma, cioè la densità della mistura."
+curves <- tibble(x = seq(1.2, 5.6, length.out = 400)) |>
+  mutate(
+    short   = em$prop[1] * dnorm(x, em$mu[1], em$sigma[1]),
+    long    = em$prop[2] * dnorm(x, em$mu[2], em$sigma[2]),
+    mixture = short + long
+  ) |>
+  pivot_longer(-x, names_to = "curve", values_to = "density")
+
+ggplot(faithful, aes(eruptions)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30,
+                 fill = "grey80", colour = "white") +
+  geom_line(data = curves, aes(x, density, colour = curve,
+                               linetype = curve), linewidth = 1) +
+  scale_linetype_manual(values = c(long = 2, mixture = 1, short = 2)) +
+  labs(x = "Durata dell'eruzione (minuti)", y = "Densità",
+       colour = NULL, linetype = NULL)
+```
+
+### Assegnazioni soft
+
+Le responsabilità sono l'**assegnazione soft** di ciascuna eruzione. Il cluster hard è la componente con la responsabilità più grande, e $1 - \max_g \tau_{ig}$ è l'**incertezza**:
+
+```{r}
+#| label: em-soft
+cl_em  <- max.col(em$tau)
+unc_em <- 1 - apply(em$tau, 1, max)
+table(cl_em)
+faithful |>
+  mutate(p_short = round(em$tau[, 1], 3), uncertainty = round(unc_em, 3)) |>
+  arrange(desc(uncertainty)) |>
+  head(4)
+```
+
+Quasi tutte le eruzioni sono classificate con quasi certezza; solo `r sum(unc_em > 0.1)` hanno un'incertezza superiore a 0.1. Si trovano nella valle tra le due gobbe, dove entrambe le componenti sono plausibili.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: le equazioni di EM e perché la verosimiglianza aumenta
+
+Con $G$ componenti e parametri $\theta = (\pi_g, \mu_g, \sigma_g)_{g=1}^G$, la log-verosimiglianza è
+
+$$
+\ell(\theta) = \sum_{i=1}^n \log \sum_{g=1}^G \pi_g\, \phi(x_i \mid \mu_g, \sigma_g).
+$$
+
+Il logaritmo di una somma è difficile da massimizzare direttamente. EM introduce le etichette latenti $z_i$ e itera:
+
+**E-step.** $\displaystyle \tau_{ig} = P(z_i = g \mid x_i; \theta^{(t)}) = \frac{\pi_g \phi(x_i \mid \mu_g, \sigma_g)}{\sum_h \pi_h \phi(x_i \mid \mu_h, \sigma_h)}$.
+
+**M-step.** Con $n_g = \sum_i \tau_{ig}$:
+$$
+\pi_g = \frac{n_g}{n}, \qquad
+\mu_g = \frac{1}{n_g}\sum_i \tau_{ig}\, x_i, \qquad
+\sigma_g^2 = \frac{1}{n_g}\sum_i \tau_{ig}\,(x_i - \mu_g)^2 .
+$$
+
+Sono esattamente le righe di `em_1d()`. Ogni iterazione massimizza un limite inferiore di $\ell$ che tocca $\ell$ nei parametri correnti, quindi $\ell(\theta^{(t+1)}) \ge \ell(\theta^{(t)})$. Come k-means, EM converge a un massimo **locale**, quindi i valori iniziali contano. Una verifica numerica diretta: massimizzare $\ell$ con un ottimizzatore generico raggiunge lo stesso valore.
+
+```{r}
+#| label: em-check-optim
+x  <- faithful$eruptions
+nll <- function(p) {      # p = (logit pi1, mu1, mu2, log s1, log s2)
+  -sum(log(plogis(p[1]) * dnorm(x, p[2], exp(p[4])) +
+           (1 - plogis(p[1])) * dnorm(x, p[3], exp(p[5]))))
+}
+opt <- optim(c(0, 2, 4, 0, 0), nll, method = "BFGS")
+c(optim = -opt$value, em = tail(em$loglik, 1))
+```
+:::
+
+## 4. Lo stesso modello con mclust
+
+Il pacchetto `mclust` (Scrucca, Fop, Murphy & Raftery, 2016) adatta misture gaussiane con EM, sceglie buoni valori iniziali e confronta molti modelli. In una dimensione ci sono due modelli di covarianza: `"E"` (stessa varianza in tutte le componenti) e `"V"` (varianze variabili). Il nostro adattamento con `em_1d()` è il modello `"V"` con $G = 2$:
+
+```{r}
+#| label: mclust-faithful-2
+fit_v2 <- Mclust(faithful$eruptions, G = 2, modelNames = "V")
+rbind(
+  mclust = c(fit_v2$parameters$pro, fit_v2$parameters$mean,
+             sqrt(fit_v2$parameters$variance$sigmasq)),
+  em_1d  = c(em$prop, em$mu, em$sigma)
+) |> round(3)
+```
+
+Le stime coincidono (a meno dell'ordine delle componenti e di minime differenze numeriche). Ora lasciamo che `mclust` scelga il numero di componenti e il modello tramite il **BIC**:
+
+```{r}
+#| label: mclust-faithful-bic
+bic_f <- mclustBIC(faithful$eruptions, G = 1:6)
+summary(bic_f)
+```
+
+```{r}
+#| label: fig-faithful-bic
+#| fig-cap: "BIC di misture unidimensionali con da 1 a 6 componenti, per varianze uguali (E) e variabili (V). In mclust il modello migliore ha il BIC più alto."
+plot(bic_f)
+```
+
+::: {.callout-important}
+## In mclust, un BIC più alto è meglio
+
+Molti manuali definiscono $\text{BIC} = -2\log L + m \log n$ (più basso è meglio). `mclust` usa il **segno opposto**:
+$$
+\text{BIC} = 2 \log L - m \log n ,
+$$
+dove $m$ è il numero di parametri liberi e $n$ la numerosità campionaria. Il primo termine premia l'adattamento, il secondo penalizza la complessità. **Scegli il modello con il BIC più grande.** Una differenza inferiore a circa 2 è di solito considerata un'evidenza debole; sopra 10, forte.
+:::
+
+Verifichiamo la formula con il nostro adattamento. Con una componente il modello ha $m = 2$ parametri (media, varianza); con due componenti "V", $m = 5$ (due medie, due varianze, una proporzione libera):
+
+```{r}
+#| label: bic-by-hand
+x <- faithful$eruptions
+n <- length(x)
+s1 <- sqrt(mean((x - mean(x))^2))            # DS di massima verosimiglianza
+c(G1 = 2 * sum(dnorm(x, mean(x), s1, log = TRUE)) - 2 * log(n),
+  G2 = 2 * tail(em$loglik, 1) - 5 * log(n))
+c(mclust_G1 = bic_f[1, "V"], mclust_G2 = bic_f[2, "V"])
+```
+
+Due componenti sono molto meglio di una. `summary(bic_f)` elenca i primi tre modelli; se vince un modello con più di due componenti, guarda le differenze di BIC prima di concludere che esistono più di due *tipi* di eruzione: componenti in più spesso descrivono semplicemente in modo più flessibile una gobba asimmetrica o appiattita.
+
+## 5. Più dimensioni: i modelli di covarianza
+
+Con $p$ variabili, ogni componente $g$ ha un vettore delle medie $\mu_g$ e una **matrice di covarianza** $\Sigma_g$, che descrive la forma della sua nuvola di punti: una sfera, un'ellisse allineata agli assi o un'ellisse inclinata. `mclust` scrive ogni covarianza come
+
+$$
+\Sigma_g = \lambda_g\, D_g A_g D_g^\top ,
+$$
+
+con tre ingredienti geometrici:
+
+- **volume** $\lambda_g$ — quanto è grande la nuvola;
+- **forma** $A_g$ — quanto è allungata (una matrice diagonale di lunghezze relative degli assi);
+- **orientamento** $D_g$ — in quale direzione punta.
+
+Ciascun ingrediente può essere **E**guale tra le componenti, **V**ariabile oppure (per forma e orientamento) l'**I**dentità. I nomi di tre lettere dei modelli indicano volume–forma–orientamento:
+
+| Modello | Volume | Forma | Orientamento | I cluster appaiono come |
+|---|---|---|---|---|
+| `EII` | uguale | identità | — | sfere della stessa dimensione (il più vicino a k-means) |
+| `VII` | variabile | identità | — | sfere di dimensioni diverse |
+| `EEI` | uguale | uguale | assi | ellissi identiche allineate agli assi |
+| `VVI` | variabile | variabile | assi | ellissi diverse allineate agli assi |
+| `EEE` | uguale | uguale | uguale | ellissi inclinate identiche (una covarianza comune) |
+| `VEV`, `EVV`, … | misto | misto | variabile | vincoli intermedi |
+| `VVV` | variabile | variabile | variabile | ogni cluster ha la propria covarianza (il più flessibile) |
+
+`mclust` adatta 14 modelli di questo tipo (`?mclustModelNames` li elenca tutti). I modelli semplici hanno pochi parametri e sono stabili; `VVV` ha $G\,p(p+1)/2$ parametri di covarianza, che diventano molti con molte variabili e poche osservazioni. Il BIC bilancia l'adattamento con questo costo.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: k-means come caso particolare
+
+Prendi una mistura con proporzioni uguali e il modello `EII` ($\Sigma_g = \lambda I$ per ogni $g$). Se sostituiamo l'E-step soft con uno hard (assegna ogni punto alla componente con la responsabilità più alta) e facciamo tendere $\lambda \to 0$, le responsabilità diventano 0/1 in base alla **media più vicina** e l'M-step calcola le **medie dei cluster**: è esattamente k-means. Quindi k-means assume implicitamente cluster sferici di uguale dimensione e dispersione. I modelli a misture rilassano ogni parte di questa assunzione.
+:::
+
+## 6. Pinguini: una mistura trova le specie?
+
+Usiamo le stesse quattro misure standardizzate delle lezioni precedenti. (La standardizzazione non è strettamente necessaria per i modelli più flessibili, ma porta le variabili su scale confrontabili, il che conta per i modelli più semplici come `EII` e per i valori iniziali.)
+
+```{r}
+#| label: penguins-data
+peng <- penguins |>
+  select(species, bill_len, bill_dep, flipper_len, body_mass) |>
+  na.omit()
+peng_z <- scale(select(peng, -species))
+
+fit_p <- Mclust(peng_z, G = 1:9)
+summary(fit_p)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- L'intestazione indica il modello selezionato: qui `r fit_p$modelName` con `r fit_p$G` componenti, cioè il modello di covarianza e il $G$ con il **BIC più alto** tra tutti quelli adattati.
+- `log-likelihood`, `n`, `df` (numero di parametri) e `BIC` sono gli ingredienti della formula sopra; `ICL` è un criterio correlato (sezione 9).
+- La **tabella dei cluster** riporta la dimensione di ciascun cluster (hard).
+:::
+
+```{r}
+#| label: fig-penguins-bic
+#| fig-cap: "BIC per i 14 modelli di covarianza e da 1 a 9 componenti sui dati dei pinguini. Più alto è meglio."
+plot(fit_p, what = "BIC")
+```
+
+```{r}
+#| label: penguins-compare
+table(cluster = fit_p$classification, species = peng$species)
+
+fit_p3 <- Mclust(peng_z, G = 3)
+set.seed(1)
+km_p <- kmeans(peng_z, centers = 3, nstart = 25)
+c(mclust_BIC_choice = adjustedRandIndex(fit_p$classification, peng$species),
+  mclust_G3         = adjustedRandIndex(fit_p3$classification, peng$species),
+  kmeans_k3         = adjustedRandIndex(km_p$cluster, peng$species))
+```
+
+Il BIC sceglie $G =$ `r fit_p$G`. Con $G = 3$, la mistura (modello `r fit_p3$modelName`) raggiunge un ARI con le specie di `r round(adjustedRandIndex(fit_p3$classification, peng$species), 2)`, contro `r round(adjustedRandIndex(km_p$cluster, peng$species), 2)` di k-means. `r if (adjustedRandIndex(fit_p3$classification, peng$species) > adjustedRandIndex(km_p$cluster, peng$species)) "Consentire cluster **ellittici e correlati** qui aiuta: all'interno di una specie, lunghezza del becco, lunghezza delle pinne e massa corporea crescono insieme, quindi ogni specie forma un'ellisse inclinata anziché una sfera." else "Qui la flessibilità in più non aiuta: i cluster ellittici stimati dalla mistura non si allineano meglio alle specie rispetto a quelli sferici di k-means."` Nota anche che il numero di componenti preferito dal BIC non deve per forza coincidere con il numero di specie: il BIC sceglie il miglior *modello di densità*, e una singola specie può essere descritta meglio da più di una gaussiana (per esempio, maschi e femmine).
+
+## 7. Assegnazioni soft e incertezza
+
+`Mclust` memorizza le responsabilità in `$z` (una colonna per cluster) e l'incertezza $1 - \max_g \tau_{ig}$ in `$uncertainty`.
+
+```{r}
+#| label: penguins-soft
+round(head(fit_p3$z), 3)
+summary(fit_p3$uncertainty)
+peng |>
+  mutate(cluster = fit_p3$classification,
+         uncertainty = fit_p3$uncertainty) |>
+  arrange(desc(uncertainty)) |>
+  head(5)
+```
+
+Gli esemplari più incerti sono quelli che stanno tra due cluster — spesso pinguini Adelie e Chinstrap con misure intermedie. Un metodo di clustering hard li assegnerebbe con apparente sicurezza; la mistura ci dice onestamente che non è sicura. Un uso pratico: riporta i cluster per le osservazioni assegnate con sicurezza e segnala quelle incerte (diciamo, incertezza > 0.2) per un esame più attento.
+
+## 8. Clienti all'ingrosso
+
+Ora i dati wholesale, con il solito pre-trattamento.
+
+```{r}
+#| label: wholesale-prep
+wholesale <- read_csv(data_path("wholesale_customers.csv"),
+                      show_col_types = FALSE)
+spend_vars <- c("Fresh", "Milk", "Grocery", "Frozen",
+                "Detergents_Paper", "Delicassen")
+
+X <- wholesale |>
+  select(all_of(spend_vars)) |>
+  mutate(across(everything(), log1p)) |>
+  scale()
+
+fit_w <- Mclust(X, G = 1:9)
+summary(fit_w)
+summary(fit_w$BIC)
+```
+
+```{r}
+#| label: fig-wholesale-bic
+#| fig-cap: "BIC per numero di componenti e modello di covarianza, dati wholesale."
+plot(fit_w, what = "BIC")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `summary(fit_w)` fornisce il modello scelto (`r fit_w$modelName`, $G =$ `r fit_w$G`) e le dimensioni dei cluster.
+- `summary(fit_w$BIC)` elenca i **tre modelli migliori** con le loro differenze di BIC dal migliore. Se i secondi classificati sono entro poche unità di BIC e hanno un $G$ diverso, i dati non decidono con chiarezza il numero di cluster — frequente con i dati sui clienti.
+- Nel grafico del BIC, una curva che continua a salire lentamente con $G$ è un segnale che la mistura sta descrivendo soprattutto una *forma* non gaussiana dei dati, non gruppi ben separati.
+:::
+
+### Confronto con k-means e con il canale di vendita
+
+```{r}
+#| label: wholesale-compare
+set.seed(123)
+km_w <- kmeans(X, centers = fit_w$G, nstart = 50)
+c(mclust_vs_kmeans  = adjustedRandIndex(fit_w$classification, km_w$cluster),
+  mclust_vs_channel = adjustedRandIndex(fit_w$classification,
+                                        wholesale$Channel),
+  kmeans_vs_channel = adjustedRandIndex(km_w$cluster, wholesale$Channel))
+summary(fit_w$uncertainty)
+```
+
+Con lo stesso numero di cluster, la mistura e k-means concordano con ARI `r round(adjustedRandIndex(fit_w$classification, km_w$cluster), 2)`. Un valore chiaramente inferiore a 1 significa che i cluster ellittici e disuguali della mistura tracciano confini diversi da quelli sferici di k-means. A differenza di k-means, la mistura ci dice anche che `r sum(fit_w$uncertainty > 0.2)` clienti (il `r round(100 * mean(fit_w$uncertainty > 0.2))`%) hanno un'incertezza superiore a 0.2.
+
+```{r}
+#| label: fig-wholesale-pca
+#| fig-cap: "Cluster della mistura sulle prime due componenti principali. I punti sbiaditi sono assegnazioni incerte."
+pc <- prcomp(X)$x
+tibble(PC1 = pc[, 1], PC2 = pc[, 2],
+       cluster = factor(fit_w$classification),
+       certainty = 1 - fit_w$uncertainty) |>
+  ggplot(aes(PC1, PC2, colour = cluster, alpha = certainty)) +
+  geom_point(size = 1.8) +
+  scale_alpha(range = c(0.15, 1)) +
+  labs(colour = "Cluster", alpha = "1 − incertezza")
+```
+
+### Profili nelle unità originali
+
+Come sempre, descrivi i cluster con quantità che un dirigente comprende: la spesa annua mediana per categoria, più la dimensione del cluster.
+
+```{r}
+#| label: wholesale-profiles
+wholesale |>
+  mutate(cluster = factor(fit_w$classification)) |>
+  summarise(n = n(), across(all_of(spend_vars), median), .by = cluster) |>
+  arrange(cluster)
+
+table(cluster = fit_w$classification, channel = wholesale$Channel)
+```
+
+Le medie della mistura (`fit_w$parameters$mean`) sono sulla scala logaritmica standardizzata, quindi servono per confrontare i cluster ma non per riportarli. Le mediane qui sopra sono nelle unità monetarie originali. La tabella di contingenza con `Channel` (1 = Horeca, 2 = Retail), non usato per il clustering, aiuta a dare un nome ai cluster.
+
+## 9. ICL: un criterio che preferisce cluster ben separati
+
+Il BIC seleziona il miglior modello **per la densità** dei dati. Se due gaussiane molto sovrapposte descrivono un cluster asimmetrico meglio di una sola, il BIC ne sceglierà due — anche se, come *cluster*, non sono separate. La **verosimiglianza completa integrata** (ICL; Biernacki, Celeux & Govaert, 2000) aggiunge una penalità per la sovrapposizione: è il BIC meno un termine che cresce quando le responsabilità sono lontane da 0 e 1. L'ICL tende quindi a scegliere cluster meno numerosi e meglio separati.
+
+```{r}
+#| label: icl
+icl_w <- mclustICL(X, G = 1:9)
+summary(icl_w)
+```
+
+Se BIC e ICL concordano, bene. Se l'ICL sceglie meno componenti, le componenti in più scelte dal BIC probabilmente descrivono la *forma* dei cluster più che gruppi aggiuntivi. Riporta quale criterio hai usato e perché.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Scegliere il modello con il BIC più piccolo.** In `mclust` il BIC è definito in modo che **più alto sia meglio**.
+2. **Identificare le componenti della mistura con i gruppi.** Un cluster non gaussiano (asimmetrico, curvo) può richiedere diverse componenti gaussiane. Usa l'ICL, guarda i grafici e unisci le componenti se descrivono un solo gruppo.
+3. **Ignorare l'incertezza.** Le assegnazioni soft sono la principale informazione in più che una mistura fornisce; riporta quante osservazioni sono incerte.
+4. **Troppi parametri.** `VVV` con molte variabili e poche osservazioni può essere instabile o non convergere; `mclust` riporta allora valori di BIC mancanti per quei modelli. Aiutano modelli di covarianza più semplici o la riduzione della dimensione.
+5. **Descrivere i cluster solo con le medie stimate sulla scala trasformata.** Fornisci mediane (o medie) nelle unità originali.
+6. **Dimenticare che EM trova un ottimo locale.** `mclust` usa valori iniziali accurati, ma un pre-trattamento diverso o un sottocampione diverso possono cambiare la soluzione; verifica la stabilità come nell'[introduzione](55-clustering-intro.qmd).
+:::
+
+## 10. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Due modelli hanno BIC −2540 e −2525 in mclust. Quale è preferito, e con quanta forza?
+
+Quello con −2525: è **più alto** di 15, il che, secondo la scala consueta, è un'evidenza forte.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Un'osservazione ha responsabilità (0.48, 0.47, 0.05). Qual è il suo cluster hard e la sua incertezza, e che cosa ne faresti?
+
+Cluster hard 1 (la responsabilità più grande), incertezza $1 - 0.48 = 0.52$. Si trova tra i cluster 1 e 2 e non va trattata come un membro tipico di nessuno dei due; segnalala oppure riportala come "tra 1 e 2".
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Quale modello di covarianza di mclust corrisponde più da vicino alle assunzioni di k-means?
+
+`EII`: cluster sferici con volume uguale. k-means ne è il limite con assegnazione hard e proporzioni uguali.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Perché il BIC può scegliere quattro componenti quando credi che ci siano due gruppi?
+
+Perché il BIC sceglie il miglior **modello di densità**, non la miglior partizione. Se un gruppo è asimmetrico o ha una forma non ellittica, due gaussiane possono descriverlo meglio di una. L'ICL, che penalizza le componenti sovrapposte, è più in linea con l'idea di "cluster".
+:::
+
+## 11. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — prevedi le responsabilità.** Usando i parametri stimati in `em`, un'eruzione di 3 minuti è più vicina alla media breve (circa 2.0) che alla media lunga (circa 4.3). Prevedi a quale componente viene assegnata, poi calcola le sue responsabilità con `em$prop * dnorm(3, em$mu, em$sigma)`, normalizzate in modo che sommino a 1.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+d <- em$prop * dnorm(3, em$mu, em$sigma)
+round(d / sum(d), 3)        # circa 0.012 (breve) e 0.988 (lunga)
+```
+Sorprendentemente, va alla componente **lunga** con probabilità circa 0.99. La componente breve è stretta (DS circa 0.24), quindi 3 minuti distano circa 4 DS da essa; la componente lunga è più ampia (DS circa 0.44), e 3 minuti distano meno di 3 DS. Una mistura misura la distanza nelle unità della dispersione propria di ciascun cluster; k-means, che usa la distanza grezza dalle medie, assegnerebbe questa eruzione al cluster breve.
+:::
+:::
+
+::: {.exercise}
+[★]{.stars} **Esercizio 2 — debug.** Uno studente scrive: *"Ho adattato `Mclust()` e ho tenuto il modello con il BIC più piccolo, che era `EII` con una componente."* Che cosa è andato storto?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+In `mclust`, BIC $= 2\log L - m\log n$, quindi **più grande è meglio**. Lo studente ha scelto il modello *peggiore*. L'oggetto adattato contiene già il migliore (`fit$modelName`, `fit$G`), e `summary(fit$BIC)` elenca i primi tre.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — EM e valori iniziali.** Esegui `em_1d()` su `faithful$eruptions` partendo da `mu = c(3.5, 3.5)`, `sigma = c(1, 1)`, `prop = c(0.5, 0.5)`. Che cosa ottieni, e perché? Poi parti da `mu = c(1.5, 5.5)`, `sigma = c(0.1, 0.1)`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+em_sym <- em_1d(faithful$eruptions, mu = c(3.5, 3.5), sigma = c(1, 1),
+                prop = c(0.5, 0.5))
+em_sym[c("mu", "sigma", "prop")]
+```
+Con componenti iniziali identiche, entrambe ottengono le stesse responsabilità (0.5 ciascuna) per ogni osservazione, quindi l'M-step le rende di nuovo identiche: l'algoritmo resta bloccato su una soluzione **simmetrica** in cui entrambe le componenti sono uguali alla media complessiva (circa 3.49) e alla DS complessiva (circa 1.14). EM non rompe mai da solo una simmetria perfetta. Dal secondo punto di partenza, asimmetrico, EM raggiunge la stessa soluzione di prima (log-verosimiglianza circa −276.4): i valori iniziali contano, ma in problemi semplici di solito basta una partenza ragionevole e asimmetrica.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — interpreta.** Una mistura gaussiana su 1.000 clienti dà: modello `VEV`, $G = 4$; dimensioni 410, 290, 220, 80; 170 clienti con incertezza > 0.2; l'ICL seleziona $G = 3$. Scrivi tre frasi per un report.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Il miglior modello di densità secondo il BIC ha quattro cluster ellittici con volumi e orientamenti diversi ma una forma comune. Circa il 17% dei clienti è assegnato con un'incertezza notevole, quindi i confini tra i cluster sono sfumati. Poiché l'ICL preferisce tre cluster, due delle quattro componenti probabilmente si sovrappongono e potrebbero descrivere un unico gruppo non gaussiano; esaminerei quali due, e presenterei la soluzione a tre gruppi a meno che la quarta componente non abbia un'interpretazione chiara e utile.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi: cluster allungati.** Ricrea le bande allungate dalla [lezione su k-means](56-kmeans.qmd), sezione 8 (`set.seed(6)`, due bande orizzontali). Adatta `Mclust(..., G = 2)` e k-means con $k = 2$, e confronta entrambi con la verità tramite l'ARI. Quale modello di covarianza seleziona `Mclust`, e perché ha successo?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+set.seed(6)
+elongated <- tibble(
+  x = c(rnorm(150, 0, 3), rnorm(150, 0, 3)),
+  y = c(rnorm(150, 0, 0.3), rnorm(150, 2, 0.3)),
+  truth = rep(1:2, each = 150)
+)
+xy <- elongated[, c("x", "y")]
+fit_el <- Mclust(xy, G = 2)
+set.seed(1)
+km_el <- kmeans(xy, centers = 2, nstart = 25)
+fit_el$modelName
+c(mclust = adjustedRandIndex(fit_el$classification, elongated$truth),
+  kmeans = adjustedRandIndex(km_el$cluster, elongated$truth))
+```
+k-means ha un ARI vicino a 0 (taglia le bande verticalmente); la mistura dovrebbe essere vicina a 1. Il modello selezionato ha tipicamente componenti **allungate e allineate agli assi** (un modello diagonale come `EEI`): ogni banda è una nuvola normale con varianza grande in $x$ e piccola in $y$, cosa che una matrice di covarianza può rappresentare e una sfera no.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 6 — profila e dai un nome.** Per la mistura wholesale `fit_w`, calcola la **responsabilità media** di ciascun cluster all'interno di ciascun `Channel` (`aggregate(fit_w$z, list(channel = wholesale$Channel), mean)`) e la spesa mediana per cluster. Dai a ogni cluster un nome breve e indica quale è il meno chiaramente definito.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+aggregate(fit_w$z, list(channel = wholesale$Channel), mean)
+wholesale |>
+  mutate(cluster = fit_w$classification, unc = fit_w$uncertainty) |>
+  summarise(n = n(), mean_uncertainty = mean(unc),
+            across(all_of(spend_vars), median), .by = cluster)
+```
+I nomi derivano dai profili: cluster con Grocery, Milk e Detergents_Paper elevati e molti clienti Retail ("tipo negozio"), cluster con Fresh e Frozen elevati e molti clienti Horeca ("tipo ristorante"), e forse un piccolo cluster con spesa complessivamente bassa. Il cluster meno chiaramente definito è quello con la **più alta incertezza media**: i suoi membri stanno spesso tra altri due cluster. I tuoi nomi esatti dipendono dalla soluzione selezionata dal BIC.
+:::
+:::
+
+## Riepilogo
+
+| Compito | Codice | Da ricordare |
+|---|---|---|
+| Adattare una mistura (scelta con BIC) | `Mclust(x, G = 1:9)` | scala prima per dati multivariati |
+| Fissare $G$ / modello | `Mclust(x, G = 3, modelNames = "VVV")` | modelli 1-D: `"E"`, `"V"` |
+| Tabella e grafico del BIC | `mclustBIC(x)`, `summary(fit$BIC)`, `plot(fit, what = "BIC")` | **più alto è meglio** |
+| Modello scelto | `fit$modelName`, `fit$G` | lettere volume–forma–orientamento |
+| Assegnazione hard / soft | `fit$classification`, `fit$z` | le righe di `z` sommano a 1 |
+| Incertezza | `fit$uncertainty` | $1 - \max_g \tau_{ig}$ |
+| Parametri | `fit$parameters$pro`, `$mean`, `$variance` | sulla scala dei dati adattati |
+| Scelta orientata alla separazione | `mclustICL(x)` | cluster meno numerosi e meglio separati |
+| Confrontare partizioni | `adjustedRandIndex(a, b)` | ad esempio con k-means |
+
+- Una mistura gaussiana modella i dati come somma pesata di distribuzioni normali; ogni componente è un cluster.
+- **EM** alterna assegnazione soft (E) e stima pesata (M); aumenta la verosimiglianza e raggiunge un massimo locale.
+- I **modelli di covarianza** (EII … VVV) controllano volume, forma e orientamento dei cluster; il **BIC** (più alto è meglio) sceglie modello e $G$, l'ICL favorisce cluster separati.
+- Le **assegnazioni soft** e l'**incertezza** mostrano quali osservazioni sono ambigue — un'informazione che k-means non può dare.
+- Descrivi i profili dei cluster **nelle unità originali** e confrontali con informazioni esterne quando esistono.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Scrucca, L., Fop, M., Murphy, T. B. & Raftery, A. E. (2016). mclust 5: clustering, classification and density estimation using Gaussian finite mixture models. *The R Journal*, 8(1), 289–317. <https://journal.r-project.org/archive/2016/RJ-2016-021/>
+- Documentazione e vignetta del pacchetto `mclust`, <https://cran.r-project.org/package=mclust>
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2a ed.), capitolo 12, <https://www.statlearning.com>
+:::
+

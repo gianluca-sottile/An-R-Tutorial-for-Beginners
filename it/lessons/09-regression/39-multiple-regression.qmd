@@ -1,0 +1,524 @@
+---
+title: "Regressione multipla"
+subtitle: "Più predittori, fattori, interazioni — e la diagnostica che ti tiene onesto"
+description: "Interpreta i coefficienti 'a parità degli altri predittori', usa predittori categoriali e interazioni, individua la multicollinearità e i punti influenti, gestisci l'eteroschedasticità con gli errori standard robusti e riporta un modello in modo chiaro."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~100 min]{} [Prerequisiti: [Regressione lineare semplice](38-simple-regression.qmd), [Fattori e tipi di variabili](../01-foundations/06-factors.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- stimare una regressione con più predittori e interpretare ciascun coefficiente **a parità degli altri**;
+- includere **predittori categoriali**, leggerne la codifica dummy e cambiare il livello di riferimento;
+- stimare e visualizzare un'**interazione** tra un predittore numerico e un fattore;
+- diagnosticare la **multicollinearità** (VIF), i **punti influenti** (leva, distanza di Cook) e l'**eteroschedasticità**, e calcolare gli errori standard robusti;
+- mostrare le previsioni di un modello con un **grafico dell'effetto parziale** e riportare il modello a parole.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(broom)
+```
+
+## 1. Perché più di un predittore?
+
+Alla fine di [Regressione semplice](38-simple-regression.qmd) abbiamo visto che la pendenza della massa corporea sulla lunghezza della pinna è circa 50 g/mm su tutti i pinguini, ma solo circa 33 g/mm entro i pinguini di Adelia. I pinguini Gentoo hanno *sia* le pinne più lunghe *sia* un corpo più grande, quindi una parte della pendenza complessiva è in realtà una **differenza tra specie**.
+
+Con un solo predittore, ogni altra influenza finisce mescolata nella sua pendenza. La **regressione multipla** inserisce più predittori nello stesso modello, così che ciascun coefficiente descriva l'associazione di un predittore con la risposta **dopo aver tenuto conto degli altri**.
+
+## 2. Due predittori numerici: "a parità degli altri"
+
+L'efficienza nei consumi (`mpg`) nei dati `mtcars` diminuisce con il peso dell'auto (`wt`, in 1000 lb). Le auto più pesanti tendono ad avere anche più cavalli (`hp`): la correlazione tra `wt` e `hp` è `r round(cor(mtcars$wt, mtcars$hp), 2)`.
+
+```{r}
+#| label: two-models
+m_wt <- lm(mpg ~ wt, data = mtcars)
+m_wt_hp <- lm(mpg ~ wt + hp, data = mtcars)
+
+coef(m_wt)
+coef(m_wt_hp)
+```
+
+Il coefficiente di `wt` passa da `r round(coef(m_wt)["wt"], 2)` a `r round(coef(m_wt_hp)["wt"], 2)`. Rispondono a domande diverse:
+
+- **Modello semplice:** le auto più pesanti di 1000 lb hanno, in media, `r round(abs(coef(m_wt)["wt"]), 1)` mpg in meno — in parte perché le auto più pesanti hanno anche motori più potenti.
+- **Modello multiplo:** tra le auto **con la stessa potenza**, quelle più pesanti di 1000 lb hanno, in media, `r round(abs(coef(m_wt_hp)["wt"]), 1)` mpg in meno.
+
+"A parità di cavalli" è un aggiustamento statistico, non un esperimento. Nessuno ha aggiunto peso a un'auto mantenendo fisso il motore; il modello confronta auto che differiscono per peso ma hanno potenza simile.
+
+```{r}
+#| label: summary-wt-hp
+summary(m_wt_hp)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Ogni riga della tabella dei coefficienti verifica $H_0: \beta_j = 0$ **dati gli altri predittori nel modello**. Sia `wt` sia `hp` aggiungono informazione rispetto all'altro.
+- **Multiple R-squared** è `r round(summary(m_wt_hp)$r.squared, 2)`. Aggiungere un predittore non può mai far diminuire l'R²; l'**R² corretto** (`r round(summary(m_wt_hp)$adj.r.squared, 2)`) penalizza ogni parametro in più ed è più equo per confrontare modelli di dimensioni diverse (approfondiremo in [Selezione del modello](40-model-selection.qmd)).
+- La **F-statistic** ora verifica tutte le pendenze insieme: $H_0: \beta_{wt} = \beta_{hp} = 0$.
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: che cosa significa "aggiustare" (Frisch–Waugh–Lovell)
+
+In forma matriciale $y = X\beta + \varepsilon$, e OLS dà $\hat\beta = (X^\top X)^{-1} X^\top y$.
+
+Il coefficiente di `wt` nel modello multiplo è uguale alla pendenza ottenuta (1) regredendo `mpg` su `hp` e tenendo i residui, (2) regredendo `wt` su `hp` e tenendo i residui, (3) regredendo i primi residui sui secondi. A parole: è l'associazione tra le parti di `mpg` e di `wt` che `hp` non riesce a spiegare.
+
+```{r}
+#| label: fwl
+e_mpg <- resid(lm(mpg ~ hp, data = mtcars))
+e_wt  <- resid(lm(wt ~ hp, data = mtcars))
+coef(lm(e_mpg ~ e_wt))["e_wt"]
+```
+
+Lo stesso numero di `m_wt_hp`.
+:::
+
+## 3. Predittori categoriali e codifica dummy
+
+Aggiungiamo ora `species` al modello dei pinguini.
+
+```{r}
+#| label: additive
+m_add <- lm(body_mass ~ flipper_len + species, data = penguins)
+tidy(m_add)
+```
+
+Un fattore con $k$ livelli entra nel modello come $k - 1$ **variabili dummy** (indicatori 0/1). Il primo livello, qui `Adelie`, è il **livello di riferimento** e non ha una dummy propria. Lo vediamo nella **matrice del modello**, la tabella numerica che `lm()` usa davvero:
+
+```{r}
+#| label: model-matrix
+model.matrix(m_add)[c("1", "161", "302"), ]
+```
+
+La riga 1 è un Adelie (entrambe le dummy a 0), la riga 161 un Gentoo, la riga 302 un Chinstrap. (Selezioniamo le righe per *nome*: le righe con valori mancanti sono state eliminate, quindi posizioni e nomi non coincidono più.)
+
+::: {.callout-tip .read-output}
+## Come leggere i coefficienti
+
+- `flipper_len`: entro una specie, 1 mm di pinna in più corrisponde in media a `r round(coef(m_add)["flipper_len"], 1)` g di massa corporea in più — molto meno dei `r round(coef(lm(body_mass ~ flipper_len, data = penguins))[2], 1)` g del modello semplice.
+- `speciesChinstrap`: i Chinstrap sono in media più leggeri di `r round(abs(coef(m_add)["speciesChinstrap"]))` g **rispetto agli Adelie con la stessa lunghezza della pinna**.
+- `speciesGentoo`: i Gentoo sono in media più pesanti di `r round(coef(m_add)["speciesGentoo"])` g **rispetto agli Adelie con la stessa lunghezza della pinna**.
+- L'intercetta è la massa attesa di un Adelie con pinne di 0 mm — priva di significato.
+:::
+
+Geometricamente, il modello disegna **tre rette parallele**, una per specie, con pendenza comune e altezze diverse.
+
+### Cambiare il livello di riferimento
+
+I coefficienti di un fattore sono sempre *differenze rispetto al riferimento*. Per confrontare invece con i Gentoo, cambia il riferimento con `relevel()` (R base) o `fct_relevel()` (forcats):
+
+```{r}
+#| label: relevel
+penguins_g <- penguins |>
+  mutate(species = fct_relevel(species, "Gentoo"))
+
+lm(body_mass ~ flipper_len + species, data = penguins_g) |> coef()
+```
+
+I valori stimati (*fitted*) sono identici; cambia solo la parametrizzazione (e quindi il significato di ogni coefficiente). Per verificare se `species` nel suo insieme conta, confronta i modelli con e senza (`anova(m_without, m_with)`, vedi Sezione 4) invece di guardare le singole dummy.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: perché solo $k-1$ dummy?
+
+Con una colonna di 1 per l'intercetta e una dummy per *ogni* livello, le dummy sommano alla colonna dell'intercetta: le colonne di $X$ sono linearmente dipendenti e $X^\top X$ non si può invertire. R segnalerebbe `NA` per un coefficiente ("not defined because of singularities"). Eliminare un livello (contrasti di trattamento, l'impostazione predefinita di R) rimuove la ridondanza. Esistono altre codifiche (`contr.sum` per la codifica degli effetti, `contr.poly` per i fattori ordinati) che cambiano il significato dei coefficienti, non l'adattamento.
+:::
+
+## 4. Interazioni: quando le pendenze differiscono
+
+Il modello additivo costringe le tre specie a condividere un'unica pendenza. È ragionevole? Un'**interazione** permette alla pendenza di `flipper_len` di dipendere da `species`. In una formula, `a * b` significa `a + b + a:b`.
+
+```{r}
+#| label: interaction
+m_int <- lm(body_mass ~ flipper_len * species, data = penguins)
+tidy(m_int)
+```
+
+```{r}
+#| label: interaction-values
+#| include: false
+b <- coef(m_int)
+slope_adelie <- b["flipper_len"]
+slope_chin <- b["flipper_len"] + b["flipper_len:speciesChinstrap"]
+slope_gentoo <- b["flipper_len"] + b["flipper_len:speciesGentoo"]
+```
+
+::: {.callout-tip .read-output}
+## Come leggere un'interazione
+
+- `flipper_len` è ora la pendenza **per la specie di riferimento** (Adelie): `r round(slope_adelie, 1)` g/mm.
+- `flipper_len:speciesChinstrap` indica di quanto la pendenza dei Chinstrap **differisce** da quella degli Adelie. Pendenza Chinstrap = `r round(slope_adelie, 1)` + `r round(b["flipper_len:speciesChinstrap"], 1)` = `r round(slope_chin, 1)` g/mm.
+- Pendenza Gentoo = `r round(slope_adelie, 1)` + `r round(b["flipper_len:speciesGentoo"], 1)` = `r round(slope_gentoo, 1)` g/mm.
+- Gli effetti principali di `species` sono ora differenze di massa **a lunghezza della pinna 0**: prive di senso e enormi. Centra il predittore (per esempio `I(flipper_len - 200)`) per ottenere differenze a 200 mm.
+:::
+
+Per visualizzare pendenze separate si stima una retta per specie. Con `colour = species`, `geom_smooth(method = "lm")` stima esattamente le rette del modello con interazione:
+
+```{r}
+#| label: fig-interaction
+#| fig-cap: "Rette di regressione separate per specie (il modello con interazione). La retta dei Gentoo è più ripida."
+#| warning: false
+ggplot(penguins, aes(flipper_len, body_mass, colour = species)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE, linewidth = 1) +
+  labs(x = "Lunghezza della pinna (mm)", y = "Massa corporea (g)", colour = NULL)
+```
+
+Serve davvero questa flessibilità in più? Il modello additivo è **annidato** nel modello con interazione (è il caso particolare in cui entrambi i coefficienti di interazione valgono 0), quindi un test F li confronta:
+
+```{r}
+#| label: anova-int
+anova(m_add, m_int)
+```
+
+Il p-value (`r format.pval(anova(m_add, m_int)[2, "Pr(>F)"], digits = 2)`) suggerisce che le pendenze differiscano davvero — soprattutto perché la retta dei Gentoo è più ripida. Nota che l'interazione dei Chinstrap da sola è lontana dalla significatività: il test F complessivo è il modo giusto per giudicare "l'interazione conta?".
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: interazioni numerico × numerico
+
+Con due predittori numerici, `y ~ x1 * x2` dà $\hat y = b_0 + b_1 x_1 + b_2 x_2 + b_3 x_1 x_2$, quindi la pendenza di $x_1$ è $b_1 + b_3 x_2$: cambia *in modo continuo* con $x_2$. Qui $b_1$ è la pendenza di $x_1$ quando $x_2 = 0$, per questo **centrare** entrambe le variabili (sottraendo le loro medie) è quasi sempre una buona idea prima di interpretare gli effetti principali.
+:::
+
+## 5. Multicollinearità e VIF
+
+Quando i predittori sono fortemente correlati tra loro, il modello fatica a separarne gli effetti: i coefficienti diventano **instabili** e i loro errori standard **gonfiati**. Considera quattro caratteristiche correlate delle auto:
+
+```{r}
+#| label: collinear
+m_four <- lm(mpg ~ disp + hp + wt + drat, data = mtcars)
+cor(mtcars[, c("disp", "hp", "wt", "drat")]) |> round(2)
+```
+
+Il **fattore di inflazione della varianza** (VIF) del predittore $j$ è $\text{VIF}_j = 1/(1 - R_j^2)$, dove $R_j^2$ è l'R² della regressione del predittore $j$ su tutti gli *altri* predittori. Indica quante volte è più grande la varianza di $\hat\beta_j$ rispetto a quella che si avrebbe con predittori non correlati.
+
+```{r}
+#| label: vif
+car::vif(m_four)
+```
+
+Verifichiamone uno a mano:
+
+```{r}
+#| label: vif-hand
+r2_disp <- summary(lm(disp ~ hp + wt + drat, data = mtcars))$r.squared
+1 / (1 - r2_disp)
+```
+
+La cilindrata del motore è in gran parte prevedibile dagli altri tre predittori (R² = `r round(r2_disp, 2)`), quindi il suo errore standard è gonfiato di un fattore circa $\sqrt{`r round(1 / (1 - r2_disp), 1)`} \approx `r round(sqrt(1 / (1 - r2_disp)), 1)`$. Le regole pratiche più comuni segnalano un VIF superiore a 5 o 10.
+
+Che cosa fare dipende dall'obiettivo:
+
+- **Previsione**: la collinearità non danneggia le previsioni entro l'intervallo dei dati; puoi lasciarla stare, oppure usare la [regressione penalizzata](43-penalized-regression.qmd).
+- **Spiegazione**: non puoi separare effetti che i dati non separano. Elimina le variabili ridondanti, combinale in un unico indice, oppure accetta IC ampi e dichiaralo.
+
+Per i modelli con fattori, `car::vif()` riporta un VIF generalizzato (GVIF) per ogni termine, e `GVIF^(1/(2*Df))` è la versione confrontabile con la radice quadrata di un VIF ordinario.
+
+## 6. Punti influenti: leva e distanza di Cook
+
+Alcune osservazioni tirano il modello stimato più di altre.
+
+- La **leva** (*leverage*, $h_{ii}$, da `hatvalues()`) misura quanto sono inusuali i **valori dei predittori** di un'osservazione. I punti con leva alta *possono* spostare molto la retta.
+- La **distanza di Cook** combina la leva con la dimensione del residuo: misura quanto cambierebbero *tutti* i valori stimati se l'osservazione venisse rimossa.
+
+```{r}
+#| label: influence
+cd <- cooks.distance(m_wt_hp)
+lev <- hatvalues(m_wt_hp)
+
+tibble::tibble(car = names(cd), cooks_d = cd, leverage = lev) |>
+  arrange(desc(cooks_d)) |>
+  head(4)
+```
+
+Una soglia di screening comune è $4/n$ (= `r round(4 / nrow(mtcars), 3)` qui) per la distanza di Cook e $2p/n$ per la leva ($p$ = numero di coefficienti). Sono segnalazioni, non verdetti.
+
+```{r}
+#| label: fig-leverage
+#| fig-cap: "Residui contro leva con le curve della distanza di Cook per mpg ~ wt + hp."
+plot(m_wt_hp, which = 5)
+```
+
+Che cosa succede senza l'auto più influente?
+
+```{r}
+#| label: refit-without
+worst <- names(which.max(cd))
+worst
+update(m_wt_hp, data = mtcars[rownames(mtcars) != worst, ]) |> coef()
+```
+
+Il coefficiente di `wt` passa da `r round(coef(m_wt_hp)["wt"], 2)` a `r round(coef(update(m_wt_hp, data = mtcars[rownames(mtcars) != worst, ]))["wt"], 2)`. **Non eliminare mai un punto solo perché è influente.** Controlla se è un errore nei dati; se è genuino, riporta i risultati con e senza di esso, oppure usa un modello che lo descriva meglio (qui: una relazione curva, vedi Esercizio 5).
+
+## 7. Eteroschedasticità ed errori standard robusti
+
+La **E** di LINE richiede una varianza degli errori costante. Quando la dispersione dei residui cambia con i valori stimati (**eteroschedasticità**), i coefficienti restano non distorti, ma gli errori standard usuali sono sbagliati. Un esempio classico è la concentrazione di ozono a New York (`airquality`):
+
+```{r}
+#| label: fig-ozone
+#| fig-cap: "Residui contro valori stimati per Ozone ~ Temp + Wind: la dispersione cresce con il valore stimato (un imbuto)."
+m_oz <- lm(Ozone ~ Temp + Wind, data = airquality)
+
+augment(m_oz) |>
+  ggplot(aes(.fitted, .resid)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_point(alpha = 0.6) +
+  labs(x = "Ozono stimato (ppb)", y = "Residuo")
+```
+
+Il **test di Breusch–Pagan** verifica se i residui al quadrato possono essere previsti dai predittori:
+
+```{r}
+#| label: bptest
+lmtest::bptest(m_oz)
+```
+
+Un p-value piccolo è evidenza di varianza non costante (il grafico di solito è più informativo del test). Gli **errori standard consistenti con l'eteroschedasticità ("robusti", "sandwich")** restano validi senza assumere varianza costante:
+
+```{r}
+#| label: robust-se
+lmtest::coeftest(m_oz, vcov. = sandwich::vcovHC(m_oz, type = "HC3"))
+```
+
+Confronta con `tidy(m_oz)`: le stime sono identiche, ma l'ES robusto di `Wind` è sensibilmente più grande di quello classico, quindi il test è meno sicuro. `HC3` è una buona scelta predefinita per campioni piccoli e medi. Alternative: trasformare la risposta, oppure usare un modello la cui varianza cresce naturalmente con la media (un [GLM](42-poisson-regression.qmd)).
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: il sandwich
+
+La covarianza classica è $\hat\sigma^2 (X^\top X)^{-1}$, che assume $\operatorname{Var}(\varepsilon_i) = \sigma^2$ per ogni $i$. Lo stimatore sandwich la sostituisce con
+
+$$
+(X^\top X)^{-1} \Big( \sum_i \omega_i\, x_i x_i^\top \Big) (X^\top X)^{-1},
+\qquad \omega_i = \frac{e_i^2}{(1 - h_{ii})^2} \ \text{per HC3},
+$$
+
+la forma "pane–companatico–pane" (*bread–meat–bread*) che gli dà il nome. Ogni osservazione contribuisce con il proprio residuo al quadrato invece che con un $\hat\sigma^2$ comune.
+:::
+
+## 8. Grafici dell'effetto parziale: mostrare che cosa dice il modello
+
+Una tabella di coefficienti è difficile da leggere quando ci sono interazioni. Un **grafico dell'effetto parziale** mostra le previsioni del modello al variare di un predittore, con gli altri **tenuti a valori fissi**. Lo facciamo con `predict()` su una griglia.
+
+Aggiungiamo `sex` al modello con interazione e rappresentiamo la massa corporea prevista in funzione della lunghezza della pinna, per specie, per i pinguini **femmina**:
+
+```{r}
+#| label: full-model
+m_full <- lm(body_mass ~ flipper_len * species + sex, data = penguins)
+```
+
+```{r}
+#| label: fig-partial
+#| fig-cap: "Massa corporea prevista dei pinguini femmina in funzione della lunghezza della pinna e della specie, con bande di confidenza al 95%. Ogni retta copre solo l'intervallo osservato per la sua specie."
+grid <- penguins |>
+  filter(!is.na(flipper_len)) |>
+  group_by(species) |>
+  reframe(flipper_len = seq(min(flipper_len), max(flipper_len),
+                            length.out = 50)) |>
+  mutate(sex = factor("female", levels = levels(penguins$sex)))
+
+pred <- predict(m_full, newdata = grid, interval = "confidence")
+grid <- bind_cols(grid, as.data.frame(pred))
+
+ggplot(grid, aes(flipper_len, fit, colour = species, fill = species)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.2, colour = NA) +
+  geom_line(linewidth = 1) +
+  labs(x = "Lunghezza della pinna (mm)", y = "Massa corporea prevista (g)",
+       colour = NULL, fill = NULL)
+```
+
+Limitare ogni retta all'intervallo osservato per la sua specie evita l'estrapolazione. Pacchetti come **marginaleffects** (`plot_predictions()`) e **ggeffects** automatizzano il procedimento, ma la logica è sempre la stessa: costruire una griglia, prevedere, rappresentare.
+
+Nota che, una volta inserito `sex` nel modello, le pendenze delle specie diventano più simili (`anova(lm(body_mass ~ flipper_len + species + sex, data = penguins), m_full)` dà p ≈ `r round(anova(lm(body_mass ~ flipper_len + species + sex, data = penguins), m_full)[2, "Pr(>F)"], 2)`). Le interazioni — come ogni coefficiente — dipendono da che cos'altro c'è nel modello.
+
+## 9. Riportare un modello
+
+Un buon resoconto indica il modello, il campione, le stime principali **con IC e unità di misura**, e come sono state verificate le assunzioni. Per il modello additivo dei pinguini con il sesso:
+
+```{r}
+#| label: report-model
+m_report <- lm(body_mass ~ flipper_len + species + sex, data = penguins)
+tidy(m_report, conf.int = TRUE) |>
+  select(term, estimate, conf.low, conf.high, p.value)
+glance(m_report) |> select(r.squared, sigma, nobs)
+```
+
+```{r}
+#| label: report-values
+#| include: false
+tr <- tidy(m_report, conf.int = TRUE)
+fl <- tr[tr$term == "flipper_len", ]
+sx <- tr[tr$term == "sexmale", ]
+```
+
+> Abbiamo modellato la massa corporea (g) come funzione lineare della lunghezza della pinna, della specie e del sesso (n = `r nobs(m_report)` pinguini con dati completi). A parità di specie e sesso, ogni millimetro in più di lunghezza della pinna era associato a una massa corporea maggiore di `r round(fl$estimate, 1)` g (IC al 95% da `r round(fl$conf.low, 1)` a `r round(fl$conf.high, 1)`). I maschi erano in media più pesanti di `r round(sx$estimate)` g rispetto alle femmine della stessa specie e con la stessa lunghezza della pinna (IC al 95% da `r round(sx$conf.low)` a `r round(sx$conf.high)`). Il modello spiegava il `r round(100 * glance(m_report)$r.squared)`% della varianza della massa corporea; i grafici dei residui non mostravano scostamenti marcati dalla linearità o dalla varianza costante.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Interpretare un effetto principale, in presenza di un'interazione, come "l'"effetto.** Con `x * group`, il coefficiente di `x` è la pendenza solo nel *gruppo di riferimento*.
+2. **Giudicare un fattore dalle singole dummy.** Se `species` conta o no è una domanda per un test F che confronta modelli, non per il p-value di una singola dummy — che dipende dal livello di riferimento, scelto in modo arbitrario.
+3. **"Controllare per" come per magia.** L'aggiustamento rimuove solo la confusione dovuta alle variabili che hai *incluso*, misurate *bene*. Non trasforma dati osservazionali in un esperimento.
+4. **Eliminare i punti influenti per "ripulire" i dati.** Indagali; riporta analisi di sensibilità.
+5. **Includere una variabile due volte.** Due versioni della stessa informazione (per esempio un fattore e il suo codice numerico, o una variabile e la sua somma con altre) causano collinearità perfetta e coefficienti `NA`.
+6. **Leggere i p-value dopo aver guardato molti modelli.** Scegliere i predittori in base ai dati rende i p-value riportati troppo ottimistici (vedi [Selezione del modello](40-model-selection.qmd)).
+:::
+
+## 10. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. In `lm(mpg ~ wt + hp)`, il coefficiente di `hp` è −0.032. Interpretalo.
+
+A parità di peso, ogni cavallo in più è associato in media a 0.032 mpg in meno (circa 3.2 mpg in meno ogni 100 hp).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Un fattore `region` ha livelli North, Centre, South (North è il primo). Quanti coefficienti stima `lm(y ~ region)` e che cosa significa l'intercetta?
+
+Tre: l'intercetta e due dummy. L'intercetta è la media di `y` nel Nord (il livello di riferimento); ciascuna dummy è la differenza tra la media di quella regione e quella del Nord.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Vero o falso: un predittore con VIF = 12 rende inaffidabili le previsioni del modello.
+
+**Falso**, in generale. Un VIF alto gonfia l'incertezza di quel *coefficiente*; le previsioni per nuovi dati simili a quelli di addestramento possono comunque essere accurate.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Gli errori standard robusti (HC3) quale parte dell'output modificano?
+
+Solo gli errori standard, e quindi i valori t, i p-value e gli IC. Le stime dei coefficienti e i valori stimati non cambiano.
+:::
+
+## 11. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — riproduci.** Stima `mpg ~ wt + factor(am)` su `mtcars` (`am`: 0 = automatico, 1 = manuale). Interpreta il coefficiente di `factor(am)1`. Poi rendi "manual" il livello di riferimento e stima di nuovo il modello.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+cars2 <- mtcars |>
+  mutate(am = factor(am, levels = c(0, 1), labels = c("auto", "manual")))
+lm(mpg ~ wt + am, data = cars2) |> tidy(conf.int = TRUE)
+
+cars2 |>
+  mutate(am = fct_relevel(am, "manual")) |>
+  lm(mpg ~ wt + am, data = _) |>
+  coef()
+```
+A parità di peso, le auto con cambio manuale hanno essenzialmente gli stessi mpg di quelle automatiche (differenza circa −0.02, IC da circa −3 a 3). L'ampia differenza grezza di mpg tra i due tipi di cambio si spiega con il fatto che le auto manuali sono più leggere. Cambiare il riferimento inverte soltanto il segno del coefficiente.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — interpreta un'interazione.** Da `m_int`, calcola a mano la massa corporea prevista di un Gentoo con pinne di 220 mm e di un Adelie con pinne di 190 mm. Controlla con `predict()`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+b <- coef(m_int)
+gentoo_220 <- b["(Intercept)"] + b["speciesGentoo"] +
+  (b["flipper_len"] + b["flipper_len:speciesGentoo"]) * 220
+adelie_190 <- b["(Intercept)"] + b["flipper_len"] * 190
+c(gentoo_220, adelie_190)
+
+predict(m_int, data.frame(flipper_len = c(220, 190),
+                          species = c("Gentoo", "Adelie")))
+```
+Circa 5230 g per il Gentoo e circa 3700 g per l'Adelie. Per un Gentoo si sommano *sia* lo scostamento dell'intercetta dei Gentoo *sia* lo scostamento della loro pendenza.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi l'errore.** Uno studente scrive
+
+```r
+penguins2 <- penguins |>
+  mutate(is_adelie = species == "Adelie",
+         is_chinstrap = species == "Chinstrap",
+         is_gentoo = species == "Gentoo")
+lm(body_mass ~ is_adelie + is_chinstrap + is_gentoo, data = penguins2)
+```
+
+e ottiene `NA` per un coefficiente. Spiega perché e indica due modi per correggere.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+I tre indicatori sommano sempre a 1, che è uguale alla colonna dell'intercetta: la matrice del disegno è singolare (Sezione 3, *Per approfondire*). R elimina l'ultimo e riporta `NA`. Rimedi: (1) lasciare la codifica a R con `lm(body_mass ~ species, data = penguins)`; (2) eliminare un indicatore (diventa il riferimento); oppure (3) eliminare l'intercetta con `- 1`, così che ogni coefficiente sia la media di un gruppo.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — la collinearità in azione.** Stima `mpg ~ disp`, poi `mpg ~ disp + wt`. Che cosa succede al coefficiente e all'errore standard di `disp`? Calcola a mano il VIF di `disp` nel secondo modello.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+tidy(lm(mpg ~ disp, data = mtcars))
+tidy(lm(mpg ~ disp + wt, data = mtcars))
+1 / (1 - summary(lm(disp ~ wt, data = mtcars))$r.squared)
+```
+Da sola, `disp` ha una pendenza chiaramente negativa (circa −0.041, ES circa 0.005). Insieme a `wt` (correlazione circa 0.89) la sua pendenza si riduce a circa −0.018, il suo ES all'incirca raddoppia e non è più chiaramente diversa da zero. Il VIF è circa 4.7 (= 1/(1 − 0.89²)). I dati non riescono a distinguere bene cilindrata e peso.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi.** Per `mpg ~ wt + hp`, (a) disegna i quattro grafici diagnostici; (b) aggiungi un termine quadratico per il peso (`I(wt^2)`) e verifica con `anova()` se migliora l'adattamento; (c) l'auto più influente (secondo la distanza di Cook) rimane altrettanto influente?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+par(mfrow = c(2, 2)); plot(m_wt_hp); par(mfrow = c(1, 1))
+
+m_quad <- lm(mpg ~ wt + I(wt^2) + hp, data = mtcars)
+anova(m_wt_hp, m_quad)
+
+sort(cooks.distance(m_wt_hp), decreasing = TRUE)[1:3]
+sort(cooks.distance(m_quad), decreasing = TRUE)[1:3]
+```
+Il grafico dei residui contro i valori stimati ha forma a U, segno di curvatura. Il termine quadratico migliora chiaramente l'adattamento (test F, p ≈ 0.004). La Chrysler Imperial, un'auto molto pesante i cui mpg sono sottostimati dal modello rettilineo, ha la distanza di Cook più alta (circa 0.42) nel modello lineare; nel modello quadratico la sua distanza di Cook scende a circa 0.28 perché la curva la segue meglio, e la Maserati Bora (un valore estremo di `hp`) diventa l'auto più influente (circa 0.31). L'influenza è una proprietà di un punto *e* di un modello.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| `lm(y ~ x1 + x2)` | coefficienti aggiustati per gli altri predittori |
+| `model.matrix()` | la matrice del disegno numerica (dummy incluse) |
+| `relevel()`, `fct_relevel()` | cambiano il livello di riferimento di un fattore |
+| `y ~ x * group` | interazione: una pendenza di `x` diversa per ogni gruppo |
+| `anova(m_small, m_big)` | test F per modelli annidati |
+| `car::vif()` | fattori di inflazione della varianza |
+| `hatvalues()`, `cooks.distance()`, `plot(m, which = 5)` | leva e influenza |
+| `lmtest::bptest()` | test di Breusch–Pagan per la varianza costante |
+| `lmtest::coeftest(m, vcov. = sandwich::vcovHC(m))` | errori standard robusti |
+| `predict()` su una griglia | grafici dell'effetto parziale |
+
+- Ogni coefficiente di una regressione multipla è un'associazione **a parità degli altri predittori**.
+- I fattori diventano $k-1$ dummy; i coefficienti sono **differenze rispetto al livello di riferimento**.
+- Con un'interazione, la pendenza di un predittore **dipende** dall'altro; visualizzala.
+- Diagnostica collinearità, influenza e varianza non costante — e decidi che cosa fare in base al fatto che il tuo obiettivo sia la spiegazione o la previsione.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2a ed.), capitolo sulla regressione multipla, <https://openintro-ims.netlify.app>
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2a ed.), capitolo 3, <https://www.statlearning.com>
+- Fox & Weisberg, *An R Companion to Applied Regression* — il libro dietro il pacchetto `car`, <https://www.john-fox.ca/Companion/>
+:::

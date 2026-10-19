@@ -17,7 +17,7 @@ library(purrr)
 ```
 
 ::: {.lesson-meta}
-[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Scrivere funzioni](14-functions.qmd), [Cicli](16-loops.qmd), [Liste](../01-foundations/07-lists.qmd)]{}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Scrivere funzioni](14-functions.qmd), [Cicli: for, while e repeat](16-loops.qmd), [Liste](../01-foundations/07-lists.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}
@@ -279,7 +279,7 @@ Tutte e tre le correlazioni tra lunghezza e profondità del becco sono positive 
 
 ## 9. Mini-progetto: molti modelli
 
-La massa corporea aumenta con la lunghezza della pinna **allo stesso ritmo** in tutte le specie? Stimiamo una [regressione lineare](../../../lessons/09-regression/38-simple-regression.qmd) semplice per ciascuna specie e confrontiamo le pendenze. La pendenza di `lm(body_mass ~ flipper_len)` è l'aumento medio della massa corporea (g) per ogni millimetro in più di pinna.
+La massa corporea aumenta con la lunghezza della pinna **allo stesso ritmo** in tutte le specie? Stimiamo una [regressione lineare](../09-regression/38-simple-regression.qmd) semplice per ciascuna specie e confrontiamo le pendenze. La pendenza di `lm(body_mass ~ flipper_len)` è l'aumento medio della massa corporea (g) per ogni millimetro in più di pinna.
 
 ```{r}
 #| label: many-models
@@ -309,7 +309,7 @@ model_table
 
 ::: {.callout-tip .read-output}
 ## Come leggere questo output
-Ogni riga è un modello. Nei pinguini Gentoo la massa corporea aumenta di circa `r round(slopes[["Gentoo"]], 0)` g per mm di pinna; negli Adelie di circa `r round(slopes[["Adelie"]], 0)` g e nei Chinstrap di circa `r round(slopes[["Chinstrap"]], 0)` g. `n` è il numero di esemplari effettivamente usati (`lm()` scarta le righe con valori mancanti), e `r_squared` è la quota della variabilità della massa corporea spiegata dalla lunghezza della pinna all'interno di quella specie. Stabilire se le pendenze differiscano *più di quanto il caso possa spiegare* è una questione da affrontare con la [regressione multipla](../../../lessons/09-regression/39-multiple-regression.qmd) con un termine di interazione.
+Ogni riga è un modello. Nei pinguini Gentoo la massa corporea aumenta di circa `r round(slopes[["Gentoo"]], 0)` g per mm di pinna; negli Adelie di circa `r round(slopes[["Adelie"]], 0)` g e nei Chinstrap di circa `r round(slopes[["Chinstrap"]], 0)` g. `n` è il numero di esemplari effettivamente usati (`lm()` scarta le righe con valori mancanti), e `r_squared` è la quota della variabilità della massa corporea spiegata dalla lunghezza della pinna all'interno di quella specie. Stabilire se le pendenze differiscano *più di quanto il caso possa spiegare* è una questione da affrontare con la [regressione multipla](../09-regression/39-multiple-regression.qmd) con un termine di interazione.
 :::
 
 La stessa ricetta in tre passi, **dividi, applica, combina** (*split, map, combine*), funziona per qualsiasi analisi per gruppo: un t-test per paese, un grafico per anno, una sintesi per file.

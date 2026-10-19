@@ -7,7 +7,7 @@ description: "I tipi di dati di base di R (numeric, integer, character, logical)
 {{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
 
 ::: {.lesson-meta}
-[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Primi passi](02-first-steps.qmd)]{}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Primi passi in R](02-first-steps.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}

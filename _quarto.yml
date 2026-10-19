@@ -57,9 +57,6 @@ website:
       - text: "About"
         href: about.qmd
     right:
-      - text: "Italiano"
-        href: "it/index.qmd"
-        aria-label: "Switch language"
       - icon: github
         href: https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners
         aria-label: GitHub repository
@@ -240,10 +237,50 @@ website:
                 - it/lessons/08-inference/36-nonparametric-tests.qmd
                 - it/lessons/08-inference/37-anova.qmd
   
-        - section: "Livello 4 · Modelli e apprendimento (in inglese)"
+        - section: "Livello 4 · Modelli e apprendimento"
           contents:
-            - text: "Lezioni del livello 4 (per ora solo in inglese) →"
-              href: lessons/09-regression/38-simple-regression.qmd
+            - section: "9. Modelli di regressione"
+              contents:
+                - it/lessons/09-regression/38-simple-regression.qmd
+                - it/lessons/09-regression/39-multiple-regression.qmd
+                - it/lessons/09-regression/40-model-selection.qmd
+                - it/lessons/09-regression/41-logistic-regression.qmd
+                - it/lessons/09-regression/42-poisson-regression.qmd
+                - it/lessons/09-regression/43-penalized-regression.qmd
+            - section: "10. Apprendimento supervisionato"
+              contents:
+                - it/lessons/10-ml/44-ml-workflow.qmd
+                - it/lessons/10-ml/45-decision-trees.qmd
+                - it/lessons/10-ml/46-random-forests.qmd
+                - it/lessons/10-ml/47-gradient-boosting.qmd
+                - it/lessons/10-ml/48-svm.qmd
+                - it/lessons/10-ml/49-model-comparison.qmd
+            - section: "11. Riduzione della dimensionalità"
+              contents:
+                - it/lessons/11-dimred/50-pca.qmd
+                - it/lessons/11-dimred/51-factor-analysis.qmd
+                - it/lessons/11-dimred/52-correspondence-analysis.qmd
+                - it/lessons/11-dimred/53-mds.qmd
+                - it/lessons/11-dimred/54-tsne-umap.qmd
+            - section: "12. Clustering"
+              contents:
+                - it/lessons/12-clustering/55-clustering-intro.qmd
+                - it/lessons/12-clustering/56-kmeans.qmd
+                - it/lessons/12-clustering/57-hierarchical.qmd
+                - it/lessons/12-clustering/58-dbscan.qmd
+                - it/lessons/12-clustering/59-model-based.qmd
+                - it/lessons/12-clustering/60-spectral.qmd
+        - section: "Facoltativo · Deep learning (in inglese)"
+          contents:
+            - lessons/13-deep-learning/61-dl-setup.qmd
+            - lessons/13-deep-learning/62-dnn-tabular.qmd
+            - lessons/13-deep-learning/63-autoencoders.qmd
+            - lessons/13-deep-learning/64-lstm.qmd
+            - lessons/13-deep-learning/65-gru.qmd
+            - lessons/13-deep-learning/66-cnn.qmd
+        - section: "Progetto finale"
+          contents:
+            - it/lessons/67-capstone.qmd
 
   page-footer:
     left: |

@@ -4,25 +4,25 @@ subtitle: "I principali termini di statistica e di R spiegati in parole semplici
 description: "Definizioni brevi e in linguaggio semplice dei principali termini usati nel corso, ciascuna collegata alla lezione in cui viene spiegata."
 ---
 
-Usa la ricerca del browser (Ctrl/Cmd + F) o la ricerca del sito per trovare un termine. Ogni voce riporta il termine italiano seguito da quello inglese tra parentesi, e rimanda alla lezione in cui l'idea viene sviluppata. Le lezioni contrassegnate con "(EN)" sono per ora disponibili solo in inglese.
+Usa la ricerca del browser (Ctrl/Cmd + F) o la ricerca del sito per trovare un termine. Ogni voce riporta il termine italiano seguito da quello inglese tra parentesi, e rimanda alla lezione in cui l'idea viene sviluppata.
 
 ## A–C
 
-**Analisi dei cluster (clustering)** (*cluster analysis*) — Raggruppare le osservazioni in modo che quelle nello stesso gruppo siano simili, senza una risposta nota da prevedere. → [Lezione 55 (EN)](../lessons/12-clustering/55-clustering-intro.qmd)
+**Analisi dei cluster (clustering)** (*cluster analysis*) — Raggruppare le osservazioni in modo che quelle nello stesso gruppo siano simili, senza una risposta nota da prevedere. → [Lezione 55](lessons/12-clustering/55-clustering-intro.qmd)
 
-**Analisi delle componenti principali (PCA)** (*principal component analysis*) — Riscrive variabili correlate come componenti incorrelate, ordinate in base alla varianza che spiegano. → [Lezione 50 (EN)](../lessons/11-dimred/50-pca.qmd)
+**Analisi delle componenti principali (PCA)** (*principal component analysis*) — Riscrive variabili correlate come componenti incorrelate, ordinate in base alla varianza che spiegano. → [Lezione 50](lessons/11-dimred/50-pca.qmd)
 
 **ANOVA (analisi della varianza)** (*analysis of variance*) — Un metodo per confrontare le medie di più gruppi confrontando la variabilità *tra* i gruppi con la variabilità *entro* i gruppi. → [Lezione 37](lessons/08-inference/37-anova.qmd)
 
 **Bootstrap** (*bootstrap*) — Stimare la variabilità di una statistica ricampionando ripetutamente, con reinserimento, i dati osservati. → [Lezione 31](lessons/07-probability/31-bootstrap.qmd)
 
-**Compromesso distorsione–varianza** (*bias–variance trade-off*) — I modelli semplici tendono a sbagliare in modo sistematico (distorsione); i modelli flessibili tendono a cambiare molto da un campione all'altro (varianza). Una buona previsione bilancia le due cose. → [Lezione 44 (EN)](../lessons/10-ml/44-ml-workflow.qmd)
+**Compromesso distorsione–varianza** (*bias–variance trade-off*) — I modelli semplici tendono a sbagliare in modo sistematico (distorsione); i modelli flessibili tendono a cambiare molto da un campione all'altro (varianza). Una buona previsione bilancia le due cose. → [Lezione 44](lessons/10-ml/44-ml-workflow.qmd)
 
-**Convalida incrociata** (*cross-validation*) — Stimare quanto bene un modello prevede dati nuovi stimandolo ripetutamente su una parte dei dati e verificandolo sul resto. → [Lezione 40 (EN)](../lessons/09-regression/40-model-selection.qmd)
+**Convalida incrociata** (*cross-validation*) — Stimare quanto bene un modello prevede dati nuovi stimandolo ripetutamente su una parte dei dati e verificandolo sul resto. → [Lezione 40](lessons/09-regression/40-model-selection.qmd)
 
 **Correlazione** (*correlation*) — Un numero tra −1 e 1 che misura l'intensità di una relazione lineare (Pearson) o monotona (Spearman) tra due variabili numeriche. → [Lezione 27](lessons/06-visualization/27-correlation.qmd)
 
-**Curva ROC / AUC** (*ROC curve / AUC*) — Sensibilità contro 1 − specificità al variare di tutte le soglie di classificazione; l'area sottesa alla curva riassume quanto bene un modello ordina i positivi al di sopra dei negativi. → [Lezione 41 (EN)](../lessons/09-regression/41-logistic-regression.qmd)
+**Curva ROC / AUC** (*ROC curve / AUC*) — Sensibilità contro 1 − specificità al variare di tutte le soglie di classificazione; l'area sottesa alla curva riassume quanto bene un modello ordina i positivi al di sopra dei negativi. → [Lezione 41](lessons/09-regression/41-logistic-regression.qmd)
 
 ## D–E
 
@@ -50,15 +50,15 @@ Usa la ricerca del browser (Ctrl/Cmd + F) o la ricerca del sito per trovare un t
 
 **Fattore** (*factor*) — Il tipo di dato di R per le variabili categoriali, con un insieme fissato di livelli. → [Lezione 6](lessons/01-foundations/06-factors.qmd)
 
-**Fuga di informazioni** (*data leakage*) — Usare informazioni provenienti dai dati di test mentre si costruisce un modello (per esempio standardizzare prima di dividere i dati), il che fa sembrare le prestazioni migliori di quanto siano realmente. → [Lezione 44 (EN)](../lessons/10-ml/44-ml-workflow.qmd)
+**Fuga di informazioni** (*data leakage*) — Usare informazioni provenienti dai dati di test mentre si costruisce un modello (per esempio standardizzare prima di dividere i dati), il che fa sembrare le prestazioni migliori di quanto siano realmente. → [Lezione 44](lessons/10-ml/44-ml-workflow.qmd)
 
 **Gradi di libertà** (*degrees of freedom*) — In modo approssimativo, il numero di informazioni indipendenti che restano per stimare la variabilità; determinano la forma esatta delle distribuzioni t, χ² e F. → [Lezione 34](lessons/08-inference/34-t-tests.qmd)
 
-**Indice di silhouette** (*silhouette*) — Per ogni osservazione, quanto è più vicina al proprio cluster che al cluster più vicino tra gli altri (da −1 a 1). → [Lezione 55 (EN)](../lessons/12-clustering/55-clustering-intro.qmd)
+**Indice di silhouette** (*silhouette*) — Per ogni osservazione, quanto è più vicina al proprio cluster che al cluster più vicino tra gli altri (da −1 a 1). → [Lezione 55](lessons/12-clustering/55-clustering-intro.qmd)
 
-**Insieme di addestramento / di convalida / di test** (*training / validation / test set*) — I dati usati per stimare un modello / per mettere a punto le scelte / per stimare una sola volta le prestazioni finali. → [Lezione 44 (EN)](../lessons/10-ml/44-ml-workflow.qmd)
+**Insieme di addestramento / di convalida / di test** (*training / validation / test set*) — I dati usati per stimare un modello / per mettere a punto le scelte / per stimare una sola volta le prestazioni finali. → [Lezione 44](lessons/10-ml/44-ml-workflow.qmd)
 
-**Interazione** (*interaction*) — Quando l'effetto di un predittore dipende dal valore di un altro. → [Lezione 39 (EN)](../lessons/09-regression/39-multiple-regression.qmd)
+**Interazione** (*interaction*) — Quando l'effetto di un predittore dipende dal valore di un altro. → [Lezione 39](lessons/09-regression/39-multiple-regression.qmd)
 
 **Intervallo di confidenza (IC)** (*confidence interval, CI*) — Un insieme di valori plausibili per un parametro, prodotto da una procedura che cattura il vero valore in una proporzione dichiarata (per esempio il 95%) di campioni ripetuti. → [Lezione 32](lessons/08-inference/32-confidence-intervals.qmd)
 
@@ -74,9 +74,9 @@ Usa la ricerca del browser (Ctrl/Cmd + F) o la ricerca del sito per trovare un t
 
 **Media / mediana** (*mean / median*) — La media aritmetica / il valore centrale dei dati ordinati. La mediana è robusta ai valori anomali; la media no. → [Lezione 22](lessons/05-descriptive/22-summary-statistics.qmd)
 
-**Modello lineare generalizzato (GLM)** (*generalised linear model*) — Un modello che collega la media della risposta a una combinazione lineare dei predittori tramite una funzione di legame, consentendo risposte binarie (logistica) o di conteggio (Poisson). → [Lezione 41 (EN)](../lessons/09-regression/41-logistic-regression.qmd)
+**Modello lineare generalizzato (GLM)** (*generalised linear model*) — Un modello che collega la media della risposta a una combinazione lineare dei predittori tramite una funzione di legame, consentendo risposte binarie (logistica) o di conteggio (Poisson). → [Lezione 41](lessons/09-regression/41-logistic-regression.qmd)
 
-**Odds ratio (rapporto degli odds)** (*odds ratio*) — Il rapporto tra gli odds di un evento in due gruppi; la misura d'effetto naturale della regressione logistica. → [Lezione 41 (EN)](../lessons/09-regression/41-logistic-regression.qmd)
+**Odds ratio (rapporto degli odds)** (*odds ratio*) — Il rapporto tra gli odds di un evento in due gruppi; la misura d'effetto naturale della regressione logistica. → [Lezione 41](lessons/09-regression/41-logistic-regression.qmd)
 
 ## P–R
 
@@ -90,17 +90,17 @@ Usa la ricerca del browser (Ctrl/Cmd + F) o la ricerca del sito per trovare un t
 
 **Punteggio z** (*z-score*) — Di quante deviazioni standard un'osservazione si trova al di sopra o al di sotto della media. → [Lezione 22](lessons/05-descriptive/22-summary-statistics.qmd)
 
-**Regolarizzazione (penalizzazione)** (*regularisation, penalisation*) — Contrarre i coefficienti del modello verso zero (ridge, lasso) per ridurre la varianza e il sovradattamento. → [Lezione 43 (EN)](../lessons/09-regression/43-penalized-regression.qmd)
+**Regolarizzazione (penalizzazione)** (*regularisation, penalisation*) — Contrarre i coefficienti del modello verso zero (ridge, lasso) per ridurre la varianza e il sovradattamento. → [Lezione 43](lessons/09-regression/43-penalized-regression.qmd)
 
-**Regressione logistica** (*logistic regression*) — Un GLM per una risposta binaria che modella il logaritmo degli odds (log-odds) dell'evento come funzione lineare dei predittori. → [Lezione 41 (EN)](../lessons/09-regression/41-logistic-regression.qmd)
+**Regressione logistica** (*logistic regression*) — Un GLM per una risposta binaria che modella il logaritmo degli odds (log-odds) dell'evento come funzione lineare dei predittori. → [Lezione 41](lessons/09-regression/41-logistic-regression.qmd)
 
-**Residuo** (*residual*) — Valore osservato meno il valore previsto dal modello. → [Lezione 38 (EN)](../lessons/09-regression/38-simple-regression.qmd)
+**Residuo** (*residual*) — Valore osservato meno il valore previsto dal modello. → [Lezione 38](lessons/09-regression/38-simple-regression.qmd)
 
-**Ricetta** (*recipe*) — In tidymodels, un insieme di passi di pre-elaborazione (per esempio imputazione, codifica dummy, normalizzazione) stimati solo sui dati di addestramento. → [Lezione 44 (EN)](../lessons/10-ml/44-ml-workflow.qmd)
+**Ricetta** (*recipe*) — In tidymodels, un insieme di passi di pre-elaborazione (per esempio imputazione, codifica dummy, normalizzazione) stimati solo sui dati di addestramento. → [Lezione 44](lessons/10-ml/44-ml-workflow.qmd)
 
 ## S–Z
 
-**Saturazioni (pesi)** (*loadings*) — Nella PCA e nell'analisi fattoriale, i pesi che collegano le variabili originali alle componenti o ai fattori. → [Lezione 50 (EN)](../lessons/11-dimred/50-pca.qmd)
+**Saturazioni (pesi)** (*loadings*) — Nella PCA e nell'analisi fattoriale, i pesi che collegano le variabili originali alle componenti o ai fattori. → [Lezione 50](lessons/11-dimred/50-pca.qmd)
 
 **Scarto interquartile (IQR)** (*interquartile range*) — La distanza tra il primo e il terzo quartile; la variabilità del 50% centrale dei dati. → [Lezione 22](lessons/05-descriptive/22-summary-statistics.qmd)
 
@@ -108,7 +108,7 @@ Usa la ricerca del browser (Ctrl/Cmd + F) o la ricerca del sito per trovare un t
 
 **Significatività statistica** (*statistical significance*) — Un risultato è "significativo al livello α" quando il suo p-value è inferiore ad α. Di per sé non dice nulla sulla grandezza o sull'importanza di un effetto. → [Lezione 33](lessons/08-inference/33-hypothesis-testing.qmd)
 
-**Sovradattamento** (*overfitting*) — Quando un modello impara il rumore dei dati di addestramento e prevede male i dati nuovi. → [Lezione 40 (EN)](../lessons/09-regression/40-model-selection.qmd)
+**Sovradattamento** (*overfitting*) — Quando un modello impara il rumore dei dati di addestramento e prevede male i dati nuovi. → [Lezione 40](lessons/09-regression/40-model-selection.qmd)
 
 **Stima / stimatore** (*estimate / estimator*) — Un numero calcolato da un campione (stima) mediante una regola (stimatore) per approssimare una quantità ignota della popolazione. → [Lezione 30](lessons/07-probability/30-sampling-distributions.qmd)
 
@@ -126,7 +126,7 @@ Usa la ricerca del browser (Ctrl/Cmd + F) o la ricerca del sito per trovare un t
 
 **Variabile confondente** (*confounder*) — Una terza variabile che influenza entrambe le variabili di interesse e può creare (o nascondere) un'associazione tra di esse. → [Lezione 27](lessons/06-visualization/27-correlation.qmd)
 
-**Variabile dummy (indicatrice)** (*dummy variable*) — Una colonna 0/1 che rappresenta in un modello un livello di una variabile categoriale. → [Lezione 39 (EN)](../lessons/09-regression/39-multiple-regression.qmd)
+**Variabile dummy (indicatrice)** (*dummy variable*) — Una colonna 0/1 che rappresenta in un modello un livello di una variabile categoriale. → [Lezione 39](lessons/09-regression/39-multiple-regression.qmd)
 
 **Varianza** (*variance*) — La media dei quadrati delle distanze dalla media (con divisore $n-1$ in un campione). → [Lezione 22](lessons/05-descriptive/22-summary-statistics.qmd)
 

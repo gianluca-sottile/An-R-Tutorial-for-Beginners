@@ -402,7 +402,7 @@ Ma che cosa fare se la statistica non ha una formula semplice per l'ES (una medi
 3. **"Il TLC rende normali i miei dati."** Non è così. Descrive le *medie* di molte osservazioni, e richiede osservazioni indipendenti.
 4. **Considerare magico n = 30.** Per popolazioni fortemente asimmetriche (redditi, tempi di reazione, sinistri assicurativi) la media può essere ancora lontana dalla normalità con n = 30.
 5. **Credere che una popolazione più grande richieda un campione più grande.** La precisione dipende da $n$ (e dalla casualità del campione), non dalla dimensione della popolazione.
-6. **Identificare "non distorto" con "buono".** Uno stimatore non distorto può essere molto impreciso; uno leggermente distorto con un ES molto più piccolo può essere preferibile (un compromesso che ritroveremo in [Regressione penalizzata](../../../lessons/09-regression/43-penalized-regression.qmd)).
+6. **Identificare "non distorto" con "buono".** Uno stimatore non distorto può essere molto impreciso; uno leggermente distorto con un ES molto più piccolo può essere preferibile (un compromesso che ritroveremo in [Regressione penalizzata](../09-regression/43-penalized-regression.qmd)).
 :::
 
 ## 9. Verifica la comprensione

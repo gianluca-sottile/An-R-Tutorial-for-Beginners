@@ -21,7 +21,7 @@ library(lubridate)
 ```
 
 ::: {.lesson-meta}
-[Livello 1 · Fondamenti]{.level-1} [⏱ ~75 min]{} [Prerequisiti: [Fattori](../01-foundations/06-factors.qmd), [Manipolazione dei dati con dplyr](09-dplyr-verbs.qmd)]{}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~75 min]{} [Prerequisiti: [Fattori e tipi di variabili](../01-foundations/06-factors.qmd), [Manipolazione dei dati con dplyr](09-dplyr-verbs.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}

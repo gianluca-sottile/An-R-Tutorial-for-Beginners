@@ -7,7 +7,7 @@ description: "Scopri che cosa fanno i test basati sui ranghi, esegui in R i test
 {{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
 
 ::: {.lesson-meta}
-[Livello 3 · Inferenza]{.level-3} [⏱ ~70 min]{} [Prerequisiti: [Test t](34-t-tests.qmd)]{}
+[Livello 3 · Inferenza]{.level-3} [⏱ ~70 min]{} [Prerequisiti: [Test t: confrontare medie](34-t-tests.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}

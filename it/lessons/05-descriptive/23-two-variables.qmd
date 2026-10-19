@@ -320,7 +320,7 @@ sum(w_female * rate_by_dept["Female", ])
 Questo riproduce il `r round(100 * prop.table(ucb_overall, 2)["Admitted", "Female"])`% visto sopra. Uomini e donne hanno pesi diversi (le donne assegnano pesi grandi ai dipartimenti con tasso basso), quindi le loro medie possono risultare ordinate in modo opposto a ogni (o quasi ogni) confronto a livello di dipartimento.
 :::
 
-La lezione è generale: **un'associazione nei dati aggregati può scomparire o invertirsi quando si condiziona a una terza variabile**. Prima di trarre conclusioni da una tabella a doppia entrata, chiediti quali altre variabili potrebbero essere legate a entrambe. Ritroverai lo stesso fenomeno con le correlazioni in [Correlazione](../06-visualization/27-correlation.qmd) e con i coefficienti di regressione in [Regressione multipla](../../../lessons/09-regression/39-multiple-regression.qmd).
+La lezione è generale: **un'associazione nei dati aggregati può scomparire o invertirsi quando si condiziona a una terza variabile**. Prima di trarre conclusioni da una tabella a doppia entrata, chiediti quali altre variabili potrebbero essere legate a entrambe. Ritroverai lo stesso fenomeno con le correlazioni in [Correlazione](../06-visualization/27-correlation.qmd) e con i coefficienti di regressione in [Regressione multipla](../09-regression/39-multiple-regression.qmd).
 
 ::: {.callout-warning .pitfall}
 ## Errori comuni

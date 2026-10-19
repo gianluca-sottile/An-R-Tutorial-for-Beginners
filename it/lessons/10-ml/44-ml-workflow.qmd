@@ -1,0 +1,683 @@
+---
+title: "Il flusso di lavoro del machine learning"
+subtitle: "Addestrare, validare, testare — e misurare onestamente quanto bene un modello prevede nuovi dati"
+description: "Il vocabolario e la logica dell'apprendimento supervisionato: errore di generalizzazione, sovradattamento, compromesso distorsione–varianza, convalida incrociata, fuga di informazione, metriche di prestazione e modelli di riferimento, seguiti da una pipeline completa in tidymodels sui dati del Titanic."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~120 min]{} [Prerequisiti: [Regressione logistica](../09-regression/41-logistic-regression.qmd), [Selezione e validazione del modello](../09-regression/40-model-selection.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- usare il vocabolario dell'**apprendimento supervisionato** (variabili o *feature*, variabile risposta, regressione contro classificazione) e distinguere **previsione** da **inferenza**;
+- spiegare il **sovradattamento** e il **compromesso distorsione–varianza** con una simulazione;
+- stimare onestamente le prestazioni di un modello con un **insieme di test** e con la **convalida incrociata a k gruppi**, e riconoscere la **fuga di informazione** (*data leakage*);
+- scegliere e interpretare le **metriche** (RMSE, MAE, R², accuratezza, sensibilità, specificità, AUC della curva ROC, Brier score, log-loss) e confrontarle con un **modello di riferimento** (*baseline*);
+- costruire una pipeline completa in **tidymodels**: suddivisione → recipe → modello → workflow → ricampionamento → test finale.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(tidymodels)   # rsample, recipes, parsnip, workflows, tune,
+                      # yardstick, dials + dplyr, ggplot2, purrr, tibble
+```
+
+## 1. Perché un "flusso di lavoro" per la previsione?
+
+Nelle lezioni sulla regressione ci siamo posti domande come *"in che modo la massa corporea è legata alla lunghezza delle pinne?"* Ci interessavano i **coefficienti**, i loro intervalli di confidenza e i p-value. Questa è **inferenza**: capire una relazione.
+
+Molti problemi reali pongono una domanda diversa: *"per un nuovo passeggero, un nuovo paziente, un nuovo cliente — che cosa succederà?"* Qui ci interessa **quanto sono accurate le previsioni su casi che il modello non ha mai visto**. Un modello può avere coefficienti bellissimi e prevedere male; un modello che nessuno riesce a interpretare (una foresta di 1000 alberi) può prevedere molto bene.
+
+Il pericolo centrale nella previsione è l'**autoinganno**: un modello flessibile può memorizzare i dati su cui è stato addestrato e sembrare perfetto — per poi fallire sui nuovi dati. Questa lezione riguarda le abitudini che ci proteggono dal prenderci in giro da soli. Le prossime cinque lezioni (alberi, foreste, boosting, SVM, confronto tra modelli) riutilizzano esattamente questo flusso di lavoro.
+
+## 2. Vocabolario dell'apprendimento supervisionato
+
+| Termine | Significato | Esempio Titanic |
+|---|---|---|
+| **Variabile risposta** (target, outcome, $y$) | Ciò che vogliamo prevedere | `survived` (sì/no) |
+| **Variabili** (*feature*; predittori, input, $x$) | Ciò che usiamo per prevederla | `sex`, `age`, `pclass`, `fare`, … |
+| **Osservazione** (caso, riga) | Una unità | Un passeggero |
+| **Apprendimento supervisionato** | Abbiamo esempi in cui la risposta è nota e impariamo una regola $x \mapsto y$ | Passeggeri di cui è registrato il destino |
+| Problema di **regressione** | Risposta numerica | Prevedere `fare` |
+| Problema di **classificazione** | Risposta categoriale (classi) | Prevedere `survived` |
+| **Addestramento** (*training*) | Stimare la regola dai dati | Stimare una regressione logistica |
+| **Iperparametro** (parametro di regolazione) | Un'impostazione scelta *prima* dell'addestramento, non stimata da esso | Profondità di un albero, numero di vicini |
+
+I modelli di classificazione di solito restituiscono una **probabilità** per ciascuna classe (ad es. "0.83 di probabilità di sopravvivenza"); una **previsione di classe** si ottiene poi applicando una soglia (per impostazione predefinita 0.5 con due classi).
+
+| | Inferenza | Previsione |
+|---|---|---|
+| Domanda principale | *Perché / quanto?* | *Che cosa succederà?* |
+| Giudicata da | Validità delle assunzioni, incertezza delle stime | Errore su dati **nuovi** |
+| Strumenti tipici | `lm()`, `glm()`, IC, test | Ricampionamento, insiemi di test, metriche |
+| Interpretabilità | Essenziale | Desiderabile, non necessaria |
+
+## 3. Sovradattamento e compromesso distorsione–varianza
+
+### Un mondo simulato in cui conosciamo la verità
+
+Simuliamo dati da una curva nota, $y = \sin(2\pi x) + \varepsilon$, con rumore $\varepsilon \sim N(0, 0.3^2)$. Addestriamo su 50 punti e valutiamo su 2000 punti **nuovi** dello stesso mondo.
+
+Come modello flessibile usiamo la **regressione dei k vicini più prossimi (k-NN)**: per prevedere in $x_0$, si fa la media delle $y$ dei $k$ punti di addestramento più vicini a $x_0$. $k$ piccolo = molto flessibile (con $k = 1$ la previsione salta da un punto all'altro); $k$ grande = molto liscio (con $k = 50$ ogni previsione è la media generale).
+
+```{r}
+#| label: knn-setup
+f_true <- function(x) sin(2 * pi * x)
+sim_data <- function(n, sd = 0.3) {
+  x <- runif(n)
+  data.frame(x = x, y = f_true(x) + rnorm(n, sd = sd))
+}
+knn_reg <- function(x_train, y_train, x_new, k) {
+  vapply(x_new, \(x0) mean(y_train[order(abs(x_train - x0))[1:k]]),
+         numeric(1))
+}
+rmse_vec_base <- function(obs, pred) sqrt(mean((obs - pred)^2))
+```
+
+```{r}
+#| label: knn-errors
+set.seed(44)
+train_small <- sim_data(50)
+test_big <- sim_data(2000)
+k_values <- c(1, 2, 3, 5, 7, 10, 15, 20, 30, 40, 50)
+
+knn_errors <- data.frame(
+  k = k_values,
+  train = sapply(k_values, \(k) rmse_vec_base(
+    train_small$y, knn_reg(train_small$x, train_small$y, train_small$x, k))),
+  test = sapply(k_values, \(k) rmse_vec_base(
+    test_big$y, knn_reg(train_small$x, train_small$y, test_big$x, k)))
+)
+knn_errors
+```
+
+```{r}
+#| label: fig-train-test
+#| fig-cap: "L'errore sul training continua a scendere man mano che il modello diventa più flessibile (k più piccolo), ma l'errore sui nuovi dati ha una forma a U. La linea tratteggiata è il livello del rumore (0.3): nessun modello può fare meglio in media."
+knn_errors |>
+  tidyr::pivot_longer(c(train, test), names_to = "data", values_to = "rmse") |>
+  ggplot(aes(1 / k, rmse, colour = data)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  geom_hline(yintercept = 0.3, linetype = "dashed") +
+  scale_x_log10() +
+  labs(x = "Flessibilità (1 / k, scala logaritmica)", y = "RMSE", colour = NULL)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Con $k = 1$ l'errore di **training** è `r round(knn_errors$train[1], 2)`: ogni punto di addestramento è il proprio vicino più prossimo, quindi il modello lo "prevede" perfettamente. È pura memorizzazione.
+- L'errore di **test** è minimo intorno a $k =$ `r knn_errors$k[which.min(knn_errors$test)]` (RMSE `r round(min(knn_errors$test), 3)`), vicino al rumore irriducibile di 0.3.
+- Con $k$ molto grande entrambi gli errori sono alti: il modello è troppo rigido per seguire la sinusoide (**sottoadattamento**, *underfitting*).
+- Il divario tra errore di training e di test è un sintomo di **sovradattamento** (*overfitting*). L'errore di training è una stima *ottimistica* delle prestazioni e non andrebbe mai usato per scegliere un modello.
+:::
+
+### Distorsione e varianza
+
+Perché la forma a U? Immagina di ripetere l'intero esperimento molte volte, ogni volta con un nuovo insieme di addestramento di 50 punti. Per ogni $x$ possiamo porci due domande:
+
+- **Distorsione**: in media sulle ripetizioni, la previsione è centrata sulla curva vera?
+- **Varianza**: quanto la previsione salta da un insieme di addestramento all'altro?
+
+```{r}
+#| label: bias-variance
+set.seed(44)
+x_grid <- seq(0.05, 0.95, length.out = 40)
+bv <- do.call(rbind, lapply(c(1, 3, 7, 15, 30, 50), \(k) {
+  preds <- replicate(200, {
+    dat <- sim_data(50)
+    knn_reg(dat$x, dat$y, x_grid, k)
+  })                                   # 40 valori di x x 200 ripetizioni
+  data.frame(k = k,
+             bias2 = mean((rowMeans(preds) - f_true(x_grid))^2),
+             variance = mean(apply(preds, 1, var)))
+}))
+bv$expected_mse <- bv$bias2 + bv$variance + 0.3^2
+bv
+```
+
+I modelli flessibili ($k$ piccolo) hanno **distorsione bassa ma varianza alta**: in media seguono la curva, ma ogni adattamento è rumoroso. I modelli rigidi ($k$ grande) hanno **varianza bassa ma distorsione alta**: stabili, ma sistematicamente sbagliati. L'errore di test atteso è (approssimativamente) la somma dei due più il rumore, ed è minimo a una complessità intermedia — qui intorno a $k =$ `r bv$k[which.min(bv$expected_mse)]`.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la scomposizione distorsione–varianza
+
+Per la perdita quadratica, dato un nuovo punto $(x_0, y_0)$ con $y_0 = f(x_0) + \varepsilon$, $E(\varepsilon) = 0$, $\operatorname{Var}(\varepsilon) = \sigma^2$, e un modello stimato $\hat f$ che dipende dall'insieme di addestramento casuale,
+
+$$
+E\big[(y_0 - \hat f(x_0))^2\big] =
+\underbrace{\sigma^2}_{\text{irriducibile}} +
+\underbrace{\big(E[\hat f(x_0)] - f(x_0)\big)^2}_{\text{distorsione}^2} +
+\underbrace{\operatorname{Var}\big(\hat f(x_0)\big)}_{\text{varianza}} .
+$$
+
+Il valore atteso è sia sull'insieme di addestramento sia sul nuovo rumore. Per il k-NN, $\operatorname{Var}(\hat f(x_0)) \approx \sigma^2 / k$, il che spiega perché la varianza cala al crescere di $k$. Per la classificazione con perdita 0–1 la scomposizione non è additiva, ma vale lo stesso compromesso qualitativo.
+:::
+
+## 4. Valutazione onesta: suddivisione e ricampionamento
+
+### Training / validazione / test
+
+Il rimedio all'autoinganno è semplice: **valutare su dati che non hanno avuto alcun ruolo nella costruzione del modello.**
+
+- **Insieme di addestramento** (*training set*) — usato per stimare i modelli.
+- **Insieme di validazione** — usato per *confrontare* i modelli e scegliere gli iperparametri.
+- **Insieme di test** — messo sotto chiave e usato **una sola volta**, alla fine, per riportare la prestazione finale.
+
+Perché tre e non due? Ogni volta che guardi un insieme di dati per prendere una decisione, esso entra a far parte del processo di addestramento. Se provi 50 modelli e tieni quello con il miglior punteggio sul test, quel punteggio è ottimistico: l'hai selezionato *perché* è stato fortunato su quelle particolari righe di test.
+
+### Convalida incrociata a k gruppi
+
+Con poche centinaia di osservazioni, un unico insieme di validazione è piccolo e rumoroso. La **convalida incrociata a k gruppi** (*k-fold cross-validation*, CV) riutilizza i dati di addestramento in modo più efficiente:
+
+1. Dividi l'insieme di addestramento in $k$ gruppi (*fold*) di uguale dimensione (di solito $k = 5$ o $10$).
+2. Per ciascun gruppo: stima il modello sugli altri $k - 1$ gruppi e valutalo sul gruppo escluso.
+3. Calcola la media delle $k$ stime di prestazione (e osserva la loro dispersione).
+
+Ogni osservazione viene usata per la valutazione esattamente una volta e per l'addestramento $k - 1$ volte. L'insieme di test resta comunque da parte.
+
+### Stratificazione
+
+Con una risposta categoriale, le suddivisioni casuali possono, per caso, mettere più sopravvissuti in un gruppo che in un altro. La suddivisione **stratificata** campiona separatamente all'interno di ciascuna classe, così che ogni suddivisione abbia (quasi) le stesse proporzioni di classe dei dati completi. Per una risposta numerica, rsample stratifica sui quartili. Usala come scelta predefinita: `strata = outcome`.
+
+## 5. Fuga di informazione (data leakage)
+
+La **fuga di informazione** (*leakage*) si verifica quando informazioni dei dati di valutazione si infiltrano nel processo di addestramento. Il modello sembra allora migliore di quanto sia davvero. Fonti tipiche:
+
+- **Preprocessing sui dati completi prima della suddivisione** — calcolare medie e deviazioni standard per la standardizzazione, imputare i dati mancanti con la mediana complessiva, selezionare "le variabili più correlate", tutto sull'intero insieme di dati.
+- **Variabili che non sarebbero disponibili al momento della previsione** — ad es. usare la "durata del ricovero" per prevedere la diagnosi di ammissione.
+- **Righe duplicate o collegate** tra training e test (lo stesso paziente due volte).
+
+La fuga dovuta alla standardizzazione di solito è piccola. Quella dovuta alla **selezione delle variabili** può essere enorme. Ecco una dimostrazione in cui *nulla* si può prevedere: 100 osservazioni, 1000 variabili di puro rumore e una risposta da lancio di moneta. La procedura con fuga sceglie le 10 variabili più correlate con $y$ **usando tutti i dati**, poi esegue una CV a 5 gruppi; la procedura onesta ripete la selezione **dentro ogni gruppo di addestramento**.
+
+```{r}
+#| label: leakage-setup
+set.seed(2026)
+n <- 100
+p <- 1000
+x <- matrix(rnorm(n * p), nrow = n)
+y <- rbinom(n, size = 1, prob = 0.5)   # risposta non legata a x
+
+top_k <- function(x, y, k = 10) order(-abs(cor(x, y)))[1:k]
+```
+
+```{r}
+#| label: leakage-cv
+cv_accuracy <- function(x, y, leaky, k = 10, v = 5) {
+  folds <- sample(rep(1:v, length.out = length(y)))
+  if (leaky) keep <- top_k(x, y, k)               # usa TUTTE le righe
+  acc <- numeric(v)
+  for (i in 1:v) {
+    tr <- folds != i
+    if (!leaky) keep <- top_k(x[tr, ], y[tr], k)   # solo il gruppo di addestramento
+    d_tr <- data.frame(y = y[tr], x[tr, keep])
+    d_te <- data.frame(x[!tr, keep])
+    fit <- suppressWarnings(glm(y ~ ., data = d_tr, family = binomial))
+    p_hat <- predict(fit, d_te, type = "response")
+    acc[i] <- mean((p_hat > 0.5) == y[!tr])
+  }
+  mean(acc)
+}
+leaky <- replicate(20, cv_accuracy(x, y, leaky = TRUE))
+honest <- replicate(20, cv_accuracy(x, y, leaky = FALSE))
+c(leaky = mean(leaky), honest = mean(honest))
+```
+
+La procedura con fuga riporta un'accuratezza di circa `r round(mean(leaky), 2)` su dati in cui la vera accuratezza di *qualsiasi* modello è 0.5. La procedura onesta dà `r round(mean(honest), 2)`: non meglio di un lancio di moneta. (Con puro rumore, le stime di CV oneste spesso finiscono un po' *sotto* 0.5, perché escludere un gruppo sbilancia leggermente le classi nella parte di addestramento in direzione opposta; è una stranezza nota, non un'abilità.) La regola: **ogni passo che impara qualcosa dai dati — standardizzazione, imputazione, selezione delle variabili, PCA — deve essere stimato solo sulla parte di addestramento e poi applicato alla parte di valutazione.** In tidymodels questo avviene automaticamente quando tutto il preprocessing sta dentro una *recipe* (paragrafo 8).
+
+## 6. Metriche: che cosa significa "buono"?
+
+Una metrica trasforma previsioni e valori veri in un solo numero. Metriche diverse premiano cose diverse, quindi scegli quella che corrisponde allo *scopo* del modello.
+
+### Metriche per la regressione
+
+| Metrica | Formula | Premia / penalizza |
+|---|---|---|
+| **RMSE** | $\sqrt{\frac1n\sum(y_i - \hat y_i)^2}$ | Stesse unità di $y$; penalizza molto gli errori grandi |
+| **MAE** | $\frac1n\sum \lvert y_i - \hat y_i\rvert$ | Stesse unità; più robusto a pochi errori grandi |
+| **R²** | $1 - \frac{\sum(y_i-\hat y_i)^2}{\sum(y_i-\bar y)^2}$ | Quota di varianza spiegata rispetto a "prevedere la media"; senza unità |
+
+```{r}
+#| label: reg-metrics
+pred_k7 <- knn_reg(train_small$x, train_small$y, test_big$x, k = 7)
+c(rmse = sqrt(mean((test_big$y - pred_k7)^2)),
+  mae  = mean(abs(test_big$y - pred_k7)),
+  rsq  = 1 - sum((test_big$y - pred_k7)^2) /
+             sum((test_big$y - mean(test_big$y))^2))
+```
+
+(La funzione `rsq()` di yardstick è il quadrato della correlazione tra valori osservati e previsti; `rsq_trad()` è la formula qui sopra. Coincidono per un adattamento ai minimi quadrati valutato sui suoi stessi dati di addestramento, ma possono differire su nuovi dati — ad es. previsioni distorte possono comunque essere molto correlate con i valori veri.)
+
+### Metriche per la classificazione
+
+Prendiamo un esempio giocattolo con 200 casi, una probabilità per la classe "positiva" (1) e la soglia predefinita 0.5:
+
+```{r}
+#| label: toy-class
+set.seed(1)
+truth <- rbinom(200, 1, 0.3)
+score <- rnorm(200, mean = ifelse(truth == 1, 1, 0))
+prob <- plogis(-1 + 1.2 * score)     # P(classe 1) prevista
+pred <- as.integer(prob > 0.5)
+table(predicted = pred, truth = truth)
+```
+
+```{r}
+#| label: toy-metrics
+pos <- prob[truth == 1]
+neg <- prob[truth == 0]
+c(accuracy    = mean(pred == truth),
+  sensitivity = mean(pred[truth == 1] == 1),
+  specificity = mean(pred[truth == 0] == 0),
+  roc_auc     = mean(outer(pos, neg, ">")) +
+                0.5 * mean(outer(pos, neg, "==")),
+  brier       = mean((prob - truth)^2),
+  log_loss    = -mean(truth * log(prob) + (1 - truth) * log(1 - prob)))
+```
+
+| Metrica | Che cosa misura | Richiede | Meglio se |
+|---|---|---|---|
+| **Accuratezza** | Quota di previsioni di classe corrette | Classi (soglia) | Più alta |
+| **Sensibilità** (richiamo, tasso di veri positivi) | Dei veri positivi, quanti ne cogliamo | Classi | Più alta |
+| **Specificità** (tasso di veri negativi) | Dei veri negativi, quanti ne escludiamo correttamente | Classi | Più alta |
+| **AUC della curva ROC** | Probabilità che un positivo scelto a caso riceva un punteggio più alto di un negativo scelto a caso; qualità di **ordinamento** senza soglia | Probabilità | Più alta (0.5 = casuale, 1 = perfetta) |
+| **Brier score** | Differenza quadratica media tra probabilità ed esito 0/1; premia probabilità **ben calibrate** | Probabilità | Più basso |
+| **Log-loss** (log-verosimiglianza negativa media) | Come il Brier, ma punisce molto duramente gli errori fatti con sicurezza | Probabilità | Più basso |
+
+La curva ROC rappresenta la sensibilità contro $1 -$ specificità per *ogni* possibile soglia; l'AUC è l'area sotto di essa. Un modello può avere un'AUC alta (ordina bene i casi) ma probabilità mal calibrate (ad es. dice 0.9 quando la frequenza vera è 0.6) — Brier e log-loss lo rilevano, l'AUC no.
+
+### Sbilanciamento delle classi e modello di riferimento
+
+Nei dati giocattolo, il `r round(100 * mean(truth == 0))`% dei casi è 0. Un "modello" che **prevede sempre 0** raggiunge un'accuratezza di `r round(mean(truth == 0), 2)` — contro `r round(mean(pred == truth), 2)` del nostro modello. Con un esito raro (diciamo il 2% di frodi), il modello "sempre no" ha il 98% di accuratezza ed è inutile.
+
+Ne seguono due abitudini:
+
+1. **Calcola sempre un modello di riferimento** (*baseline*): prevedi la classe di maggioranza (classificazione) o la media del training (regressione). Un modello è interessante solo se lo batte nettamente. L'R² è in effetti il miglioramento rispetto alla baseline "prevedi la media".
+2. Con classi sbilanciate, guarda **sensibilità/specificità, AUC, Brier/log-loss**, non solo l'accuratezza, e stratifica le suddivisioni.
+
+## 7. I dati del Titanic
+
+Il file `data/titanic_data.csv` elenca i passeggeri del Titanic con il loro destino. In questo file, i valori mancanti **non** sono codificati come celle vuote o `NA`, ma con un punto interrogativo `"?"`. Verifichiamolo con R base, leggendo ogni colonna come testo:
+
+```{r}
+#| label: titanic-check
+raw_chr <- read.csv(data_path("titanic_data.csv"), colClasses = "character")
+dim(raw_chr)
+colSums(raw_chr == "?")
+```
+
+Quindi `age`, `fare`, `cabin`, `embarked` e `home.dest` contengono `"?"`. Se lo ignorassimo, `age` verrebbe letta come *testo*. Leggiamo il file indicando a `read_csv()` quali stringhe significano "mancante", e teniamo le variabili note al momento dell'imbarco e non per lo più mancanti:
+
+```{r}
+#| label: titanic-read
+titanic_raw <- readr::read_csv(data_path("titanic_data.csv"),
+                               na = c("", "NA", "?"),
+                               show_col_types = FALSE)
+
+titanic <- titanic_raw |>
+  select(survived, pclass, sex, age, sibsp, parch, fare, embarked) |>
+  mutate(
+    survived = factor(survived, levels = c(1, 0), labels = c("yes", "no")),
+    pclass   = factor(pclass, levels = 1:3, labels = c("1st", "2nd", "3rd")),
+    sex      = factor(sex),
+    embarked = factor(embarked)
+  )
+
+glimpse(titanic)
+colSums(is.na(titanic))
+```
+
+Due dettagli contano per il resto del corso:
+
+- `survived` è un **fattore** il cui **primo livello è `"yes"`**. yardstick tratta per impostazione predefinita il primo livello come "evento" (la classe positiva), quindi sensibilità e AUC si riferiscono alla *sopravvivenza*.
+- **Non** imputiamo né trasformiamo ancora nulla: ciò deve avvenire dentro la recipe, sui dati di addestramento.
+
+```{r}
+#| label: titanic-balance
+titanic |> count(survived) |> mutate(prop = n / sum(n))
+```
+
+Circa il `r round(100 * mean(titanic$survived == "no"))`% dei passeggeri è morto: la baseline "prevedi la classe di maggioranza" ha un'accuratezza di `r round(mean(titanic$survived == "no"), 3)`.
+
+## 8. La grammatica di tidymodels, dall'inizio alla fine
+
+tidymodels suddivide un progetto di modellazione in piccoli pacchetti, ciascuno dei quali svolge un compito:
+
+| Passo | Pacchetto | Funzioni chiave |
+|---|---|---|
+| Suddividere i dati | **rsample** | `initial_split()`, `training()`, `testing()`, `vfold_cv()` |
+| Preprocessare | **recipes** | `recipe()`, `step_*()` |
+| Specificare il modello | **parsnip** | `logistic_reg()`, `set_engine()`, `set_mode()` |
+| Raggruppare | **workflows** | `workflow()`, `add_recipe()`, `add_model()` |
+| Ricampionare / ottimizzare | **tune** | `fit_resamples()`, `tune_grid()`, `last_fit()` |
+| Misurare | **yardstick** | `metric_set()`, `roc_auc()`, `accuracy()`, … |
+
+### Passo 1 — suddividere
+
+```{r}
+#| label: tm-split
+set.seed(2026)
+titanic_split <- initial_split(titanic, prop = 0.75, strata = survived)
+titanic_train <- training(titanic_split)
+titanic_test  <- testing(titanic_split)
+
+set.seed(2026)
+titanic_folds <- vfold_cv(titanic_train, v = 5, strata = survived)
+titanic_split
+```
+
+L'insieme di test (`r nrow(titanic_test)` passeggeri) viene ora messo da parte. Tutto fino al Passo 6 usa solo `titanic_train` (`r nrow(titanic_train)` passeggeri) e i suoi 5 gruppi.
+
+### Passo 2 — recipe (preprocessing)
+
+```{r}
+#| label: tm-recipe
+titanic_rec <- recipe(survived ~ ., data = titanic_train) |>
+  step_impute_median(all_numeric_predictors()) |>
+  step_impute_mode(all_nominal_predictors()) |>
+  step_log(fare, offset = 1) |>
+  step_dummy(all_nominal_predictors()) |>
+  step_normalize(all_numeric_predictors())
+titanic_rec
+```
+
+Una recipe è un **piano**, non un risultato. Quando la scrivi non viene calcolato nulla. Quando il workflow viene stimato su un insieme di addestramento (o un gruppo di addestramento), la recipe *impara* mediane, mode, medie e DS **solo da quei dati**, e poi le applica ai corrispondenti dati di valutazione. È così che tidymodels previene la fuga di informazione del paragrafo 5.
+
+- `step_impute_median()` / `step_impute_mode()` riempiono i valori mancanti;
+- `step_log(fare, offset = 1)` usa $\log(\text{fare} + 1)$ per attenuare la lunga coda destra (alcune tariffe sono 0);
+- `step_dummy()` trasforma i fattori in colonne indicatrici 0/1;
+- `step_normalize()` centra e scala i predittori numerici (non essenziale per la regressione logistica, ma necessario per diversi modelli successivi).
+
+Se vuoi *vedere* che cosa produce la recipe, `prep()` la stima e `bake()` la applica:
+
+```{r}
+#| label: tm-bake
+titanic_rec |> prep() |> bake(new_data = NULL) |> glimpse()
+```
+
+### Passo 3 — specifica del modello
+
+```{r}
+#| label: tm-model
+lr_spec <- logistic_reg() |>
+  set_engine("glm") |>
+  set_mode("classification")
+lr_spec
+```
+
+parsnip separa **quale** modello vuoi (`logistic_reg()`) da **quale software** lo stima (il *motore*, qui la `glm()` di R base). La stessa specifica potrebbe usare `"glmnet"` o `"stan"` cambiando una sola parola.
+
+### Passo 4 — workflow
+
+```{r}
+#| label: tm-workflow
+lr_wf <- workflow() |>
+  add_recipe(titanic_rec) |>
+  add_model(lr_spec)
+lr_wf
+```
+
+### Passo 5 — ricampionamento
+
+```{r}
+#| label: tm-resample
+titanic_metrics <- metric_set(roc_auc, accuracy, sensitivity, specificity,
+                              brier_class, mn_log_loss)
+
+set.seed(2026)
+lr_res <- fit_resamples(
+  lr_wf,
+  resamples = titanic_folds,
+  metrics = titanic_metrics,
+  control = control_resamples(save_pred = TRUE)
+)
+lr_cv <- collect_metrics(lr_res)
+lr_cv
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Ogni riga è una metrica mediata sui 5 gruppi (`mean`), con il suo errore standard (`std_err`) tra i gruppi e il numero di gruppi (`n`).
+- L'AUC ROC in convalida incrociata è `r round(lr_cv$mean[lr_cv$.metric == "roc_auc"], 3)` e l'accuratezza `r round(lr_cv$mean[lr_cv$.metric == "accuracy"], 3)`.
+- La sensibilità (`r round(lr_cv$mean[lr_cv$.metric == "sensitivity"], 2)`) è la quota di **sopravvissuti** previsti correttamente; la specificità (`r round(lr_cv$mean[lr_cv$.metric == "specificity"], 2)`) la quota di **non sopravvissuti** previsti correttamente, alla soglia predefinita di 0.5.
+- La colonna `std_err` ti dice quanto cambierebbe la stima con una suddivisione diversa: differenze tra modelli inferiori a circa uno o due errori standard non dovrebbero impressionarti.
+:::
+
+### Confronto con la baseline
+
+parsnip ha un modello che ignora tutti i predittori e prevede sempre le proporzioni del training — esattamente la baseline del paragrafo 6:
+
+```{r}
+#| label: tm-null
+null_wf <- workflow() |>
+  add_recipe(titanic_rec) |>
+  add_model(null_model() |> set_engine("parsnip") |>
+              set_mode("classification"))
+
+set.seed(2026)
+null_res <- fit_resamples(null_wf, resamples = titanic_folds,
+                          metrics = titanic_metrics)
+collect_metrics(null_res) |> select(.metric, mean, std_err)
+```
+
+Il modello nullo ha un'AUC di 0.5 e un'accuratezza pari alla quota di non sopravvissuti; la sua sensibilità è 0 perché non prevede mai "yes". La regressione logistica è nettamente migliore su ogni metrica.
+
+### Passo 6 — il test finale, esattamente una volta
+
+Una volta fatte le scelte di modellazione (qui non c'era nulla da ottimizzare), `last_fit()` stima il workflow sull'**intero insieme di addestramento** e lo valuta **una sola volta** sull'insieme di test:
+
+```{r}
+#| label: tm-lastfit
+lr_final <- last_fit(lr_wf, split = titanic_split, metrics = titanic_metrics)
+collect_metrics(lr_final)
+```
+
+```{r}
+#| label: fig-roc
+#| fig-cap: "Curva ROC della regressione logistica sull'insieme di test del Titanic. La diagonale corrisponde a una previsione puramente casuale."
+lr_test_pred <- collect_predictions(lr_final)
+lr_test_pred |>
+  roc_curve(truth = survived, .pred_yes) |>
+  autoplot()
+```
+
+```{r}
+#| label: tm-confmat
+lr_test_pred |> conf_mat(truth = survived, estimate = .pred_class)
+```
+
+L'AUC sul test (`r round(collect_metrics(lr_final) |> filter(.metric == "roc_auc") |> pull(.estimate), 3)`) dovrebbe essere simile alla stima di CV. Se fosse molto peggiore, sarebbe un campanello d'allarme (fuga di informazione nella CV, oppure un insieme di test diverso dai dati di addestramento). Il workflow stimato dentro `lr_final` si può estrarre con `extract_workflow(lr_final)` e usare con `predict()` su nuovi passeggeri.
+
+::: {.callout-note collapse="true" icon="false"}
+## Riquadro: `caret` e perché questo corso usa tidymodels
+
+**caret** (*Classification And REgression Training*), scritto da Max Kuhn e rilasciato per la prima volta su CRAN nel 2007, è stato per molti anni *l'*interfaccia standard di R al machine learning. Una singola funzione, `train()`, offre un'interfaccia uniforme a più di 200 modelli, con ricampionamento e ottimizzazione integrati. Una pipeline più o meno equivalente in caret è la seguente:
+
+```r
+library(caret)
+ctrl <- trainControl(method = "cv", number = 5, classProbs = TRUE,
+                     summaryFunction = twoClassSummary)
+set.seed(2026)
+caret_fit <- train(survived ~ ., data = titanic_train,
+                   method = "glm", family = binomial,
+                   preProcess = c("medianImpute", "center", "scale"),
+                   na.action = na.pass,
+                   metric = "ROC", trControl = ctrl)
+caret_fit
+```
+
+caret funziona ancora ed è ancora su CRAN; moltissimo codice, libri e materiale didattico lo usano. Ma è in **modalità di manutenzione**: riceve correzioni di errori, ma non sono previste nuove funzionalità importanti, e il suo autore raccomanda **tidymodels** — che guida insieme a Julia Silge e altri in Posit — come suo successore per i lavori nuovi. I motivi per cui qui scegliamo tidymodels:
+
+- **Progettazione modulare.** Suddivisione, preprocessing, specifica del modello, ottimizzazione e metriche sono pacchetti separati con funzioni piccole e componibili, invece di una grande funzione con molti argomenti.
+- **Interfacce coerenti.** Ogni modello si specifica allo stesso modo (`model() |> set_engine()`), gli argomenti hanno gli stessi nomi tra i motori (`trees`, `min_n`, `learn_rate`) e le previsioni tornano sempre come tibble con nomi di colonna prevedibili (`.pred_class`, `.pred_yes`).
+- **Preprocessing dentro il ricampionamento.** Le recipe sono stimate dentro ciascun gruppo e solo sull'insieme di addestramento, il che rende difficile commettere per caso la fuga di informazione del paragrafo 5. (Anche `preProcess` di caret lo fa; le recipe lo estendono a un feature engineering arbitrario.)
+- **Un ecosistema in sviluppo attivo**: `tune` e `finetune` per l'ottimizzazione (griglie, racing, ottimizzazione bayesiana), `yardstick` per le metriche, `workflowsets` per confrontare molti modelli, `probably` per calibrazione e soglie, più un libro gratuito, *Tidy Modeling with R*.
+
+Il prezzo è qualche riga di codice in più e più oggetti da imparare. I concetti si trasferiscono direttamente: se incontri codice caret, `trainControl()` ≈ `vfold_cv()` + `control_*()`, `preProcess` ≈ una recipe, `train()` ≈ `tune_grid()` + `finalize_workflow()` + `fit()`.
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Giudicare un modello dal suo errore di training.** Migliora sempre con la complessità. Usa la CV o un insieme di validazione.
+2. **Preprocessare prima di suddividere** (standardizzare, imputare, selezionare variabili sui dati completi). Metti ogni passo che dipende dai dati dentro la recipe.
+3. **Usare l'insieme di test più di una volta.** Non appena scegli un modello in base al suo punteggio sul test, quel punteggio non è più una stima onesta.
+4. **Riportare solo l'accuratezza con classi sbilanciate.** Confronta con la baseline della classe di maggioranza e guarda sensibilità, specificità e AUC.
+5. **Dimenticare quale livello sia l'evento.** yardstick usa per impostazione predefinita il *primo* livello del fattore; controlla `levels(df$outcome)`.
+6. **Interpretare troppo piccole differenze.** Guarda `std_err`: due modelli le cui AUC in CV differiscono per meno dei loro errori standard sono, in pratica, pari.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Un modello ha un RMSE di training di 0.1 e un RMSE in convalida incrociata di 0.9. Un secondo modello ha 0.6 e 0.65. Quale preferisci, e che cosa sta succedendo al primo?
+
+Il secondo: prevede meglio i nuovi dati (0.65 < 0.9). Il primo sta **sovradattando** — ha distorsione bassa ma varianza molto alta, e ha memorizzato i dati di addestramento.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Perché la mediana usata per imputare `age` deve essere calcolata dentro ogni gruppo di CV e non una volta sola sull'intero insieme di dati?
+
+Perché altrimenti il gruppo di valutazione contribuisce alla mediana usata per addestrare il modello: l'informazione trapela dai dati di valutazione al processo di addestramento e la stima di CV diventa (leggermente) ottimistica. Con passi più aggressivi (selezione delle variabili) la distorsione può essere enorme.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Il modello A ha AUC ROC 0.85 e Brier score 0.20; il modello B ha AUC 0.85 e Brier 0.14. Qual è la differenza?
+
+Entrambi **ordinano** i passeggeri ugualmente bene, ma le probabilità di B sono più vicine agli esiti osservati — B è meglio **calibrato**. Se le probabilità stesse vengono usate (ad es. per decidere come allocare risorse), preferisci B.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Che cosa fa `strata = survived` in `vfold_cv()`?
+
+Crea i gruppi separatamente tra sopravvissuti e non sopravvissuti, così che ogni gruppo abbia circa la stessa proporzione di sopravvissuti dell'insieme di addestramento.
+:::
+
+## 10. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — baseline.** (a) Calcola a mano, su `titanic_train`, l'accuratezza della regola "muoiono tutti". (b) Per un problema di regressione che prevede `fare`, qual è la previsione di riferimento e qual è il suo R² sui dati di addestramento?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+mean(titanic_train$survived == "no")   # circa 0.62
+```
+(b) La baseline prevede per tutti la media di `fare` nel training. Per la definizione di R², il suo R² sui dati di addestramento è esattamente 0 (su nuovi dati può essere leggermente negativo).
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — prevedi, poi verifica.** Nella simulazione k-NN del paragrafo 3, che cosa succede all'RMSE di *test* al $k$ migliore se porti la dimensione dell'insieme di addestramento da 50 a 500? E che cosa succede al $k$ migliore? Esegui il codice per verificare.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+set.seed(44)
+train_big <- sim_data(500)
+k_values <- c(1, 3, 5, 10, 20, 40, 80, 150)
+sapply(k_values, \(k) rmse_vec_base(
+  test_big$y, knn_reg(train_big$x, train_big$y, test_big$x, k)))
+```
+Con più dati il miglior RMSE di test si **avvicina al livello di rumore 0.3** (più dati riducono la varianza), e il $k$ migliore diventa **più grande** (con più punti possiamo fare la media su più vicini senza uscire dalla regione locale, quindi possiamo permetterci un adattamento più liscio).
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — individua la fuga di informazione.** Un collega scrive:
+
+```r
+titanic_scaled <- titanic |>
+  mutate(age = (age - mean(age, na.rm = TRUE)) / sd(age, na.rm = TRUE))
+split <- initial_split(titanic_scaled, strata = survived)
+```
+
+Che cosa c'è che non va, e come lo riscriveresti in tidymodels?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+La media e la DS di `age` sono calcolate su **tutti** i passeggeri, compreso il futuro insieme di test: l'informazione del test trapela nell'addestramento. Prima suddividi, poi metti la standardizzazione in una recipe:
+
+```r
+split <- initial_split(titanic, strata = survived)
+rec <- recipe(survived ~ ., data = training(split)) |>
+  step_impute_median(age) |>
+  step_normalize(age)
+```
+La recipe impara media e DS dai dati di addestramento (o dal gruppo di addestramento) e applica quegli stessi numeri ai dati di test.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — interpreta le metriche.** Un modello di screening per una malattia con prevalenza del 5% ha accuratezza 0.95, sensibilità 0.02, specificità 0.999 e AUC ROC 0.80. Scrivi tre frasi per un medico.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Il 95% di accuratezza non è migliore di dichiarare sani tutti, che dà anch'esso il 95%. Alla soglia attuale il modello non riconosce quasi nessun paziente malato (ne individua solo il 2%), quindi così com'è è inutile per lo screening. Tuttavia, un'AUC di 0.80 mostra che per lo più ordina i malati più in alto dei sani, quindi **abbassare la soglia** potrebbe dare una sensibilità utile, al prezzo di più falsi allarmi.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — una recipe più ricca.** Aggiungi a `titanic_rec` una variabile `family = sibsp + parch` (suggerimento: `step_mutate()`) e un'interazione tra sesso e classe (suggerimento: `step_interact(terms = ~ starts_with("sex_"):starts_with("pclass_"))` dopo `step_dummy()`). Confronta l'AUC ROC in CV con quella del workflow originale. La differenza è maggiore degli errori standard?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+rec2 <- recipe(survived ~ ., data = titanic_train) |>
+  step_mutate(family = sibsp + parch) |>
+  step_impute_median(all_numeric_predictors()) |>
+  step_impute_mode(all_nominal_predictors()) |>
+  step_log(fare, offset = 1) |>
+  step_dummy(all_nominal_predictors()) |>
+  step_interact(terms = ~ starts_with("sex_"):starts_with("pclass_")) |>
+  step_normalize(all_numeric_predictors())
+
+set.seed(2026)
+res2 <- fit_resamples(lr_wf |> update_recipe(rec2),
+                      resamples = titanic_folds, metrics = titanic_metrics)
+bind_rows(original = collect_metrics(lr_res),
+          richer = collect_metrics(res2), .id = "recipe") |>
+  filter(.metric == "roc_auc")
+```
+L'interazione sesso × classe di solito alza un po' l'AUC (essere donna aiutava molto di più in prima e seconda classe che in terza). Confronta il guadagno con `std_err`: se è inferiore a circa un errore standard, l'evidenza a favore del modello più ricco è debole.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | A che cosa serve |
+|---|---|
+| Training / validazione / test | Stimare / scegliere / riportare — l'insieme di test si usa una volta sola |
+| `initial_split(df, prop, strata)` | Suddivisione training–test, stratificata sulla risposta |
+| `vfold_cv(train, v, strata)` | Gruppi per la convalida incrociata a k gruppi |
+| `recipe()` + `step_*()` | Preprocessing appreso solo sui dati di addestramento (nessuna fuga) |
+| `logistic_reg() \|> set_engine("glm")` | Specifica del modello (che cosa + quale software) |
+| `workflow()` | Recipe + modello in un solo oggetto |
+| `fit_resamples()`, `collect_metrics()` | Stime di prestazione ricampionate |
+| `metric_set()` | Scegliere le metriche da calcolare |
+| `null_model()` | Baseline: classe di maggioranza / media |
+| `last_fit(wf, split)` | Stima finale sul training, singola valutazione sul test |
+
+- L'errore di training è ottimistico; ciò che conta è l'**errore di generalizzazione**.
+- La flessibilità scambia **distorsione** con **varianza**; il modello migliore sta nel mezzo.
+- **Tutto ciò che viene appreso dai dati** (preprocessing compreso) appartiene dentro il ricampionamento.
+- Scegli le metriche in base allo scopo: ordinamento (AUC), probabilità calibrate (Brier, log-loss), decisioni a una soglia (sensibilità, specificità) — e batti sempre una **baseline**.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Kuhn & Silge, *Tidy Modeling with R*, <https://www.tmwr.org> (capitoli su suddivisione dei dati, ricampionamento e metriche)
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2a ed.), capitoli 2 e 5, <https://www.statlearning.com>
+- Articoli "Get started" di tidymodels, <https://www.tidymodels.org/start/>
+:::

@@ -1,38 +1,60 @@
+<style>
+  .lang-switch { display: inline-flex; align-items: center; gap: 2px; padding: 2px;
+    border: 1px solid var(--rt-line, #e5e7eb); border-radius: 999px; margin: 0 .5rem; }
+  .lang-switch a { display: inline-flex; align-items: center; gap: .35rem;
+    padding: .2rem .6rem; border-radius: 999px; font-size: .82rem; font-weight: 600;
+    text-decoration: none; color: inherit; opacity: .7; line-height: 1.2; }
+  .lang-switch a:hover { opacity: 1; }
+  .lang-switch a.active { background: var(--rt-primary, #2160B8); color: #fff; opacity: 1; }
+  .lang-switch svg { width: 18px; height: 12px; border-radius: 2px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.12); flex: none; }
+  @media (max-width: 991px) { .lang-switch { margin: .5rem 0; } }
+</style>
 <script>
 /* Language switch EN <-> IT ---------------------------------------------------
    The Italian site mirrors the English one under /it/ with identical file
-   names. This script (1) wires the "Italiano / English" navbar button to the
-   same page in the other language and (2) on Italian pages translates the
-   navbar and points its links to the Italian pages.                          */
+   names. This script (1) adds an "EN | IT" switch with flags to the navbar,
+   pointing to the same page in the other language, and (2) on Italian pages
+   translates the navbar and points its links to the Italian pages.           */
 (function () {
-  // Pages that exist in Italian (paths relative to the site root, no .html)
-  var TRANSLATED = /^(index|setup|learning-path|glossary|about|lessons\/0[1-8]-[^/]+\/[^/]+)$/;
+  // Pages that exist in Italian (paths relative to the site root, no .html).
+  // Update this list when more lessons are translated.
+  var TRANSLATED = /^(index|setup|learning-path|glossary|about|lessons\/(0[1-9]|1[0-2])-[^/]+\/[^/]+|lessons\/67-capstone)$/;
+
+  var FLAG_GB = '<svg viewBox="0 0 60 30" aria-hidden="true"><clipPath id="ls-s"><path d="M0,0 v30 h60 v-30 z"/></clipPath><clipPath id="ls-t"><path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath><g clip-path="url(#ls-s)"><path d="M0,0 v30 h60 v-30 z" fill="#012169"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/><path d="M0,0 L60,30 M60,0 L0,30" clip-path="url(#ls-t)" stroke="#C8102E" stroke-width="4"/><path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/><path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/></g></svg>';
+  var FLAG_IT = '<svg viewBox="0 0 3 2" aria-hidden="true"><rect width="1" height="2" fill="#009246"/><rect x="1" width="1" height="2" fill="#fff"/><rect x="2" width="1" height="2" fill="#CE2B37"/></svg>';
 
   var meta = document.querySelector('meta[name="quarto:offset"]');
   var offset = meta ? meta.getAttribute('content') : './';
   var root = new URL(offset, window.location.href);            // site root URL
   var here = new URL(window.location.href);
-  var rel = decodeURIComponent(here.pathname.substring(root.pathname.length)); // e.g. "it/lessons/..."
+  var rel = decodeURIComponent(here.pathname.substring(root.pathname.length));
   if (rel === '' || rel.endsWith('/')) rel += 'index.html';
   var isIt = rel.indexOf('it/') === 0;
   var page = (isIt ? rel.substring(3) : rel).replace(/\.html$/, '');
 
-  function target() {
-    if (isIt) return new URL(page + '.html', root);              // -> English
-    if (TRANSLATED.test(page)) return new URL('it/' + page + '.html', root);
-    return new URL('it/index.html', root);                         // not translated yet
-  }
+  var enUrl = new URL(page + '.html', root).href;
+  var itUrl = TRANSLATED.test(page) ? new URL('it/' + page + '.html', root).href
+                                    : new URL('it/index.html', root).href;
 
   document.addEventListener('DOMContentLoaded', function () {
-    // 1. the switch button
-    document.querySelectorAll('a[aria-label="Switch language"]').forEach(function (a) {
-      a.setAttribute('href', target().href + here.hash);
-      var label = a.querySelector('.menu-text') || a;
-      label.textContent = isIt ? 'English' : 'Italiano';
-      a.setAttribute('title', isIt ? 'Read this page in English' : 'Leggi questa pagina in italiano');
-      a.setAttribute('lang', isIt ? 'en' : 'it');
-      try { localStorage.setItem('course-lang', isIt ? 'it' : 'en'); } catch (e) {}
-    });
+    // 1. build the switch and put it at the start of the right-hand navbar
+    var box = document.createElement('div');
+    box.className = 'lang-switch';
+    box.setAttribute('role', 'group');
+    box.setAttribute('aria-label', 'Language / Lingua');
+    box.innerHTML =
+      '<a href="' + enUrl + here.hash + '" lang="en" title="English"' + (isIt ? '' : ' class="active" aria-current="true"') + '>' + FLAG_GB + 'EN</a>' +
+      '<a href="' + itUrl + (TRANSLATED.test(page) ? here.hash : '') + '" lang="it" title="Italiano"' + (isIt ? ' class="active" aria-current="true"' : '') + '>' + FLAG_IT + 'IT</a>';
+    var right = document.querySelector('#quarto-header .navbar-nav.ms-auto') ||
+                document.querySelector('#quarto-header .quarto-navbar-tools');
+    if (right) {
+      var li = document.createElement('li');
+      li.className = 'nav-item d-flex align-items-center';
+      li.appendChild(box);
+      right.insertBefore(li, right.firstChild);
+    }
+    try { localStorage.setItem('course-lang', isIt ? 'it' : 'en'); } catch (e) {}
 
     if (!isIt) return;
 
@@ -48,7 +70,7 @@
 
     // ... and point navbar links (and logo/title) to the Italian pages
     document.querySelectorAll('#quarto-header a[href]').forEach(function (a) {
-      if (a.getAttribute('aria-label') === 'Switch language') return;
+      if (a.closest('.lang-switch')) return;
       var u = new URL(a.getAttribute('href'), window.location.href);
       if (u.origin !== root.origin || u.pathname.indexOf(root.pathname) !== 0) return;
       var r = u.pathname.substring(root.pathname.length);

@@ -7,7 +7,7 @@ description: "Comprendi l'ANOVA come confronto tra la variabilità tra gruppi e 
 {{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
 
 ::: {.lesson-meta}
-[Livello 3 · Inferenza]{.level-3} [⏱ ~90 min]{} [Prerequisiti: [Test t](34-t-tests.qmd), [La logica del test d'ipotesi](33-hypothesis-testing.qmd)]{}
+[Livello 3 · Inferenza]{.level-3} [⏱ ~90 min]{} [Prerequisiti: [Test t: confrontare medie](34-t-tests.qmd), [La logica del test d'ipotesi](33-hypothesis-testing.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}
@@ -138,7 +138,7 @@ summary(fit_plant)
 - **`Pr(>F)`** = `r round(summary(fit_plant)[[1]][["Pr(>F)"]][1], 4)`: se le tre medie della popolazione fossero tutte uguali, una F almeno così grande sarebbe rara. Quindi almeno una media differisce — ma l'ANOVA non dice **quale** (Sezione 5).
 :::
 
-L'ANOVA è un modello lineare con un predittore categoriale; `lm()` + `anova()` produce la stessa tabella e ti prepara a [Regressione lineare semplice (EN)](../../../lessons/09-regression/38-simple-regression.qmd):
+L'ANOVA è un modello lineare con un predittore categoriale; `lm()` + `anova()` produce la stessa tabella e ti prepara a [Regressione lineare semplice](../09-regression/38-simple-regression.qmd):
 
 ```{r}
 #| label: lm-anova
@@ -451,7 +451,7 @@ Perché l'effetto di un fattore dipende dal livello dell'altro. L'effetto princi
 ::: {.callout-note collapse="true" icon="false"}
 ## D3. Il grafico dei residui contro i valori stimati mostra un imbuto che si apre verso destra. Indica due rimedi.
 
-Trasformare la risposta (logaritmo, reciproco, radice quadrata, guidati da Box–Cox), oppure — con un solo fattore — usare l'ANOVA di Welch `oneway.test()`. Un modello per varianza non costante (per esempio un GLM, vedi [Regressione di Poisson (EN)](../../../lessons/09-regression/42-poisson-regression.qmd)) è un'ulteriore possibilità.
+Trasformare la risposta (logaritmo, reciproco, radice quadrata, guidati da Box–Cox), oppure — con un solo fattore — usare l'ANOVA di Welch `oneway.test()`. Un modello per varianza non costante (per esempio un GLM, vedi [Regressione di Poisson](../09-regression/42-poisson-regression.qmd)) è un'ulteriore possibilità.
 :::
 
 ## 9. Esercizi

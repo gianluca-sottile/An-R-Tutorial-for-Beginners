@@ -1,0 +1,575 @@
+---
+title: "Regressione lineare semplice"
+subtitle: "Un predittore, una retta: stimare, leggere e controllare un modello lineare"
+description: "Comprendi il modello di regressione come media condizionata più rumore, stimalo con i minimi quadrati tramite lm(), leggi ogni riga di summary(), costruisci intervalli di confidenza e di previsione e verifica le assunzioni con i grafici diagnostici."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~90 min]{} [Prerequisiti: [Correlazione](../06-visualization/27-correlation.qmd), [Test t: confrontare medie](../08-inference/34-t-tests.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- descrivere un modello di regressione come **media condizionata più rumore** e spiegare che cosa minimizzano i "minimi quadrati";
+- stimare una regressione semplice con `lm()` e interpretare pendenza e intercetta **a parole, con le unità di misura**;
+- leggere ogni riga di `summary(lm(...))` e collegare il test sulla pendenza a `cor.test()`;
+- distinguere un **intervallo di confidenza** per la media da un **intervallo di previsione** per una nuova osservazione;
+- controllare le assunzioni con i grafici diagnostici e usare una **trasformazione logaritmica** quando serve.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(broom)
+```
+
+## 1. Perché ci serve un modello?
+
+I pinguini più pesanti tendono ad avere le pinne più lunghe. Un grafico a dispersione lo mostra a colpo d'occhio, e la [correlazione](../06-visualization/27-correlation.qmd) lo riassume con un solo numero. Ma spesso vogliamo di più:
+
+- *Di quanto* è più pesante, in media, un pinguino con le pinne più lunghe di 10 mm?
+- Se misuriamo la pinna di un nuovo esemplare, *quale massa corporea dobbiamo aspettarci*, e quanto è incerta questa stima?
+- La relazione è abbastanza forte da rendere improbabile che sia un caso dovuto al campionamento?
+
+Un **modello di regressione** risponde a tutte e tre le domande. Descrive come cambia la **media** di una variabile risposta $y$ al variare di un predittore $x$, e quanto le singole osservazioni si disperdono attorno a quella media.
+
+## 2. Un modello è "media condizionata + rumore"
+
+Guardiamo i pinguini. Per ciascuna fascia di lunghezza della pinna, i punti arancioni mostrano la **massa corporea media** degli esemplari di quella fascia.
+
+```{r}
+#| label: fig-cond-mean
+#| fig-cap: "Massa corporea in funzione della lunghezza della pinna. Punti arancioni: massa corporea media entro fasce di lunghezza della pinna. Si dispongono vicino a una retta."
+#| warning: false
+ggplot(penguins, aes(flipper_len, body_mass)) +
+  geom_point(alpha = 0.3) +
+  stat_summary_bin(fun = mean, bins = 12, geom = "point",
+                   colour = "#E69F00", size = 3) +
+  labs(x = "Lunghezza della pinna (mm)", y = "Massa corporea (g)")
+```
+
+Le medie delle fasce salgono quasi lungo una retta. Quella retta è la **media condizionata**: la media di $y$ *dato* un valore di $x$. I singoli pinguini non stanno sulla retta, ma si disperdono attorno a essa. Questa dispersione è il **rumore** (o **errore**): tutto ciò che riguarda la massa corporea e che la lunghezza della pinna non spiega (sesso, specie, dieta, errore di misura...).
+
+Una regressione lineare semplice afferma quindi:
+
+$$
+\underbrace{y_i}_{\text{osservato}} \;=\; \underbrace{\beta_0 + \beta_1 x_i}_{\text{media condizionata}} \;+\; \underbrace{\varepsilon_i}_{\text{rumore}}
+$$
+
+- $\beta_0$, l'**intercetta**: la media di $y$ quando $x = 0$;
+- $\beta_1$, la **pendenza**: di quanto cambia la media di $y$ quando $x$ aumenta di una unità;
+- $\varepsilon_i$: lo scostamento dell'osservazione $i$ dalla retta, che si assume abbia media zero.
+
+Le lettere greche sono **parametri della popolazione**, quindi ignoti. Dai dati calcoliamo le **stime** $\hat\beta_0$ e $\hat\beta_1$ (si legge "beta cappello").
+
+## 3. Minimi quadrati: qual è la retta "migliore"?
+
+Partiamo da un piccolo dataset incluso in R: `women` contiene l'altezza media (in pollici) e il peso medio (in libbre) delle donne americane tra i 30 e i 39 anni, per 15 altezze.
+
+Per una qualunque retta candidata, il **residuo** di un punto è la sua distanza *verticale* dalla retta: il valore osservato $y$ meno il valore $y$ previsto dalla retta. Il grafico mostra i residui (segmenti rossi) per la retta che R sceglierà.
+
+```{r}
+#| label: fig-residuals
+#| fig-cap: "I residui sono le distanze verticali tra ciascun punto e la retta stimata."
+m_women <- lm(weight ~ height, data = women)
+
+augment(m_women) |>
+  ggplot(aes(height, weight)) +
+  geom_segment(aes(xend = height, yend = .fitted), colour = "#D55E00") +
+  geom_abline(intercept = coef(m_women)[1], slope = coef(m_women)[2]) +
+  geom_point(size = 2) +
+  labs(x = "Altezza (in)", y = "Peso (lb)")
+```
+
+I **minimi quadrati ordinari (OLS)** scelgono la retta che rende **minima la somma dei quadrati dei residui** (RSS, *residual sum of squares*). L'elevamento al quadrato rende positivi tutti i residui e penalizza fortemente gli errori grandi. Calcoliamo l'RSS per alcune pendenze candidate (ogni retta passa per il punto delle medie, come fa sempre la retta OLS):
+
+```{r}
+#| label: rss-candidates
+rss <- function(b0, b1) sum((women$weight - (b0 + b1 * women$height))^2)
+
+slopes <- c(3, 3.2, 3.45, 3.7, 4)
+intercepts <- mean(women$weight) - slopes * mean(women$height)
+data.frame(slope = slopes, RSS = mapply(rss, intercepts, slopes))
+```
+
+L'RSS è minima per una pendenza di 3.45 e cresce da entrambi i lati. Nessun'altra retta ha un'RSS più piccola.
+
+### OLS a mano e con `lm()`
+
+Con un solo predittore la minimizzazione ha una soluzione in forma chiusa: la pendenza è la covarianza tra $x$ e $y$ divisa per la varianza di $x$, e l'intercetta fa passare la retta per $(\bar x, \bar y)$.
+
+```{r}
+#| label: ols-by-hand
+b1 <- cov(women$height, women$weight) / var(women$height)
+b0 <- mean(women$weight) - b1 * mean(women$height)
+c(intercept = b0, slope = b1)
+
+coef(m_women)
+```
+
+`lm()` ("linear model", modello lineare) restituisce gli stessi numeri. La formula `weight ~ height` si legge "weight modellato da height": la risposta sta a sinistra di `~`, il predittore a destra.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la derivazione delle stime OLS
+
+Minimizziamo $\text{RSS}(b_0, b_1) = \sum_i (y_i - b_0 - b_1 x_i)^2$. Ponendo uguali a zero entrambe le derivate parziali si ottengono le **equazioni normali**
+
+$$
+\sum_i (y_i - b_0 - b_1 x_i) = 0, \qquad \sum_i x_i (y_i - b_0 - b_1 x_i) = 0 .
+$$
+
+La prima dice che i residui sommano a zero, quindi $\hat\beta_0 = \bar y - \hat\beta_1 \bar x$. Sostituendo nella seconda,
+
+$$
+\hat\beta_1 = \frac{\sum_i (x_i - \bar x)(y_i - \bar y)}{\sum_i (x_i - \bar x)^2} = \frac{\operatorname{cov}(x, y)}{\operatorname{var}(x)} = r \,\frac{s_y}{s_x},
+$$
+
+dove $r$ è la correlazione di Pearson e $s_x, s_y$ sono le deviazioni standard. Sotto le assunzioni della Sezione 9, OLS è il *miglior stimatore lineare non distorto* (teorema di Gauss–Markov): nessun altro stimatore non distorto e lineare in $y$ ha varianza minore.
+:::
+
+## 4. Interpretare pendenza e intercetta a parole
+
+La pendenza è `r round(coef(m_women)[2], 2)`: **per ogni pollice in più di altezza, il peso medio è più alto di `r round(coef(m_women)[2], 2)` libbre.** Dillo sempre con le unità di misura, e di' "in media": le singole donne non aumentano di peso crescendo di un pollice; stiamo confrontando *gruppi di donne* che differiscono di un pollice in altezza.
+
+L'intercetta è `r round(coef(m_women)[1], 1)` libbre: il peso previsto per una donna alta 0 pollici. È un'assurdità, non perché il modello sia sbagliato, ma perché $x = 0$ è molto al di fuori dei dati (le altezze vanno da `r min(women$height)` a `r max(women$height)` in). Un rimedio comune è **centrare** il predittore, in modo che l'intercetta si riferisca a un valore sensato:
+
+```{r}
+#| label: centred
+lm(weight ~ I(height - 65), data = women) |> coef()
+```
+
+Ora l'intercetta, `r round(coef(lm(weight ~ I(height - 65), data = women))[1], 1)`, è il peso previsto a 65 pollici. La pendenza non cambia. (`I()` dice alla formula di calcolare `height - 65` come operazione aritmetica.)
+
+## 5. Leggere `summary(lm)` riga per riga
+
+Torniamo ai pinguini. Modelliamo la massa corporea in funzione della lunghezza della pinna:
+
+```{r}
+#| label: penguin-model
+m_peng <- lm(body_mass ~ flipper_len, data = penguins)
+summary(m_peng)
+```
+
+```{r}
+#| label: penguin-model-values
+#| include: false
+s_peng <- summary(m_peng)
+b_flip <- coef(m_peng)[2]
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **Call** — il modello che hai stimato.
+- **Residuals** — un riepilogo a cinque numeri dei residui. Dovrebbero essere pressoché simmetrici attorno a 0 (mediana vicina a 0, Q1 e Q3 di ampiezza simile).
+- **Tabella dei coefficienti**, una riga per parametro:
+  - `Estimate` — $\hat\beta$. I pinguini con le pinne più lunghe di 1 mm sono in media più pesanti di `r round(b_flip, 1)` g (circa `r round(10 * b_flip, -1)` g ogni 10 mm).
+  - `Std. Error` — quanto varierebbe la stima da campione a campione: `r round(s_peng$coefficients[2, 2], 2)` g/mm.
+  - `t value` — stima / errore standard: la pendenza dista `r round(s_peng$coefficients[2, 3], 1)` errori standard da 0. È la stessa idea di rapporto segnale/rumore del [test t](../08-inference/34-t-tests.qmd).
+  - `Pr(>|t|)` — il p-value per $H_0: \beta = 0$ ("nessuna relazione lineare"). Qui è piccolissimo.
+- **Residual standard error** — l'errore standard dei residui, cioè la dimensione tipica di un residuo: i singoli pinguini si discostano tipicamente dalla retta di circa `r round(s_peng$sigma, -1)` g. I gradi di libertà sono $n - 2$ (sono stati stimati due parametri).
+- **`(2 observations deleted due to missingness)`** — `lm()` elimina in silenzio le righe con `NA` in una qualunque variabile del modello. Controlla sempre questa riga.
+- **Multiple R-squared** — la quota della varianza della massa corporea "spiegata" dalla retta: `r round(100 * s_peng$r.squared)`%. L'R² *corretto* (*adjusted*) penalizza i predittori aggiuntivi (utile nella [prossima lezione](39-multiple-regression.qmd)).
+- **F-statistic** — verifica se il modello nel suo complesso è migliore di un modello con la sola intercetta. Con un solo predittore coincide con $t^2$ (`r round(s_peng$coefficients[2, 3]^2, 1)`) e ha lo stesso p-value.
+:::
+
+Gli intervalli di confidenza per i coefficienti si ottengono con `confint()`:
+
+```{r}
+#| label: confint
+confint(m_peng)
+```
+
+Abbiamo una confidenza del 95% che, nella popolazione di pinguini rappresentata da questi esemplari, ogni millimetro in più di pinna corrisponda a una massa media maggiore compresa tra `r round(confint(m_peng)[2, 1], 1)` e `r round(confint(m_peng)[2, 2], 1)` g.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: errore standard, R² e F
+
+Con $\hat\sigma^2 = \text{RSS}/(n-2)$ (il quadrato dell'errore standard dei residui),
+
+$$
+\operatorname{SE}(\hat\beta_1) = \frac{\hat\sigma}{\sqrt{\sum_i (x_i - \bar x)^2}}, \qquad
+t = \frac{\hat\beta_1}{\operatorname{SE}(\hat\beta_1)} \sim t_{n-2} \text{ sotto } H_0 .
+$$
+
+La pendenza è stimata con maggiore precisione quando il rumore $\hat\sigma$ è piccolo e quando i valori di $x$ sono molto dispersi.
+
+Con $\text{TSS} = \sum_i (y_i - \bar y)^2$ (devianza totale),
+
+$$
+R^2 = 1 - \frac{\text{RSS}}{\text{TSS}}, \qquad
+F = \frac{(\text{TSS} - \text{RSS})/1}{\text{RSS}/(n-2)} .
+$$
+
+Nella regressione semplice $R^2 = r^2$, il quadrato della correlazione di Pearson, e $F = t^2$.
+:::
+
+## 6. Test sulla pendenza = test sulla correlazione
+
+Nella [lezione sulla correlazione](../06-visualization/27-correlation.qmd) abbiamo verificato $H_0: \rho = 0$ con `cor.test()`. Confronta:
+
+```{r}
+#| label: cor-test
+ct <- cor.test(penguins$body_mass, penguins$flipper_len)
+c(t_cor = unname(ct$statistic), t_slope = s_peng$coefficients[2, 3])
+c(r_squared = unname(ct$estimate^2), R2 = s_peng$r.squared)
+```
+
+Le due statistiche t sono identiche, e $r^2 = R^2$. **Verificare che "pendenza = 0" e verificare che "correlazione = 0" è lo stesso test.** La differenza sta in ciò che riporti: la correlazione è priva di unità e simmetrica in $x$ e $y$; la pendenza ha unità di misura (g per mm) e una direzione (prevedere $y$ da $x$). La pendenza è la correlazione riscalata: $\hat\beta_1 = r \, s_y / s_x$.
+
+## 7. Output ordinato del modello con `broom`
+
+`summary()` stampa bene ma è scomodo da riutilizzare. Il pacchetto **broom** trasforma i modelli in data frame:
+
+```{r}
+#| label: broom-tidy
+tidy(m_peng, conf.int = TRUE)   # una riga per coefficiente
+glance(m_peng)                  # una riga per modello
+```
+
+```{r}
+#| label: broom-augment
+augment(m_peng) |> head(4)      # una riga per osservazione
+```
+
+`augment()` aggiunge `.fitted` (il punto sulla retta), `.resid` (il residuo) e colonne diagnostiche (`.hat`, `.cooksd`, `.std.resid`) che useremo in [Regressione multipla](39-multiple-regression.qmd).
+
+## 8. Intervallo di confidenza e intervallo di previsione
+
+Due domande diverse su un pinguino con pinne di 200 mm:
+
+1. *Qual è la massa corporea **media** di tutti i pinguini con pinne di 200 mm?* → **intervallo di confidenza** per la media.
+2. *Quale sarà la massa corporea del **prossimo** pinguino con pinne di 200 mm?* → **intervallo di previsione** per una singola nuova osservazione.
+
+```{r}
+#| label: ci-pi
+new_birds <- data.frame(flipper_len = c(180, 200, 220))
+predict(m_peng, newdata = new_birds, interval = "confidence")
+predict(m_peng, newdata = new_birds, interval = "prediction")
+```
+
+```{r}
+#| label: ci-pi-values
+#| include: false
+ci200 <- predict(m_peng, data.frame(flipper_len = 200), interval = "confidence")
+pi200 <- predict(m_peng, data.frame(flipper_len = 200), interval = "prediction")
+```
+
+La previsione puntuale è la stessa (`r round(ci200[1])` g a 200 mm), ma gli intervalli sono molto diversi: circa ±`r round((ci200[3] - ci200[2]) / 2)` g per la media, circa ±`r round((pi200[3] - pi200[2]) / 2)` g per un singolo esemplare. L'intervallo di previsione deve includere anche la dispersione $\sigma$ da esemplare a esemplare, che non si riduce raccogliendo più dati.
+
+```{r}
+#| label: fig-bands
+#| fig-cap: "Retta stimata con la banda di confidenza al 95% (scura, per la media) e la banda di previsione al 95% (chiara, per i singoli esemplari)."
+#| warning: false
+grid <- data.frame(flipper_len = seq(172, 231, length.out = 100))
+bands <- cbind(
+  grid,
+  predict(m_peng, grid, interval = "confidence") |>
+    as.data.frame() |> rename(ci_lwr = lwr, ci_upr = upr),
+  predict(m_peng, grid, interval = "prediction") |>
+    as.data.frame() |> select(pi_lwr = lwr, pi_upr = upr)
+)
+
+ggplot(bands, aes(flipper_len)) +
+  geom_ribbon(aes(ymin = pi_lwr, ymax = pi_upr), fill = "#56B4E9",
+              alpha = 0.25) +
+  geom_ribbon(aes(ymin = ci_lwr, ymax = ci_upr), fill = "#0072B2",
+              alpha = 0.5) +
+  geom_point(data = penguins, aes(y = body_mass), alpha = 0.3) +
+  geom_line(aes(y = fit), linewidth = 1) +
+  labs(x = "Lunghezza della pinna (mm)", y = "Massa corporea (g)")
+```
+
+La banda di confidenza è stretta al centro e si allarga verso i bordi, dove abbiamo meno dati. Circa il 95% dei pinguini cade dentro la banda di previsione. `geom_smooth(method = "lm")` disegna solo la banda di **confidenza**.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: i due errori standard
+
+In un nuovo valore $x_0$, con $\hat y_0 = \hat\beta_0 + \hat\beta_1 x_0$:
+
+$$
+\operatorname{SE}_{\text{media}} = \hat\sigma\sqrt{\frac1n + \frac{(x_0 - \bar x)^2}{\sum_i (x_i - \bar x)^2}}, \qquad
+\operatorname{SE}_{\text{prev}} = \hat\sigma\sqrt{1 + \frac1n + \frac{(x_0 - \bar x)^2}{\sum_i (x_i - \bar x)^2}} .
+$$
+
+Entrambi gli intervalli sono $\hat y_0 \pm t_{n-2,\,0.975} \times \text{SE}$. Per $n \to \infty$ il primo ES tende a 0, il secondo tende a $\hat\sigma$.
+:::
+
+## 9. Assunzioni e grafici diagnostici
+
+Le stime sono semplicemente la retta che si adatta meglio; gli **errori standard, i p-value e gli intervalli** si basano invece su assunzioni. Un utile mnemonico è **LINE** (dalle iniziali inglesi):
+
+| Lettera | Assunzione | Che cosa succede se non vale | Come verificarla |
+|---|---|---|---|
+| **L** | **Linearità**: la media condizionata è una retta in $x$ | la retta è sistematicamente sbagliata in alcune zone | residui vs valori stimati |
+| **I** | **Indipendenza** degli errori | ES troppo piccoli (es. misure ripetute, serie storiche) | rifletti sul disegno dello studio |
+| **N** | **Normalità** degli errori | conta per $n$ piccoli e per gli intervalli di previsione | QQ-plot normale |
+| **E** | **Varianza costante** (omoschedasticità) | ES e intervalli di previsione sono sbagliati | grafico scale-location |
+
+R base disegna i quattro grafici diagnostici standard con `plot()` applicato al modello:
+
+```{r}
+#| label: fig-diagnostics
+#| fig-cap: "I quattro grafici diagnostici standard per il modello dei pinguini."
+#| fig-height: 7
+par(mfrow = c(2, 2))
+plot(m_peng)
+par(mfrow = c(1, 1))
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questi grafici
+
+- **Residuals vs Fitted** (in alto a sinistra): vogliamo una nuvola senza forma attorno a 0 con la linea rossa piatta. Una curva significa che la forma lineare non coglie qualcosa.
+- **Q-Q Residuals** (in alto a destra): punti sulla linea tratteggiata indicano residui approssimativamente normali. Code curve indicano asimmetria o code pesanti.
+- **Scale-Location** (in basso a sinistra): una linea rossa piatta indica dispersione costante. Una linea crescente ("a imbuto") significa che la varianza aumenta con la media.
+- **Residuals vs Leverage** (in basso a destra): segnala le osservazioni che tirano con forza la retta. I punti oltre le curve tratteggiate della distanza di Cook meritano un'occhiata più attenta (vedi [Regressione multipla](39-multiple-regression.qmd)).
+:::
+
+Per i pinguini i grafici sembrano ragionevoli, ma i residui nascondono una struttura che possiamo rivelare colorandoli per specie:
+
+```{r}
+#| label: fig-resid-species
+#| fig-cap: "Residui del modello dei pinguini, colorati per specie. I Chinstrap stanno per lo più sotto lo zero."
+peng_aug <- augment(m_peng,
+                    data = tidyr::drop_na(penguins, body_mass, flipper_len))
+
+peng_aug |>
+  ggplot(aes(.fitted, .resid, colour = species)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_point(alpha = 0.7) +
+  labs(x = "Massa corporea stimata (g)", y = "Residuo (g)", colour = NULL)
+```
+
+I pinguini Chinstrap sono, in media, più leggeri di `r round(abs(mean(peng_aug$.resid[peng_aug$species == "Chinstrap"])))` g rispetto a quanto prevede la retta. Un predittore mancante si manifesta come struttura nei residui: è esattamente la motivazione della [regressione multipla](39-multiple-regression.qmd).
+
+## 10. Trasformazioni: quando la retta è curva
+
+Molte relazioni sono moltiplicative: raddoppiare una quantità moltiplica un'altra per un fattore costante. Prendere i **logaritmi** trasforma queste curve in rette. I dati incorporati `trees` riportano la circonferenza (il diametro, in pollici), l'altezza e il volume di legname di 31 ciliegi.
+
+```{r}
+#| label: fig-trees
+#| fig-cap: "Volume dell'albero in funzione della circonferenza: curvo sulla scala originale (a sinistra), rettilineo sulla scala log–log (a destra)."
+#| fig-width: 9
+#| fig-height: 4
+trees_long <- bind_rows(
+  tibble::tibble(scale = "Scala originale", x = trees$Girth, y = trees$Volume),
+  tibble::tibble(scale = "Scala log–log", x = log(trees$Girth),
+                 y = log(trees$Volume))
+) |>
+  mutate(scale = factor(scale, levels = c("Scala originale", "Scala log–log")))
+
+ggplot(trees_long, aes(x, y)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  facet_wrap(~ scale, scales = "free") +
+  labs(x = "Circonferenza (in) / log(circonferenza)", y = "Volume (piedi cubi) / log(volume)")
+```
+
+Sulla scala originale la retta non coglie la curvatura (è troppo alta al centro e troppo bassa agli estremi), ma si adatta bene dopo aver preso i logaritmi.
+
+```{r}
+#| label: log-log
+m_trees <- lm(log(Volume) ~ log(Girth), data = trees)
+coef(m_trees)
+```
+
+Sulla scala log–log la pendenza è un'**elasticità**: una circonferenza maggiore dell'1% corrisponde a un volume maggiore di circa `r round(coef(m_trees)[2], 1)`%. (La geometria è d'accordo: il volume cresce all'incirca con il quadrato del diametro.)
+
+Quando si applica il logaritmo solo a $y$, la pendenza descrive una **variazione moltiplicativa** di $y$ per unità di $x$:
+
+```{r}
+#| label: log-y
+m_mpg <- lm(log(mpg) ~ wt, data = mtcars)
+exp(coef(m_mpg)["wt"])
+```
+
+Ogni 1000 lb in più di peso moltiplicano il consumo atteso (in miglia per gallone) per `r round(exp(coef(m_mpg)["wt"]), 2)`, cioè circa il `r round(100 * (1 - exp(coef(m_mpg)["wt"])))`% di miglia per gallone in meno.
+
+| Modello | Interpretazione di $\hat\beta_1$ |
+|---|---|
+| $y \sim x$ | +1 unità di $x$ → $y$ cambia di $\hat\beta_1$ unità |
+| $\log y \sim x$ | +1 unità di $x$ → $y$ viene moltiplicato per $e^{\hat\beta_1}$ (≈ $100\hat\beta_1$% se è piccolo) |
+| $y \sim \log x$ | +1% in $x$ → $y$ cambia di circa $\hat\beta_1 / 100$ unità |
+| $\log y \sim \log x$ | +1% in $x$ → $y$ cambia di circa $\hat\beta_1$% |
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: ritrasformare le previsioni
+
+Se $\log y = \beta_0 + \beta_1 x + \varepsilon$, allora $\exp(\hat\beta_0 + \hat\beta_1 x)$ stima la **mediana** di $y$ in $x$, non la media. Quando gli errori sono normali con varianza $\sigma^2$, la media è $\exp(\beta_0 + \beta_1 x + \sigma^2/2)$. Per $\sigma$ piccolo la differenza è trascurabile; per dati molto rumorosi no. Gli intervalli di previsione, invece, si possono ritrasformare direttamente esponenziando i loro estremi.
+:::
+
+## 11. Regressione verso la media
+
+La parola "regressione" deriva da Francis Galton, che notò come genitori molto alti tendano ad avere figli alti, ma *meno estremamente* alti. Non è una forza biologica: accade ogni volta che due misure sono correlate in modo imperfetto. Una simulazione: 1000 studenti con una certa abilità reale sostengono due test, ciascuno con una fortuna indipendente.
+
+```{r}
+#| label: regression-to-mean
+set.seed(42)
+ability <- rnorm(1000, mean = 100, sd = 10)
+test1 <- ability + rnorm(1000, sd = 10)
+test2 <- ability + rnorm(1000, sd = 10)
+
+top <- test1 > quantile(test1, 0.9)   # il 10% migliore nel primo test
+c(test1 = mean(test1[top]), test2 = mean(test2[top]))
+```
+
+I migliori studenti del test 1 ottengono in media un punteggio più basso nel test 2: nessuno è peggiorato; una parte del primo punteggio era dovuta alla fortuna, che non si è ripetuta. La pendenza di `test2` su `test1` è circa `r round(coef(lm(test2 ~ test1))[2], 2)`, ben al di sotto di 1. Diffida dei "trattamenti" somministrati a chi ha avuto i risultati peggiori: migliorerà in media anche se il trattamento non fa nulla. Un gruppo di controllo ti protegge da questa illusione.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Leggere la pendenza in senso causale.** "Avere le pinne più lunghe rende un pinguino più pesante" non è ciò che dice il modello. La pendenza confronta esemplari *diversi*; senza un esperimento descrive un'associazione, non una causa.
+2. **Estrapolare.** La retta è supportata solo all'interno dell'intervallo dei dati. L'intercetta del modello `women` (un peso negativo a altezza 0) è un esempio estremo.
+3. **Confondere intervallo di confidenza e intervallo di previsione.** Usa l'intervallo di previsione per dire dove cadrà un singolo individuo; è sempre più ampio.
+4. **Fidarsi del solo R².** Un R² alto non significa che la forma lineare sia giusta (guarda i residui), e un R² basso non significa che la pendenza sia irrilevante.
+5. **Dimenticare la riga sugli `NA`.** `lm()` elimina in silenzio le righe incomplete; confronta `nobs(model)` con `nrow(data)`.
+6. **`lm(df$y ~ df$x)`.** Scrivere il modello con `$` impedisce a `predict()` di funzionare su nuovi dati (vedi Esercizio 3). Usa `lm(y ~ x, data = df)`.
+:::
+
+## 12. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Un modello dello stipendio (in euro) sugli anni di esperienza ha pendenza 1200. Scrivi l'interpretazione in una frase.
+
+"I dipendenti con un anno in più di esperienza guadagnano, in media, 1200 euro in più." Confronta dipendenti diversi, è una media e ha le unità di misura. Non afferma che un anno in più *causi* un aumento di 1200 euro.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Vero o falso: in una regressione semplice, il p-value della pendenza coincide con il p-value di `cor.test()` sulle stesse due variabili.
+
+**Vero.** Le due statistiche t sono algebricamente identiche (Sezione 6).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Perché l'intervallo di previsione non si riduce ad ampiezza zero quando $n$ diventa enorme?
+
+Perché include la dispersione delle singole osservazioni attorno alla media ($\sigma$). Più dati determinano con più precisione la *retta* (l'intervallo di confidenza si restringe), ma i singoli pinguini continuano a variare attorno a essa.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Il grafico dei residui contro i valori stimati mostra una chiara forma a U. Quale assunzione è violata e che cosa potresti provare?
+
+La **linearità**. Prova una trasformazione (per esempio il logaritmo di $y$ o di $x$), un termine polinomiale come `I(x^2)`, oppure un predittore mancante.
+:::
+
+## 13. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — stima e interpreta.** I dati incorporati `cars` riportano la distanza di arresto (`dist`, piedi) di automobili a diverse velocità (`speed`, mph), rilevata negli anni Venti. Stima `dist ~ speed`, riporta la pendenza con il suo IC al 95% e scrivi una frase che la interpreti.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+m_cars <- lm(dist ~ speed, data = cars)
+tidy(m_cars, conf.int = TRUE)
+```
+La pendenza è circa 3.9 (IC al 95% grosso modo da 3.1 a 4.8): le auto che viaggiavano di 1 mph più veloci avevano bisogno, in media, di circa 4 piedi in più per fermarsi. L'R² è circa 0.65. Nota che l'intercetta (circa −17.6 piedi a 0 mph) non ha significato: è ancora un'estrapolazione.
+:::
+:::
+
+::: {.exercise}
+[★]{.stars} **Esercizio 2 — prevedi l'output.** Senza eseguirlo, che cosa stamperà il codice seguente? Poi eseguilo e controlla.
+
+```r
+m <- lm(eruptions ~ waiting, data = faithful)
+c(summary(m)$coefficients["waiting", "t value"],
+  cor.test(faithful$eruptions, faithful$waiting)$statistic)
+```
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Due numeri identici (circa 34.1): la statistica t della pendenza è uguale alla statistica t del test di correlazione. Condividono anche lo stesso p-value.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi l'errore.** Uno studente vuole il peso previsto per una donna alta 70 pollici:
+
+```r
+bad <- lm(women$weight ~ women$height)
+predict(bad, newdata = data.frame(height = 70))
+```
+
+R stampa 15 numeri e un avviso invece di una sola previsione. Perché? Correggi il codice.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Il predittore del modello si chiama letteralmente `women$height`. `newdata` contiene una colonna chiamata `height`, che `predict()` non riesce ad associare, quindi ricade sui dati originali (15 righe) e segnala un avviso: *'newdata' had 1 row but variables found have 15 rows*. Usa l'argomento `data =`:
+
+```r
+good <- lm(weight ~ height, data = women)
+predict(good, newdata = data.frame(height = 70))   # circa 154 lb
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — interpreta un output.** Usando `m_peng`, un collega dice: "l'intervallo al 95% per un pinguino con pinne di 200 mm è da 4114 a 4198 g, quindi un esemplare di 4500 g con pinne di 200 mm sarebbe molto insolito". Ha ragione? Calcola l'intervallo appropriato e spiega.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Il collega ha usato l'intervallo di **confidenza** per la *media*. Per un singolo esemplare serve l'intervallo di **previsione**:
+
+```r
+predict(m_peng, data.frame(flipper_len = 200), interval = "prediction")
+```
+Va da circa 3380 a 4930 g, quindi un esemplare di 4500 g è del tutto normale. L'intervallo di confidenza dice soltanto dove è probabile che si trovi la *media* di tutti gli esemplari con pinne di 200 mm.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi: una specie alla volta.** (a) Stima `body_mass ~ flipper_len` separatamente per ciascuna delle tre specie. (b) Confronta le tre pendenze con la pendenza del modello su tutte le specie. (c) Osserva l'R² del modello per gli Adelie. Che cosa concludi sull'uso di un'unica retta per tutti i pinguini?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+penguins |>
+  group_by(species) |>
+  group_modify(\(d, key) tidy(lm(body_mass ~ flipper_len, data = d))) |>
+  filter(term == "flipper_len")
+
+lm(body_mass ~ flipper_len, data = filter(penguins, species == "Adelie")) |>
+  glance()
+```
+Le pendenze entro specie sono circa 33 (Adelie), 35 (Chinstrap) e 55 (Gentoo) g/mm, mentre la pendenza su tutte le specie è circa 50 g/mm. Una parte della pendenza complessiva deriva dalle *differenze tra specie* (i Gentoo hanno sia le pinne più lunghe sia una massa maggiore). Entro gli Adelie, l'R² scende a circa 0.22. Un'unica retta per tutte le specie mescola due cose: la relazione entro specie e le differenze tra specie. La regressione multipla con `species` come predittore le separa.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| `lm(y ~ x, data = df)` | stima un modello lineare con i minimi quadrati |
+| `coef()`, `confint()` | stime e relativi IC al 95% |
+| `summary()` | stime, ES, t, p, errore standard dei residui, R², F |
+| `cor.test()` | stesso test della pendenza nella regressione semplice |
+| `tidy()`, `glance()`, `augment()` | output del modello come data frame (broom) |
+| `predict(m, newdata, interval = "confidence")` | intervallo per la risposta **media** |
+| `predict(m, newdata, interval = "prediction")` | intervallo per una **nuova osservazione** |
+| `plot(m)` | quattro grafici diagnostici (assunzioni LINE) |
+| `lm(log(y) ~ log(x))` | relazioni moltiplicative; pendenza = elasticità |
+
+- Un modello di regressione è una **media condizionata più rumore**; i minimi quadrati scelgono la retta con la minima somma dei quadrati delle distanze verticali.
+- Interpreta la pendenza **a parole, con le unità e con "in media"** — e non in senso causale senza un disegno dello studio che lo giustifichi.
+- Il p-value della pendenza risponde a "c'è un'associazione lineare?"; l'IC ti dice **quanto è grande** plausibilmente.
+- Gli intervalli di previsione sono molto più ampi degli intervalli di confidenza.
+- Guarda sempre i residui: le strutture che vi compaiono indicano predittori mancanti o una forma funzionale sbagliata.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2a ed.), capitoli sulla regressione lineare, <https://openintro-ims.netlify.app>
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2a ed.), capitolo 3, <https://www.statlearning.com>
+- Documentazione di broom, <https://broom.tidymodels.org>
+:::

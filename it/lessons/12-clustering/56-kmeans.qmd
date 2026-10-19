@@ -1,0 +1,611 @@
+---
+title: "Clustering k-means"
+subtitle: "L'algoritmo di Lloyd, scegliere k con onestà e leggere i cluster nelle unità originali"
+description: "Osserva k-means al lavoro iterazione per iterazione, evita gli ottimi locali con nstart, scegli il numero di cluster con gomito, silhouette, statistica gap e stabilità bootstrap, descrivi i cluster e scopri dove k-means fallisce."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~90 min]{} [Prerequisiti: [Clustering: il quadro generale](55-clustering-intro.qmd), [Analisi delle componenti principali](../11-dimred/50-pca.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- descrivere passo per passo l'**algoritmo di Lloyd** e spiegare perché può fermarsi in un **ottimo locale**;
+- eseguire `kmeans()` con un `nstart` ragionevole e leggere ogni elemento del suo output;
+- scegliere il numero di cluster combinando **gomito**, **silhouette media**, **statistica gap** e **stabilità bootstrap**;
+- **descrivere (profilare)** i cluster sia nelle unità originali sia in punteggi z;
+- riconoscere i dati per i quali k-means è lo strumento sbagliato.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+#| message: false
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+library(cluster)   # silhouette(), clusGap(), maxSE()
+library(mclust)    # adjustedRandIndex()
+```
+
+## 1. Perché k-means?
+
+Un rivenditore vende migliaia di modelli di computer e vuole descrivere il catalogo con una manciata di **configurazioni tipiche** — "macchine economiche", "macchine veloci con dischi grandi", e così via. k-means fa esattamente questo: divide le osservazioni in $k$ gruppi e riassume ciascun gruppo con il suo **centro** (la media dei suoi membri).
+
+È il metodo di clustering più usato perché è semplice, veloce anche su dati grandi, e il suo output — pochi centri — è facile da comunicare. È anche facile da usare male. Questa lezione mostra entrambi i lati.
+
+## 2. L'algoritmo di Lloyd, passo per passo
+
+k-means cerca $k$ centri tali che ogni punto sia vicino al proprio centro. L'algoritmo standard (di Lloyd) alterna due semplici passi:
+
+1. **Assegna**: metti ogni punto nel cluster del centro più vicino.
+2. **Aggiorna**: sposta ogni centro nella media dei punti che gli sono stati assegnati.
+
+Ripeti finché nulla cambia. Osserviamolo su un piccolo dataset bidimensionale con tre gruppi.
+
+```{r}
+#| label: toy-data
+set.seed(10)
+toy <- tibble(
+  x = c(rnorm(20, 0, 0.6), rnorm(20, 4, 0.6), rnorm(20, 2, 0.6)),
+  y = c(rnorm(20, 0, 0.6), rnorm(20, 0.5, 0.6), rnorm(20, 3.5, 0.6))
+)
+```
+
+Scriviamo noi l'algoritmo di Lloyd (bastano poche righe) e memorizziamo ogni iterazione. Per rendere visibili i passi partiamo da una posizione iniziale **sbagliata**: i primi tre punti, che appartengono tutti allo stesso gruppo.
+
+```{r}
+#| label: lloyd-function
+lloyd_steps <- function(data, centers, max_iter = 10) {
+  X <- as.matrix(data)
+  steps <- list()
+  for (it in seq_len(max_iter)) {
+    # distanza al quadrato da ogni punto (righe) a ogni centro (colonne)
+    d2 <- sapply(seq_len(nrow(centers)),
+                 \(j) colSums((t(X) - centers[j, ])^2))
+    cl <- max.col(-d2, ties.method = "first")          # 1. assegna
+    wcss <- sum(d2[cbind(seq_len(nrow(X)), cl)])
+    steps[[it]] <- list(cluster = cl, centers = centers, wcss = wcss)
+    new_centers <- rowsum(X, cl) / as.vector(table(cl))  # 2. aggiorna
+    if (max(abs(new_centers - centers)) < 1e-10) break
+    centers <- new_centers
+  }
+  steps
+}
+
+steps <- lloyd_steps(toy, centers = as.matrix(toy[1:3, ]))
+sapply(steps, \(s) s$wcss)
+```
+
+```{r}
+#| label: fig-lloyd
+#| fig-cap: "L'algoritmo di Lloyd partendo da una posizione iniziale sbagliata. Le croci sono i centri usati per l'assegnazione in quella iterazione; i colori sono i cluster risultanti. La devianza entro i gruppi (WCSS) diminuisce a ogni iterazione."
+#| fig-height: 6
+labels <- sprintf("Iterazione %d — WCSS = %.1f", seq_along(steps),
+                  sapply(steps, \(s) s$wcss))
+
+pts <- bind_rows(lapply(seq_along(steps), \(it) {
+  toy |> mutate(step = labels[it], cluster = factor(steps[[it]]$cluster))
+}))
+ctr <- bind_rows(lapply(seq_along(steps), \(it) {
+  tibble(step = labels[it], x = steps[[it]]$centers[, 1],
+         y = steps[[it]]$centers[, 2], cluster = factor(1:3))
+}))
+
+ggplot(pts, aes(x, y, colour = cluster)) +
+  geom_point(alpha = 0.7) +
+  geom_point(data = ctr, shape = 4, size = 5, stroke = 2) +
+  facet_wrap(~ step) +
+  labs(x = "x", y = "y", colour = "Cluster")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questa figura
+
+- **Iterazione 1**: i tre centri stanno dentro lo stesso gruppo, quindi l'assegnazione è scadente e la WCSS è grande.
+- In ciascun pannello successivo i centri si sono spostati nelle medie dei loro cluster precedenti e i punti sono stati riassegnati.
+- Dopo `r length(steps)` iterazioni nulla cambia più: l'algoritmo è **arrivato a convergenza**. La WCSS finale è `r round(steps[[length(steps)]]$wcss, 2)`.
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la funzione obiettivo e perché l'algoritmo converge
+
+k-means minimizza la **devianza entro i gruppi** (*within-cluster sum of squares*)
+
+$$
+\text{WCSS}(C_1, \dots, C_k) = \sum_{r=1}^k \sum_{i \in C_r} \lVert x_i - \bar x_r \rVert^2 ,
+\qquad \bar x_r = \frac{1}{|C_r|}\sum_{i \in C_r} x_i .
+$$
+
+- Il passo **assegna** non può aumentare la WCSS: ogni punto passa al centro che gli è più vicino.
+- Il passo **aggiorna** non può aumentare la WCSS: per un dato insieme di punti, la media è il punto che minimizza la somma delle distanze al quadrato.
+
+Quindi la WCSS diminuisce (o resta uguale) a ogni passo, e poiché il numero di partizioni è finito l'algoritmo deve fermarsi. Ma si ferma in un minimo **locale**: una partizione che nessun singolo passo può migliorare, non necessariamente la migliore. Trovare il minimo globale è in generale computazionalmente difficile (NP-hard).
+:::
+
+## 3. `kmeans()` in R
+
+Nella pratica usiamo la funzione `kmeans()` già disponibile. Per impostazione predefinita usa l'algoritmo di Hartigan–Wong, un raffinamento di quello di Lloyd che di solito raggiunge una WCSS più bassa; l'idea è la stessa.
+
+```{r}
+#| label: kmeans-toy
+set.seed(1)
+km_toy <- kmeans(toy, centers = 3, nstart = 25)
+km_toy$size
+km_toy$centers
+c(within = km_toy$tot.withinss, between = km_toy$betweenss,
+  total = km_toy$totss)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `centers = 3` è il numero di cluster $k$; `nstart = 25` richiede 25 posizioni iniziali casuali, tenendo il risultato migliore (WCSS più bassa).
+- `size` — numero di punti per cluster.
+- `centers` — le coordinate di ciascun centro (qui nelle unità di `x` e `y`).
+- `cluster` (non stampato) — il cluster di ciascuna osservazione.
+- `tot.withinss` è la WCSS; `betweenss` la somma dei quadrati *tra* i centri; sommate danno `totss`. Il rapporto `betweenss / totss` = `r round(km_toy$betweenss / km_toy$totss, 2)` è la quota di variabilità "spiegata" dai cluster.
+:::
+
+## 4. Ottimi locali: perché `nstart` conta
+
+Con una sola partenza casuale, k-means può rimanere bloccato. Ecco sei gruppi ben separati; eseguiamo k-means 100 volte con `nstart = 1`, ogni volta con un seme diverso, e registriamo la WCSS finale.
+
+```{r}
+#| label: local-optima
+set.seed(3)
+grid_centres <- expand.grid(a = c(0, 5, 10), b = c(0, 5))
+blobs <- do.call(rbind, lapply(1:6, \(j) {
+  cbind(rnorm(30, grid_centres$a[j], 0.8), rnorm(30, grid_centres$b[j], 0.8))
+}))
+
+wcss_single <- sapply(1:100, \(s) {
+  set.seed(s)
+  kmeans(blobs, centers = 6, nstart = 1)$tot.withinss
+})
+best <- min(wcss_single)
+mean(wcss_single > best + 1e-6)     # quota di esecuzioni bloccate in una soluzione peggiore
+```
+
+Nel `r round(100 * mean(wcss_single > best + 1e-6))`% delle esecuzioni con una sola partenza, k-means si è fermato in una soluzione peggiore — tipicamente due gruppi veri fusi in un solo cluster e un altro gruppo spezzato in due. Con `nstart = 25` la probabilità che *tutte* e 25 le partenze falliscano diventa trascurabile:
+
+```{r}
+#| label: local-optima-nstart
+set.seed(1)
+kmeans(blobs, centers = 6, nstart = 25)$tot.withinss
+best
+```
+
+**Regola:** imposta sempre `nstart` ad almeno 25 (di più per $k$ grande), e usa sempre `set.seed()` per la riproducibilità.
+
+## 5. Un dataset reale: i prezzi dei computer
+
+Il file `computers.csv` descrive personal computer venduti negli Stati Uniti nel 1993–1995, con prezzo e specifiche. La sua prima colonna **non ha nome**: è solo un numero di riga scritto insieme ai dati. Dobbiamo eliminarla — altrimenti il "numero di riga" diventerebbe una variabile di clustering.
+
+```{r}
+#| label: computers-read
+computers_raw <- read_csv(data_path("computers.csv"),
+                          show_col_types = FALSE,
+                          name_repair = "unique_quiet")
+names(computers_raw)[1:3]
+
+# verifica che la prima colonna sia davvero solo 1, 2, 3, ... prima di eliminarla
+stopifnot(all(computers_raw[[1]] == seq_len(nrow(computers_raw))))
+computers <- computers_raw |> select(-1)
+glimpse(computers)
+```
+
+Ci sono `r nrow(computers)` computer.
+
+Facciamo il clustering sulle cinque **specifiche di prodotto**: `price` (dollari USA), `speed` (MHz), `hd` (dimensione del disco rigido, MB), `ram` (MB) e `screen` (pollici). Lasciamo fuori `ads` e `trend`, che descrivono il *mercato* al momento della vendita (numero di inserzioni, indice del mese), e le tre variabili sì/no, che si adattano male alla distanza euclidea. Poiché le variabili hanno unità completamente diverse, le standardizziamo.
+
+```{r}
+#| label: computers-scale
+spec_vars <- c("price", "speed", "hd", "ram", "screen")
+comp_z <- computers |>
+  select(all_of(spec_vars)) |>
+  scale()
+round(apply(comp_z, 2, sd), 2)
+```
+
+## 6. Scegliere k
+
+Non esiste un unico $k$ corretto. Guardiamo diversi criteri e li combiniamo con il buon senso.
+
+### 6.1 Il gomito
+
+```{r}
+#| label: elbow
+k_grid <- 1:10
+wss <- sapply(k_grid, \(k) {
+  set.seed(123)
+  kmeans(comp_z, centers = k, nstart = 25, iter.max = 50)$tot.withinss
+})
+```
+
+```{r}
+#| label: fig-elbow
+#| fig-cap: "Grafico del gomito: devianza totale entro i gruppi per k da 1 a 10."
+ggplot(tibble(k = k_grid, wss = wss), aes(k, wss)) +
+  geom_line(linewidth = 1, colour = "#0072B2") +
+  geom_point(size = 2.5, colour = "#0072B2") +
+  scale_x_continuous(breaks = k_grid) +
+  labs(x = "Numero di cluster (k)", y = "Devianza totale entro i gruppi")
+```
+
+La WCSS diminuisce sempre. Cerchiamo il punto dopo il quale aggiungere cluster porta **poco** miglioramento. Qui passare da uno a due cluster elimina `r round(wss[1] - wss[2])` unità di WCSS, i tre passi successivi ne eliminano `r paste(round(-diff(wss)[2:4]), collapse = ", ")`, e dopo $k = 5$ i guadagni si riducono lentamente (da `r round(-diff(wss)[5])` a `r round(-diff(wss)[9])`). Il gomito **non è netto** — una situazione comune con i dati reali, e il motivo per cui non ci affidiamo mai al solo gomito.
+
+### 6.2 Silhouette media
+
+La silhouette (vedi [la lezione precedente](55-clustering-intro.qmd)) richiede tutte le distanze a coppie. Per `r nrow(comp_z)` computer sono circa `r round(nrow(comp_z)^2 / 2 / 1e6)` milioni di distanze, quindi la valutiamo su un sottocampione casuale di 1.500 computer (i cluster sono comunque stimati su tutti i dati).
+
+```{r}
+#| label: silhouette-k
+set.seed(2024)
+sub <- sample(nrow(comp_z), 1500)
+d_sub <- dist(comp_z[sub, ])
+
+sil_k <- sapply(2:8, \(k) {
+  set.seed(123)
+  cl <- kmeans(comp_z, centers = k, nstart = 25, iter.max = 50)$cluster
+  mean(silhouette(cl[sub], d_sub)[, "sil_width"])
+})
+names(sil_k) <- 2:8
+round(sil_k, 3)
+```
+
+La silhouette media più alta si ha per $k =$ `r names(which.max(sil_k))` (`r round(max(sil_k), 2)`), ma tutti i valori stanno tra `r round(min(sil_k), 2)` e `r round(max(sil_k), 2)`: secondo l'indicazione consueta, è una struttura **debole** per ogni $k$. I computer non si dispongono in gruppi nettamente separati.
+
+### 6.3 La statistica gap
+
+La **statistica gap** (Tibshirani, Walther & Hastie, 2001) confronta $\log(\text{WCSS}_k)$ sui nostri dati con ciò che otterremmo su **dati di riferimento senza cluster** (uniformi sul campo di variazione dei dati). Un gap grande significa "molto più compatto del caso". `cluster::clusGap()` simula `B` dataset di riferimento; per contenere i tempi di calcolo usiamo un sottocampione di 1.000 computer.
+
+```{r}
+#| label: gap
+set.seed(2024)
+sub_gap <- sample(nrow(comp_z), 1000)
+gap <- clusGap(comp_z[sub_gap, ], FUNcluster = kmeans, K.max = 8,
+               B = 50, d.power = 2, nstart = 10, iter.max = 50,
+               verbose = FALSE)
+gap_tab <- as_tibble(gap$Tab) |> mutate(k = 1:8)
+gap_tab |> select(k, gap, SE.sim)
+
+k_gap_tibs   <- maxSE(gap_tab$gap, gap_tab$SE.sim, method = "Tibs2001SEmax")
+k_gap_global <- maxSE(gap_tab$gap, gap_tab$SE.sim, method = "globalmax")
+c(Tibs2001SEmax = k_gap_tibs, globalmax = k_gap_global)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `gap` è il gap per ciascun $k$; `SE.sim` è il suo errore standard di simulazione.
+- La regola proposta dagli autori (`"Tibs2001SEmax"`) sceglie il **più piccolo** $k$ il cui gap è entro un errore standard dal gap in $k+1$. Qui sceglie $k =$ `r k_gap_tibs`. `r if (k_gap_tibs == 1) "Scegliere un solo cluster significa: rispetto a dati privi di struttura, dividere non rende i dati molto più compatti del previsto — la statistica gap non trova una struttura a cluster convincente." else ""`
+- Il massimo globale del gap è in $k =$ `r k_gap_global`. `r if (k_gap_global == 8) "Poiché è il k più grande provato, il gap continua semplicemente a crescere: non c'è un punto di arresto naturale." else ""`
+- Abbiamo usato `d.power = 2`, che corrisponde alle distanze euclidee al quadrato dell'articolo originale (il valore predefinito della funzione è 1).
+:::
+
+### 6.4 Stabilità sui campioni bootstrap
+
+Partenze casuali diverse sugli *stessi* dati dicono poco sull'affidabilità. Un controllo più onesto, introdotto nella [lezione precedente](55-clustering-intro.qmd), è **ricampionare i dati**: adattare k-means su un campione bootstrap, assegnare tutti i computer al centro bootstrap più vicino e confrontare con la partizione di riferimento tramite l'ARI.
+
+```{r}
+#| label: stability-functions
+assign_nearest <- function(x, centers) {
+  d2 <- sapply(seq_len(nrow(centers)),
+               \(j) colSums((t(x) - centers[j, ])^2))
+  max.col(-d2, ties.method = "first")
+}
+
+boot_ari <- function(x, k, B = 20) {
+  set.seed(1)
+  ref <- kmeans(x, centers = k, nstart = 25, iter.max = 50)$cluster
+  set.seed(2)
+  vapply(seq_len(B), \(b) {
+    rows <- sample(nrow(x), replace = TRUE)
+    fit  <- kmeans(x[rows, ], centers = k, nstart = 10, iter.max = 50)
+    adjustedRandIndex(ref, assign_nearest(x, fit$centers))
+  }, numeric(1))
+}
+```
+
+```{r}
+#| label: stability-k
+stab <- sapply(2:6, \(k) boot_ari(comp_z, k))
+colnames(stab) <- 2:6
+round(apply(stab, 2, \(a) c(mean = mean(a), min = min(a))), 3)
+```
+
+La soluzione più stabile è $k =$ `r colnames(stab)[which.max(colMeans(stab))]` (ARI medio `r round(max(colMeans(stab)), 3)`, minimo `r round(min(stab[, which.max(colMeans(stab))]), 3)`), mentre $k =$ `r colnames(stab)[which.min(colMeans(stab))]` è la meno stabile (media `r round(min(colMeans(stab)), 2)`): con così tanti cluster, i confini si spostano molto da un campione all'altro.
+
+### 6.5 Decisione
+
+| Criterio | Suggerisce |
+|---|---|
+| Gomito | nessun gomito netto |
+| Silhouette media | $k =$ `r names(which.max(sil_k))`, ma struttura debole per ogni $k$ |
+| Statistica gap (Tibs2001SEmax) | $k =$ `r k_gap_tibs` |
+| Stabilità bootstrap | $k =$ `r colnames(stab)[which.max(colMeans(stab))]` |
+
+I criteri non concordano, e i valori di silhouette e gap ci dicono che i computer **non** formano gruppi naturali fortemente separati. Questo è già un risultato. Il clustering può comunque essere utile come **segmentazione** — un riassunto comodo del catalogo — purché i segmenti siano riproducibili e interpretabili. Scegliamo quindi la soluzione più stabile:
+
+```{r}
+#| label: k-final
+k_final <- as.integer(colnames(stab)[which.max(colMeans(stab))])
+set.seed(123)
+km <- kmeans(comp_z, centers = k_final, nstart = 50, iter.max = 50)
+km$size
+```
+
+## 7. Descrivere i cluster
+
+Un cluster è utile solo se riusciamo a descriverlo. I centri in punteggi z ci dicono *quanto è insolito* ciascun cluster su ogni variabile; i riassunti nelle **unità originali** dicono a un dirigente che cosa contiene davvero il cluster. Riporta entrambi.
+
+### Nelle unità originali
+
+```{r}
+#| label: profile-original
+profile_orig <- computers |>
+  mutate(cluster = factor(km$cluster)) |>
+  summarise(n = n(), across(all_of(spec_vars), median), .by = cluster) |>
+  arrange(cluster)
+profile_orig
+```
+
+### In punteggi z
+
+```{r}
+#| label: fig-profile-z
+#| fig-cap: "Centri dei cluster in unità di deviazione standard (punteggi z). Rosso: sopra la media generale; blu: sotto."
+as_tibble(km$centers) |>
+  mutate(cluster = factor(seq_len(k_final))) |>
+  pivot_longer(-cluster, names_to = "variable", values_to = "z") |>
+  ggplot(aes(variable, cluster, fill = z)) +
+  geom_tile(colour = "white") +
+  geom_text(aes(label = round(z, 1))) +
+  scale_fill_gradient2(low = "#0072B2", mid = "white", high = "#D55E00") +
+  labs(x = NULL, y = "Cluster", fill = "punteggio z")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questi profili
+
+- Leggi ogni **riga** della mappa di calore: quali variabili sono chiaramente sopra (rosso) o sotto (blu) la media per quel cluster?
+- Poi passa alla tabella nelle unità originali per dare dei numeri. Per esempio, il cluster con il prezzo mediano più alto, il cluster `r profile_orig$cluster[which.max(profile_orig$price)]`, ha un prezzo mediano di `r format(max(profile_orig$price), big.mark = ",")` dollari, `r profile_orig$ram[which.max(profile_orig$price)]` MB di RAM e un disco da `r profile_orig$hd[which.max(profile_orig$price)]` MB.
+- Dai a ogni cluster un breve **nome descrittivo** (ad es. "fascia base", "schermo grande") basato sul suo profilo — e verifica che il nome sia ancora adatto quando guardi alcuni singoli computer del cluster.
+:::
+
+### Un'immagine in due dimensioni
+
+Per *vedere* i cluster, proiettiamo i dati standardizzati sulle prime due componenti principali (vedi [PCA](../11-dimred/50-pca.qmd)).
+
+```{r}
+#| label: fig-pca-clusters
+#| fig-cap: "Cluster k-means mostrati sulle prime due componenti principali delle specifiche standardizzate."
+pca <- prcomp(comp_z)
+pve <- summary(pca)$importance["Proportion of Variance", 1:2]
+
+tibble(PC1 = pca$x[, 1], PC2 = pca$x[, 2], cluster = factor(km$cluster)) |>
+  ggplot(aes(PC1, PC2, colour = cluster)) +
+  geom_point(alpha = 0.3, size = 0.8) +
+  labs(x = sprintf("PC1 (%.0f%%)", 100 * pve[1]),
+       y = sprintf("PC2 (%.0f%%)", 100 * pve[2]), colour = "Cluster")
+```
+
+Le prime due componenti mostrano il `r round(100 * sum(pve))`% della varianza, quindi l'immagine è una vista utile ma incompleta: cluster che qui si sovrappongono possono essere separati lungo altre componenti.
+
+### Silhouette della soluzione finale
+
+```{r}
+#| label: fig-silhouette-final
+#| fig-cap: "Grafico della silhouette della soluzione finale (sottocampione di 1.500 computer). Ogni barra è un computer; le barre a sinistra dello 0 sono più vicine a un altro cluster."
+sil_final <- silhouette(km$cluster[sub], d_sub)
+plot(sil_final, border = NA, col = seq_len(k_final),
+     main = paste("Grafico della silhouette, k =", k_final))
+```
+
+La silhouette media è `r round(summary(sil_final)$avg.width, 2)`. I cluster con molte barre negative hanno confini sfumati; riportali come tali.
+
+## 8. Dove k-means fallisce
+
+k-means assume implicitamente cluster **compatti e approssimativamente sferici** (ugualmente dispersi in tutte le direzioni), di **dimensione e dispersione simili**, e senza **valori anomali** estremi (una media ne viene attratta). Due controesempi con gruppi noti:
+
+```{r}
+#| label: counter-examples
+set.seed(6)
+elongated <- tibble(
+  x = c(rnorm(150, 0, 3), rnorm(150, 0, 3)),
+  y = c(rnorm(150, 0, 0.3), rnorm(150, 2, 0.3)),
+  truth = rep(1:2, each = 150)
+)
+set.seed(5)
+r     <- c(rnorm(150, 1, 0.1), rnorm(150, 3, 0.1))
+theta <- runif(300, 0, 2 * pi)
+rings <- tibble(x = r * cos(theta), y = r * sin(theta),
+                truth = rep(1:2, each = 150))
+
+set.seed(1)
+km_el <- kmeans(elongated[, c("x", "y")], centers = 2, nstart = 25)
+set.seed(1)
+km_ri <- kmeans(rings[, c("x", "y")], centers = 2, nstart = 25)
+c(elongated = adjustedRandIndex(km_el$cluster, elongated$truth),
+  rings     = adjustedRandIndex(km_ri$cluster, rings$truth))
+```
+
+```{r}
+#| label: fig-counter
+#| fig-cap: "Due dataset con due gruppi evidenti (forma = gruppo reale). k-means (colore) taglia a metà le lunghe bande e affetta gli anelli come una torta."
+bind_rows(
+  elongated |> mutate(cluster = factor(km_el$cluster), data = "Bande allungate"),
+  rings     |> mutate(cluster = factor(km_ri$cluster), data = "Anelli concentrici")
+) |>
+  ggplot(aes(x, y, colour = cluster, shape = factor(truth))) +
+  geom_point(alpha = 0.7) +
+  facet_wrap(~ data, scales = "free") +
+  theme(aspect.ratio = 1) +   # pannelli quadrati (coord_equal() non si può usare con scale libere)
+  labs(colour = "Cluster k-means", shape = "Gruppo reale")
+```
+
+Entrambi gli ARI sono vicini a 0: k-means minimizza le distanze al quadrato da un centro, e qui i gruppi veri **non** sono il modo più compatto di dividere i dati. Strumenti migliori: una mistura gaussiana con componenti allungate ([Clustering basato su modelli](59-model-based.qmd)) per le bande; [DBSCAN](58-dbscan.qmd) o il [clustering spettrale](60-spectral.qmd) per gli anelli.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Dimenticare di scalare** variabili misurate in unità diverse (vedi [la lezione precedente](55-clustering-intro.qmd)).
+2. **Lasciare nei dati una colonna di ID o di numero di riga.** Diventa una "variabile" e può dominare i cluster. Controlla `names()` ed elimina esplicitamente tali colonne.
+3. **Usare il valore predefinito `nstart = 1`.** I risultati possono essere un cattivo ottimo locale e cambiare da un'esecuzione all'altra.
+4. **Scegliere k da un solo criterio** — o decidere $k$ prima di guardare. Combina gomito, silhouette, gap e stabilità, e dichiara quando sono in disaccordo.
+5. **Controllare la stabilità solo rispetto alle partenze casuali.** Così si mette alla prova l'ottimizzatore, non i dati. Ricampiona le osservazioni (bootstrap).
+6. **Descrivere i cluster solo in punteggi z.** "Il cluster 2 è +1.3 sul prezzo" dice poco a un non specialista; fornisci anche mediane o medie nelle unità originali.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Perché il passo di aggiornamento dell'algoritmo di Lloyd non può mai aumentare la WCSS?
+
+Perché, per un dato gruppo di punti, la media è esattamente il punto che minimizza la somma delle distanze al quadrato da quei punti. Spostare il centro nella media può solo abbassare (o mantenere) il contributo di quel gruppo.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Esegui `kmeans(x, 4)` due volte e ottieni `tot.withinss` diversi. Che cosa è successo e che cosa cambi?
+
+Ogni esecuzione ha usato una sola partenza casuale (`nstart = 1`) e si è fermata in un diverso ottimo locale. Usa `nstart = 25` o più, e `set.seed()` prima della chiamata.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. La silhouette media è 0.3 per ogni k da 2 a 8. Che cosa concludi?
+
+Non c'è una forte struttura a cluster: i dati assomigliano più a un continuo che a gruppi separati. Un clustering può comunque essere usato come segmentazione pratica, ma va presentato come tale, e la sua stabilità verificata.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Quale di questi dataset *non* raggrupperesti con k-means: (a) clienti descritti da sei variabili di spesa standardizzate, (b) punti su due spirali intrecciate, (c) tre blob rotondi ben separati di dimensioni diverse?
+
+(b): i gruppi sono non convessi e k-means li taglierà trasversalmente. (c) di solito va bene se i blob sono ben separati, anche se dimensioni e dispersioni molto diverse possono spostare i confini. (a) è un tipico caso d'uso di k-means.
+:::
+
+## 10. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — riproduci sui pinguini.** Standardizza le quattro misure numeriche di `penguins` (elimina le righe con valori mancanti), esegui k-means con $k = 3$ e `nstart = 25`, e incrocia i cluster con `species`. Calcola l'ARI.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+peng <- penguins |>
+  select(species, bill_len, bill_dep, flipper_len, body_mass) |>
+  na.omit()
+peng_z <- scale(select(peng, -species))
+set.seed(1)
+km_p <- kmeans(peng_z, centers = 3, nstart = 25)
+table(km_p$cluster, peng$species)
+adjustedRandIndex(km_p$cluster, peng$species)   # circa 0.79
+```
+I pinguini Gentoo formano un cluster quasi perfetto; Adelia e Chinstrap sono in parte mescolati.
+:::
+:::
+
+::: {.exercise}
+[★]{.stars} **Esercizio 2 — prevedi l'output.** Senza eseguirlo, quanto valgono `kmeans(x, centers = 1)$tot.withinss` e `kmeans(x, centers = 1)$betweenss`, in termini di `totss`? Quanto varrebbe la WCSS se $k$ fosse uguale al numero di osservazioni (distinte)?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Con un solo cluster il centro è la media generale, quindi `tot.withinss` è uguale a `totss` e `betweenss` è 0. Con un cluster per ogni osservazione distinta ogni punto è il proprio centro e la WCSS è 0. Per questo la sola WCSS non può scegliere $k$.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi l'errore.** Uno studente fa il clustering dei computer con il codice qui sotto e trova che i cluster separano in gran parte i computer venduti all'inizio del periodo da quelli venduti alla fine. Che cosa è andato storto?
+
+```r
+comp_bad <- read_csv(data_path("computers.csv"), show_col_types = FALSE) |>
+  select(where(is.numeric)) |>
+  scale()
+set.seed(123)
+km_bad <- kmeans(comp_bad, centers = 4, nstart = 25)
+```
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+`where(is.numeric)` mantiene la prima colonna senza nome (il numero di riga, rinominata `...1` da `readr`) e anche `ads` e `trend`. Il file è ordinato nel tempo, quindi il numero di riga è quasi perfettamente correlato con `trend` (controlla `cor(comp_bad[, 1], comp_bad[, "trend"])`). Due delle sette variabili di clustering codificano quindi "quando è stato venduto il computer". Elimina la colonna indice e scegli le variabili in modo consapevole:
+```r
+comp_ok <- read_csv(data_path("computers.csv"), show_col_types = FALSE,
+                    name_repair = "unique_quiet") |>
+  select(-1) |>
+  select(price, speed, hd, ram, screen) |>
+  scale()
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — interpreta un profilo.** Una soluzione k-means su dati standardizzati di un supermercato dà questi centri (punteggi z):
+
+| cluster | visite | dimensione del carrello | quota bio |
+|---|---|---|---|
+| 1 | 1.2 | −0.6 | 0.1 |
+| 2 | −0.8 | 1.4 | −0.2 |
+| 3 | −0.3 | −0.4 | 1.9 |
+
+Dai un nome ai tre cluster e di' quale tabella aggiuntiva vorresti prima di presentarli.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Cluster 1: visitatori frequenti con carrelli piccoli ("clienti della spesa quotidiana"). Cluster 2: visite rare con carrelli grandi ("clienti della spesa settimanale di scorta"). Cluster 3: visite e carrelli nella media, ma una quota molto più alta di prodotti biologici ("orientati al bio"). Prima di presentarli vorrei le **dimensioni** dei cluster e le **mediane nelle unità originali** (visite al mese, euro per carrello, % bio), oltre a un controllo di stabilità.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi: una trasformazione cambia i segmenti?** `hd` e `ram` sono asimmetrici a destra (a ogni gradino la RAM più o meno raddoppia). Sostituiscili con `log2(hd)` e `log2(ram)`, standardizza, adatta di nuovo k-means con `k_final` cluster e confronta con la partizione `km` usando l'ARI e i profili nelle unità originali. La segmentazione è robusta a questa scelta?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+comp_log_z <- computers |>
+  transmute(price, speed, hd = log2(hd), ram = log2(ram), screen) |>
+  scale()
+set.seed(123)
+km_log <- kmeans(comp_log_z, centers = k_final, nstart = 50, iter.max = 50)
+adjustedRandIndex(km$cluster, km_log$cluster)
+
+computers |>
+  mutate(cluster = factor(km_log$cluster)) |>
+  summarise(n = n(), across(all_of(spec_vars), median), .by = cluster)
+```
+L'ARI è chiaramente sotto 1: la trasformazione sposta una quota consistente di computer tra i segmenti, anche se alcuni profili sembrano simili. Poiché non c'è una forte struttura naturale, i segmenti dipendono dalle scelte di preprocessing — un motivo per dichiarare esplicitamente la scelta e, idealmente, mostrare che le conclusioni principali la superano.
+:::
+:::
+
+## Riepilogo
+
+| Compito | Codice | Da ricordare |
+|---|---|---|
+| Adattare k-means | `kmeans(x, centers = k, nstart = 25)` | scala prima; `set.seed()` |
+| Output | `$cluster`, `$centers`, `$size`, `$tot.withinss`, `$betweenss` | `betweenss / totss` = quota spiegata |
+| Gomito | WCSS per `k = 1:10` | la WCSS diminuisce sempre |
+| Silhouette | `cluster::silhouette(cl, dist(x))` | sottocampiona i dati grandi |
+| Statistica gap | `cluster::clusGap(x, kmeans, K.max, B, d.power = 2)` + `maxSE()` | confronta con dati privi di struttura |
+| Stabilità bootstrap | riadatta su ricampionamenti, ARI con `mclust::adjustedRandIndex()` | i cluster instabili non si interpretano |
+| Profili | mediane nelle unità originali + centri in punteggi z | dai un nome ai cluster dai profili |
+
+- k-means alterna i passi **assegna** e **aggiorna** e riduce la WCSS fino a raggiungere un ottimo **locale** — usa molte partenze.
+- Scegliere $k$ è un giudizio: combina più criteri, e accetta che i dati reali abbiano spesso una struttura a cluster **debole**.
+- Controlla sempre la **stabilità su dati ricampionati** e descrivi i cluster nelle **unità originali**.
+- k-means cerca gruppi compatti, rotondi e di dimensioni simili; per forme allungate, annidate o non convesse, usa un'altra famiglia.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2a ed.), sezione 12.4, <https://www.statlearning.com>
+- Tibshirani, R., Walther, G. & Hastie, T. (2001). Estimating the number of clusters in a data set via the gap statistic. *Journal of the Royal Statistical Society B*, 63(2), 411–423.
+- `?kmeans` e `?cluster::clusGap` in R.
+:::

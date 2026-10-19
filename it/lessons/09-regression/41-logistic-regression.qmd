@@ -1,0 +1,708 @@
+---
+title: "Regressione logistica"
+subtitle: "Modellare esiti sì/no: odds ratio, probabilità previste e classificazione onesta"
+description: "Passa dalle probabilità agli odds e ai logit, stima la regressione logistica con glm(), interpreta i coefficienti come odds ratio, confronta i modelli con la devianza e valuta un classificatore con matrice di confusione, ROC/AUC, una soglia scelta sui dati di validazione e un grafico di calibrazione."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~120 min]{} [Prerequisiti: [Regressione multipla](39-multiple-regression.qmd), [Selezione e validazione del modello](40-model-selection.qmd), [Proporzioni e test chi-quadrato](../08-inference/35-proportions-chisq.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- convertire tra **probabilità, odds e logit (log-odds)** e spiegare perché la regressione logistica usa il logit;
+- stimare una regressione logistica con `glm(family = binomial)` e interpretare i coefficienti come **odds ratio** con i relativi intervalli di confidenza;
+- riportare **probabilità previste** per profili tipici e confrontare i modelli con **devianza, test del rapporto di verosimiglianza e AIC**;
+- valutare un classificatore con **matrice di confusione**, sensibilità, specificità, precisione, **ROC/AUC** e **grafico di calibrazione**, scegliendo la soglia sui dati di **validazione**;
+- riconoscere la **separazione** e usare diagnostiche adatte agli esiti binari (residui raggruppati).
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(readr)
+library(broom)
+library(rsample)
+library(yardstick)
+```
+
+## 1. Perché non usare semplicemente `lm()`?
+
+Molti esiti sono binari: un paziente guarisce o no, un cliente compra o no, un pinguino è maschio o femmina. Codifica l'esito come 1 ("evento") e 0, e la media di $y$ per un gruppo di unità simili è la **probabilità** dell'evento. Vogliamo quindi modellare una probabilità.
+
+Prendiamo i pinguini di Adelia e proviamo a prevedere il sesso dalla massa corporea e dalla profondità del becco con un ordinario modello lineare:
+
+```{r}
+#| label: adelie-data
+adelie <- penguins |>
+  filter(species == "Adelie", !is.na(sex)) |>
+  mutate(mass_100g = body_mass / 100)   # massa corporea in unità di 100 g
+
+m_lpm <- lm(as.numeric(sex == "male") ~ mass_100g + bill_dep, data = adelie)
+range(fitted(m_lpm))
+```
+
+Alcune "probabilità" sono negative e altre superano 1. Una retta non ha nessuna ragione di restare tra 0 e 1. Ci serve un modello le cui previsioni siano sempre probabilità valide: la **regressione logistica**.
+
+## 2. Probabilità, odds e logit
+
+Gli **odds** di un evento sono la probabilità che accada divisa per la probabilità che non accada: $\text{odds} = p / (1 - p)$. Li usano i bookmaker: odds pari a 4 ("4 a 1") significano che l'evento è quattro volte più probabile che non accada, cioè $p = 0.8$. Il **logit** (o **log-odds**) è il logaritmo naturale degli odds.
+
+```{r}
+#| label: odds-table
+tibble::tibble(
+  probability = c(0.01, 0.1, 0.2, 0.5, 0.8, 0.9, 0.99),
+  odds = probability / (1 - probability),
+  log_odds = log(odds)          # come qlogis(probability)
+)
+```
+
+Nota le tre scale:
+
+- la **probabilità** vive tra 0 e 1;
+- gli **odds** vivono tra 0 e $+\infty$, con 1 che significa "50–50";
+- i **log-odds** vivono sull'intera retta reale, valgono 0 in $p = 0.5$ e sono simmetrici: $p = 0.2$ e $p = 0.8$ danno $-1.39$ e $+1.39$.
+
+Poiché i log-odds possono assumere qualsiasi valore, *possiamo* modellarli con un predittore lineare $\beta_0 + \beta_1 x_1 + \dots$ senza mai produrre una probabilità impossibile. Tornando indietro si ottiene la **curva logistica**:
+
+$$
+\log\frac{p}{1-p} = \beta_0 + \beta_1 x \quad\Longleftrightarrow\quad
+p = \frac{1}{1 + e^{-(\beta_0 + \beta_1 x)}} .
+$$
+
+```{r}
+#| label: fig-logistic-curve
+#| fig-cap: "La curva logistica trasforma qualsiasi valore dei log-odds (asse x) in una probabilità tra 0 e 1. È più ripida in p = 0.5."
+tibble::tibble(log_odds = seq(-6, 6, by = 0.1),
+               probability = plogis(log_odds)) |>
+  ggplot(aes(log_odds, probability)) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = c(0, 1), linetype = 3) +
+  labs(x = "Log-odds (predittore lineare)", y = "Probabilità")
+```
+
+In R, `plogis()` converte i log-odds in probabilità e `qlogis()` fa l'operazione inversa.
+
+## 3. Stimare una regressione logistica con `glm()`
+
+La regressione logistica è un **modello lineare generalizzato** (GLM): un predittore lineare, una **funzione di legame** (qui il logit) che lo collega alla media e una distribuzione per $y$ (qui Bernoulli/binomiale). `glm()` lo stima con la **massima verosimiglianza** (trova i coefficienti che rendono più probabili gli 0 e gli 1 osservati).
+
+```{r}
+#| label: glm-adelie
+m_sex <- glm(sex ~ mass_100g + bill_dep, family = binomial, data = adelie)
+summary(m_sex)
+```
+
+Quando la risposta è un fattore, `glm()` modella la probabilità del **secondo livello**. `levels(adelie$sex)` è `c("female", "male")`, quindi stiamo modellando $P(\text{male})$. Controlla sempre questo punto: determina il segno di ogni coefficiente.
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- I **coefficienti** sono sulla **scala dei log-odds**. A parità di profondità del becco, ogni 100 g in più di massa corporea aumentano i log-odds di essere maschio di `r round(coef(m_sex)["mass_100g"], 2)`. Positivo = probabilità più alta di "male".
+- **`z value` e `Pr(>|z|)`** — test di Wald di $H_0: \beta = 0$ (stima / ES, confrontata con una distribuzione normale, quindi *z*, non *t*).
+- **Dispersion parameter ... taken to be 1** — per dati binari la varianza è fissata dalla media: $p(1-p)$. Non c'è un $\sigma$ separato.
+- **Null deviance / Residual deviance** — quanto male si adattano il modello con la sola intercetta e il nostro modello (più basso = meglio; vedi Sezione 6).
+- **AIC** — come in [Selezione del modello](40-model-selection.qmd).
+- **Fisher Scoring iterations** — il numero di passi dell'algoritmo di stima. Numeri molto grandi (≥ 25) possono segnalare separazione (Sezione 10).
+:::
+
+## 4. Interpretazione: gli odds ratio
+
+I log-odds sono difficili da ragionarci sopra. Esponenziando un coefficiente si ottiene un **odds ratio** (OR, rapporto degli odds): il fattore per cui vengono moltiplicati gli **odds** quando il predittore aumenta di una unità, a parità degli altri.
+
+```{r}
+#| label: odds-ratios
+exp(coef(m_sex))
+exp(confint(m_sex))    # IC al 95% con verosimiglianza profilo, poi esponenziati
+```
+
+```{r}
+#| label: or-values
+#| include: false
+or_mass <- exp(coef(m_sex))["mass_100g"]
+or_mass_ci <- exp(confint(m_sex))["mass_100g", ]
+or_bill <- exp(coef(m_sex))["bill_dep"]
+```
+
+- **Massa corporea**: per ogni 100 g in più, gli odds di essere maschio vengono moltiplicati per `r round(or_mass, 2)` (IC al 95% da `r round(or_mass_ci[1], 2)` a `r round(or_mass_ci[2], 2)`), per pinguini con la stessa profondità del becco.
+- **Profondità del becco**: ogni mm in più moltiplica gli odds per `r round(or_bill, 2)`, a parità di massa.
+- Un OR pari a 1 significa nessuna associazione; OR > 1 aumenta gli odds, OR < 1 li diminuisce. Un IC per l'OR che esclude 1 corrisponde a p < 0.05.
+
+Lo stesso con **broom** (`exponentiate = TRUE` trasforma sia le stime sia gli IC):
+
+```{r}
+#| label: tidy-or
+tidy(m_sex, exponentiate = TRUE, conf.int = TRUE)
+```
+
+Ignora l'OR dell'intercetta: sono gli odds per un pinguino con massa 0 g e profondità del becco 0 mm.
+
+::: {.callout-important}
+## Gli odds ratio non sono rischi relativi
+
+"OR = 2" significa che raddoppiano gli **odds**, non la probabilità. Se $p = 0.5$ (odds 1), raddoppiare gli odds dà odds 2, cioè $p = 0.67$; se $p = 0.9$ (odds 9), raddoppiare dà odds 18, cioè $p = 0.95$. La variazione di probabilità dipende dal punto di partenza. Per questo riportiamo anche le **probabilità previste**.
+:::
+
+## 5. Probabilità previste
+
+`predict(..., type = "response")` restituisce le probabilità; il valore predefinito `type = "link"` restituisce i log-odds. Un buon modo per comunicare un modello è prevedere per alcuni **profili tipici**:
+
+```{r}
+#| label: profiles
+profiles <- tibble::tibble(mass_100g = c(32, 37, 42),
+                           bill_dep = mean(adelie$bill_dep))
+profiles |>
+  mutate(p_male = predict(m_sex, newdata = profiles, type = "response"))
+```
+
+Un Adelie con profondità del becco media e un peso di 3200 g è molto probabilmente femmina; a 3700 g è un testa o croce; a 4200 g è molto probabilmente maschio.
+
+Per gli intervalli di confidenza, calcolali sulla scala del **legame** (dove l'approssimazione normale è buona) e trasforma gli estremi:
+
+```{r}
+#| label: fig-pred-curve
+#| fig-cap: "Probabilità prevista di essere maschio per pinguini di Adelia con profondità del becco media, con banda di confidenza al 95%. Punti: sesso osservato (0 = femmina, 1 = maschio)."
+grid <- tibble::tibble(mass_100g = seq(28, 48, by = 0.25),
+                       bill_dep = mean(adelie$bill_dep))
+link <- predict(m_sex, newdata = grid, type = "link", se.fit = TRUE)
+grid <- grid |>
+  mutate(p = plogis(link$fit),
+         lower = plogis(link$fit - 1.96 * link$se.fit),
+         upper = plogis(link$fit + 1.96 * link$se.fit))
+
+ggplot(grid, aes(100 * mass_100g, p)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.25) +
+  geom_line(linewidth = 1) +
+  geom_jitter(data = adelie, aes(body_mass, as.numeric(sex == "male")),
+              height = 0.03, width = 0, alpha = 0.4) +
+  labs(x = "Massa corporea (g)", y = "P(male)")
+```
+
+### Effetti marginali medi
+
+Un altro riepilogo sulla scala delle probabilità è l'**effetto marginale medio** (AME, *average marginal effect*): la media, su tutti i pinguini nei dati, della variazione della probabilità prevista per un piccolo aumento di un predittore. Nella regressione logistica la derivata di $p$ rispetto a $x_j$ è $\beta_j\,p(1-p)$, quindi:
+
+```{r}
+#| label: ame
+p_hat <- fitted(m_sex)
+mean(coef(m_sex)["mass_100g"] * p_hat * (1 - p_hat))
+```
+
+In media, 100 g in più di massa corporea aumentano la probabilità di essere maschio di circa `r round(100 * mean(coef(m_sex)["mass_100g"] * p_hat * (1 - p_hat)))` punti percentuali (per piccole variazioni). Il pacchetto **marginaleffects** calcola gli AME, con gli errori standard, per qualsiasi modello:
+
+```{r}
+#| label: ame-marginaleffects
+#| eval: false
+marginaleffects::avg_slopes(m_sex, variables = "mass_100g")
+```
+
+## 6. Devianza, test del rapporto di verosimiglianza e AIC
+
+La **devianza** generalizza la somma dei quadrati dei residui: misura quanto il modello stimato è lontano da un adattamento perfetto (più bassa = meglio). La differenza di devianza tra due modelli **annidati** segue, approssimativamente, una distribuzione $\chi^2$ con gradi di libertà pari al numero di parametri aggiunti: è il **test del rapporto di verosimiglianza** (LRT, *likelihood-ratio test*).
+
+```{r}
+#| label: lrt
+m0 <- glm(sex ~ 1, family = binomial, data = adelie)
+m1 <- glm(sex ~ mass_100g, family = binomial, data = adelie)
+anova(m0, m1, m_sex, test = "Chisq")
+AIC(m0, m1, m_sex)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `Resid. Dev` scende da `r round(deviance(m0), 1)` (sola intercetta) a `r round(deviance(m1), 1)` con la massa corporea, e a `r round(deviance(m_sex), 1)` aggiungendo la profondità del becco.
+- Ogni riga verifica il modello rispetto a quello sopra: la massa corporea riduce la devianza di `r round(deviance(m0) - deviance(m1), 1)` con 1 gl; aggiungere la profondità del becco la riduce ulteriormente di `r round(deviance(m1) - deviance(m_sex), 1)` (p = `r format.pval(anova(m1, m_sex, test = "Chisq")[2, "Pr(>Chi)"], digits = 2)`). Entrambi i termini migliorano l'adattamento.
+- L'AIC concorda: il modello con due predittori ha il valore più basso.
+:::
+
+L'LRT è in generale più affidabile del test z di Wald nella tabella di riepilogo, soprattutto nei campioni piccoli. (`test = "LRT"` è sinonimo di `"Chisq"`.)
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: verosimiglianza e devianza
+
+Per $y_i$ binari con probabilità stimate $\hat p_i$, la log-verosimiglianza è
+
+$$
+\ell = \sum_i \big[y_i \log \hat p_i + (1 - y_i)\log(1 - \hat p_i)\big],
+$$
+
+e per dati 0/1 la devianza è $D = -2\ell$ (il modello saturo ha verosimiglianza 1). La statistica LRT per modelli annidati è $D_0 - D_1 \sim \chi^2_{p_1 - p_0}$ sotto $H_0$. Non esiste una soluzione in forma chiusa per $\hat\beta$; `glm()` usa i *minimi quadrati iterativamente ripesati*, una sequenza di regressioni lineari pesate.
+:::
+
+## 7. Dalle probabilità alle classi: la matrice di confusione
+
+Per **classificare** scegliamo una **soglia** $t$ e prevediamo "male" quando $\hat p > t$. Con $t = 0.5$:
+
+```{r}
+#| label: confusion-adelie
+pred_class <- if_else(fitted(m_sex) > 0.5, "male", "female")
+cm <- table(predicted = pred_class, observed = adelie$sex)
+cm
+```
+
+Chiama "male" la classe **positiva** (l'evento). Allora:
+
+| | osservato positivo | osservato negativo |
+|---|---|---|
+| **previsto positivo** | vero positivo (TP) | falso positivo (FP) |
+| **previsto negativo** | falso negativo (FN) | vero negativo (TN) |
+
+```{r}
+#| label: metrics-adelie
+tp <- cm["male", "male"];   fn <- cm["female", "male"]
+tn <- cm["female", "female"]; fp <- cm["male", "female"]
+c(accuracy    = (tp + tn) / sum(cm),
+  sensitivity = tp / (tp + fn),   # recall: quota di maschi individuati
+  specificity = tn / (tn + fp),   # quota di femmine identificate correttamente
+  precision   = tp / (tp + fp))   # quota di previsioni "male" corrette
+```
+
+Questi valori sono calcolati sugli **stessi dati usati per stimare il modello**, quindi sono ottimistici. Per una valutazione onesta servono dati nuovi — il che ci porta a un esempio più grande.
+
+## 8. Un esempio reale: prevedere il reddito
+
+Il file `adult.csv` contiene `r format(48842, big.mark = ",")` record del censimento statunitense del 1994. L'obiettivo: prevedere se una persona guadagna più di 50.000 dollari l'anno.
+
+### Importazione e pulizia
+
+```{r}
+#| label: adult-import
+adult_raw <- read_csv(data_path("adult.csv"), na = c("", "?"),
+                      show_col_types = FALSE)
+glimpse(adult_raw)
+```
+
+Il file codifica i valori mancanti come `"?"` e i nomi delle colonne contengono trattini. Puliamo le categorie con **forcats**:
+
+```{r}
+#| label: adult-clean
+adult <- adult_raw |>
+  select(-x) |>                                    # indice di riga
+  rename_with(\(nm) gsub("-", "_", nm)) |>         # marital-status -> marital_status
+  mutate(
+    income = factor(income, levels = c("<=50K", ">50K"),
+                    labels = c("low", "high")),
+    workclass = factor(workclass) |>
+      fct_na_value_to_level(level = "Unknown") |>  # NA diventa un livello
+      fct_lump_min(min = 100, other_level = "Other"),
+    education = fct_collapse(
+      education,
+      "No HS diploma" = c("Preschool", "1st-4th", "5th-6th", "7th-8th",
+                          "9th", "10th", "11th", "12th"),
+      "HS grad"       = "HS-grad",
+      "Some college"  = c("Some-college", "Assoc-acdm", "Assoc-voc"),
+      "Bachelors"     = "Bachelors",
+      "Postgraduate"  = c("Masters", "Prof-school", "Doctorate")
+    ) |>
+      fct_relevel("No HS diploma", "HS grad", "Some college", "Bachelors"),
+    marital = fct_collapse(
+      marital_status,
+      "Married"       = c("Married-civ-spouse", "Married-AF-spouse"),
+      "Never married" = "Never-married",
+      other_level     = "Other"
+    ) |>
+      fct_relevel("Married", "Never married"),
+    race = fct_infreq(race),                       # il più frequente = riferimento
+    gender = factor(gender),
+    age_10 = age / 10,                             # età in decenni
+    hours_10 = hours_per_week / 10                 # ore in unità da 10
+  ) |>
+  select(income, age_10, hours_10, education, marital, gender, race,
+         workclass)
+
+count(adult, income) |> mutate(prop = n / sum(n))
+```
+
+Alcune decisioni che vale la pena spiegare:
+
+- **`fct_na_value_to_level()`**: circa il 6% di `workclass` è mancante. Eliminare quelle righe sprecherebbe dati (e potrebbero non essere mancanti a caso); un livello separato "Unknown" le conserva e permette al modello di stimarne l'effetto specifico.
+- **`fct_lump_min()`**: "Without-pay" e "Never-worked" hanno solo 21 e 10 persone — troppo poche per stimare un coefficiente. Accorpare i livelli rari in "Other" stabilizza il modello.
+- **`fct_collapse()`**: 16 livelli di istruzione diventano 5 gruppi interpretabili. Eliminiamo `educational_num`, che è solo un codice numerico di `education`: includere entrambe metterebbe la stessa informazione nel modello due volte.
+- **Il riscalamento con costanti fisse** (`age / 10`) è innocuo: non usa informazioni dai dati. **Standardizzare** (sottrarre la media, dividere per la DS) *userebbe* i dati; non serve per `glm()`, e se servisse andrebbe stimato solo sull'insieme di addestramento.
+- Circa il `r round(100 * mean(adult$income == "high"))`% delle persone è nella classe "high": l'esito è **sbilanciato**.
+
+### Suddivisione: addestramento, validazione e test
+
+Servono tre insiemi: **addestramento** per stimare il modello, **validazione** per scegliere la soglia di classificazione e **test** per valutare una sola volta la scelta finale. La stratificazione per `income` mantiene le stesse proporzioni delle classi in tutti e tre.
+
+```{r}
+#| label: adult-split
+set.seed(2026)
+adult_split <- initial_validation_split(adult, prop = c(0.6, 0.2),
+                                        strata = income)
+adult_train <- training(adult_split)
+adult_val   <- validation(adult_split)
+adult_test  <- testing(adult_split)
+c(train = nrow(adult_train), validation = nrow(adult_val),
+  test = nrow(adult_test))
+```
+
+### Stima e interpretazione
+
+```{r}
+#| label: adult-fit
+m_inc <- glm(income ~ age_10 + hours_10 + education + marital + gender +
+               race + workclass,
+             family = binomial, data = adult_train)
+
+tidy(m_inc, exponentiate = TRUE, conf.int = TRUE) |>
+  filter(term != "(Intercept)") |>
+  select(term, odds_ratio = estimate, conf.low, conf.high) |>
+  mutate(across(where(is.numeric), \(x) round(x, 2)))
+```
+
+```{r}
+#| label: adult-or-values
+#| include: false
+or_inc <- exp(coef(m_inc))
+```
+
+Leggiamo alcuni odds ratio (tutti "a parità degli altri predittori"):
+
+- **Istruzione**: rispetto a chi non ha un diploma di scuola superiore, gli odds di reddito alto sono circa `r round(or_inc["educationBachelors"])` volte più alti per chi ha una laurea triennale e circa `r round(or_inc["educationPostgraduate"])` volte più alti con un titolo post-laurea.
+- **Stato civile**: chi non si è mai sposato ha odds pari a circa `r round(or_inc["maritalNever married"], 2)` volte quelli delle persone sposate — grosso modo `r round(1 / or_inc["maritalNever married"])` volte più bassi.
+- **Ore**: ogni 10 ore settimanali in più moltiplicano gli odds per `r round(or_inc["hours_10"], 2)`.
+- **Genere**: l'OR aggiustato per gli uomini è solo `r round(or_inc["genderMale"], 2)`. La differenza *grezza* tra uomini e donne è molto più grande, ma in questi dati gran parte si sovrappone agli altri predittori, soprattutto lo stato civile, fortemente associato sia al genere sia al reddito alto — un promemoria del fatto che i coefficienti aggiustati dipendono da che cos'altro c'è nel modello e non sono effetti causali.
+
+### Diagnostica: residui raggruppati
+
+I grafici dei residui di `lm()` qui sono inutili: con un esito 0/1, i residui si dispongono su due curve qualunque sia il modello. Invece, **raggruppa** le osservazioni (per esempio per un predittore o per la probabilità stimata) e guarda il **residuo medio** $y - \hat p$ in ciascun gruppo. Se il modello è corretto, le medie dovrebbero essere vicine a 0, per lo più entro $\pm 2$ errori standard.
+
+```{r}
+#| label: fig-binned-age
+#| fig-cap: "Residui raggruppati in funzione dell'età (dati di addestramento). L'andamento a U rovesciata mostra che una retta nell'età non basta."
+binned_resid <- function(model, data, by) {
+  data |>
+    mutate(p = fitted(model), r = as.numeric(income == "high") - p,
+           bin = ntile({{ by }}, 20)) |>
+    summarise(x = mean({{ by }}), mean_resid = mean(r),
+              se = sqrt(sum(p * (1 - p))) / n(), .by = bin)
+}
+
+binned_resid(m_inc, adult_train, age_10) |>
+  ggplot(aes(10 * x, mean_resid)) +
+  geom_hline(yintercept = 0) +
+  geom_line(aes(y = 2 * se), linetype = 2) +
+  geom_line(aes(y = -2 * se), linetype = 2) +
+  geom_point() +
+  labs(x = "Età (anni, media del gruppo)", y = "Residuo medio")
+```
+
+Il modello sottostima il reddito alto nella mezza età e lo sovrastima per i giovani e gli anziani: il reddito sale con l'età e poi scende. Un termine quadratico lo cattura:
+
+```{r}
+#| label: adult-quad
+m_inc2 <- update(m_inc, . ~ . + I(age_10^2))
+anova(m_inc, m_inc2, test = "Chisq")
+AIC(m_inc, m_inc2)
+```
+
+La devianza scende di `r round(deviance(m_inc) - deviance(m_inc2))` con un solo parametro in più. Ridisegna il grafico dei residui raggruppati con `m_inc2` (Esercizio 3): l'andamento scompare. Con un termine quadratico, l'OR di `age_10` da solo non è più interpretabile; mostra invece l'effetto dell'età con le probabilità previste ai vari valori di età.
+
+## 9. Valutare il classificatore onestamente
+
+### L'accuratezza può ingannare
+
+Un "modello" che prevede "low" per tutti ha ragione nel `r round(100 * mean(adult_val$income == "low"))`% dei casi sull'insieme di validazione — senza aver imparato nulla. Con classi sbilanciate, l'**accuratezza** premia soprattutto la previsione della classe maggioritaria. Guarda sempre sensibilità e specificità (o precisione), e misure indipendenti dalla soglia come l'AUC.
+
+### Previsioni sull'insieme di validazione
+
+```{r}
+#| label: val-pred
+val_pred <- adult_val |>
+  mutate(.pred_high = predict(m_inc2, newdata = adult_val,
+                              type = "response"))
+```
+
+### Curva ROC e AUC
+
+Ogni soglia dà una coppia (sensibilità, specificità). La **curva ROC** rappresenta la sensibilità rispetto a 1 − specificità per *tutte* le soglie; l'**AUC** (area sotto la curva) è la probabilità che una persona "high" scelta a caso riceva una probabilità prevista più alta di una persona "low" scelta a caso (0.5 = testa o croce, 1 = ordinamento perfetto).
+
+In **yardstick**, l'evento è per impostazione predefinita il **primo** livello del fattore. I nostri livelli sono `c("low", "high")`, quindi dobbiamo indicare `event_level = "second"`:
+
+```{r}
+#| label: fig-roc
+#| fig-cap: "Curva ROC del modello per il reddito sull'insieme di validazione. La diagonale tratteggiata è un modello che tira a indovinare."
+roc_auc(val_pred, truth = income, .pred_high, event_level = "second")
+
+roc_curve(val_pred, truth = income, .pred_high, event_level = "second") |>
+  ggplot(aes(1 - specificity, sensitivity)) +
+  geom_path(linewidth = 1) +
+  geom_abline(linetype = 2) +
+  coord_equal() +
+  labs(x = "1 - specificità (tasso di falsi positivi)",
+       y = "Sensibilità (tasso di veri positivi)")
+```
+
+Dimenticare `event_level = "second"` farebbe riportare in silenzio $1 - \text{AUC}$ e una curva speculare.
+
+### Scegliere la soglia sull'insieme di validazione
+
+La soglia predefinita di 0.5 raramente è quella giusta. Con il `r round(100 * mean(adult$income == "high"))`% di positivi, individua solo circa la metà dei redditi alti. Quale soglia sia la "migliore" dipende dai costi dei due errori; una scelta neutra è massimizzare l'**indice J di Youden** = sensibilità + specificità − 1. Lo calcoliamo sull'insieme di **validazione** per una griglia di soglie:
+
+```{r}
+#| label: threshold
+class_summary <- function(prob, is_event, t) {
+  pred <- prob > t
+  c(threshold   = t,
+    sensitivity = sum(pred & is_event) / sum(is_event),
+    specificity = sum(!pred & !is_event) / sum(!is_event),
+    precision   = sum(pred & is_event) / sum(pred))
+}
+
+thresholds <- seq(0.05, 0.95, by = 0.01)
+grid_t <- lapply(thresholds, \(t) class_summary(
+  val_pred$.pred_high, val_pred$income == "high", t)) |>
+  bind_rows() |>
+  mutate(youden = sensitivity + specificity - 1)
+
+best_t <- grid_t$threshold[which.max(grid_t$youden)]
+best_t
+```
+
+```{r}
+#| label: fig-threshold
+#| fig-cap: "Sensibilità, specificità e precisione sull'insieme di validazione al variare della soglia. La linea punteggiata indica la soglia che massimizza l'indice J di Youden."
+grid_t |>
+  tidyr::pivot_longer(c(sensitivity, specificity, precision),
+                      names_to = "metric") |>
+  ggplot(aes(threshold, value, colour = metric)) +
+  geom_line(linewidth = 1) +
+  geom_vline(xintercept = best_t, linetype = 3) +
+  labs(x = "Soglia", y = NULL, colour = NULL)
+```
+
+Alzare la soglia rende il modello più conservativo: meno falsi positivi (specificità e precisione salgono), più positivi mancati (la sensibilità scende). Se mancare un positivo è costoso (per esempio una malattia), scegli una soglia più bassa; se sono costosi i falsi allarmi, una più alta. **La scelta spetta all'insieme di validazione, non a quello di test.**
+
+### Valutazione finale sull'insieme di test — una sola volta
+
+```{r}
+#| label: test-eval
+test_pred <- adult_test |>
+  mutate(
+    .pred_high = predict(m_inc2, newdata = adult_test, type = "response"),
+    .pred_class = factor(if_else(.pred_high > best_t, "high", "low"),
+                         levels = levels(income))
+  )
+
+conf_mat(test_pred, truth = income, estimate = .pred_class)
+
+class_metrics <- metric_set(accuracy, sens, spec, precision)
+class_metrics(test_pred, truth = income, estimate = .pred_class,
+              event_level = "second")
+roc_auc(test_pred, truth = income, .pred_high, event_level = "second")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `conf_mat()` mostra le previsioni nelle righe e la verità nelle colonne.
+- Con la soglia scelta sui dati di validazione, il modello individua la maggior parte dei redditi alti (**sensibilità**) al prezzo di più falsi allarmi (**precisione** più bassa) rispetto a 0.5.
+- L'AUC sul test è vicina all'AUC sulla validazione: nessun segnale che abbiamo sovradattato l'insieme di validazione.
+- Questi numeri sul test sono la nostra stima onesta delle prestazioni su nuove persone della stessa popolazione.
+:::
+
+### Calibrazione: le probabilità sono giuste?
+
+Un modello può ordinare bene le persone (AUC alta) e dare comunque probabilità sbagliate. Un **grafico di calibrazione** raggruppa le osservazioni di test in intervalli di probabilità prevista e confronta la previsione media con la proporzione osservata di eventi:
+
+```{r}
+#| label: fig-calibration
+#| fig-cap: "Grafico di calibrazione sull'insieme di test (10 gruppi di probabilità prevista). Punti vicini alla diagonale significano che le probabilità previste corrispondono alle frequenze osservate."
+test_pred |>
+  mutate(bin = ntile(.pred_high, 10)) |>
+  summarise(predicted = mean(.pred_high),
+            observed = mean(income == "high"),
+            n = n(), .by = bin) |>
+  ggplot(aes(predicted, observed)) +
+  geom_abline(linetype = 2) +
+  geom_line() +
+  geom_point(size = 2) +
+  coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+  labs(x = "Probabilità prevista media", y = "Proporzione osservata di reddito alto")
+```
+
+La regressione logistica stimata con la massima verosimiglianza è di solito ben calibrata su dati simili a quelli di addestramento; i modelli di machine learning più flessibili spesso non lo sono (vedi [Confronto tra modelli](../10-ml/49-model-comparison.qmd)).
+
+## 10. Separazione: quando i coefficienti sfuggono
+
+Possiamo distinguere i pinguini di Adelia dai Gentoo in base alla profondità del becco e alla lunghezza della pinna?
+
+```{r}
+#| label: separation
+two_species <- penguins |>
+  filter(species %in% c("Adelie", "Gentoo")) |>
+  droplevels()
+
+m_sep <- glm(species ~ bill_dep + flipper_len, family = binomial,
+             data = two_species)
+```
+
+R segnala che l'*algoritmo non è convergito* e che si sono verificate *probabilità stimate numericamente pari a 0 o 1*. `summary(m_sep)` mostra coefficienti ed errori standard enormi. Questa è la **separazione (completa)**: una combinazione dei predittori classifica perfettamente ogni esemplare, quindi la stima di massima verosimiglianza è infinita — la curva vuole diventare un gradino verticale.
+
+La separazione non è un errore nel tuo codice. Significa che i predittori determinano l'esito in questo campione. Le opzioni: riportare che i gruppi sono perfettamente separabili (a volte *è* proprio quello il risultato), eliminare o accorpare le categorie problematiche, oppure usare stimatori **penalizzati** come la regressione logistica di Firth (pacchetto **logistf**) o una penalizzazione ridge/lasso ([Regressione penalizzata](43-penalized-regression.qmd)), che danno stime finite e contratte.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Non controllare quale livello è l'evento.** `glm()` modella il *secondo* livello del fattore; yardstick tratta il *primo* come evento a meno che tu non imposti `event_level = "second"`. Confonderli inverte in silenzio segni o AUC.
+2. **Leggere i coefficienti come variazioni di probabilità.** Sono variazioni dei log-odds; esponenzia per ottenere gli odds ratio e usa le probabilità previste o gli AME per la scala delle probabilità.
+3. **Chiamare un odds ratio "rapporto di rischio".** Quando l'evento è frequente, i due differiscono molto.
+4. **Scegliere la soglia sull'insieme di test** — o fissarne una "scelta sulla validazione" senza calcolarla. Calcolala sui dati di validazione; usa l'insieme di test una sola volta.
+5. **Giudicare un classificatore dall'accuratezza con classi sbilanciate.** Guarda sensibilità, specificità, precisione, AUC e calibrazione.
+6. **Fare il preprocessing prima della suddivisione.** Scalare, imputare o selezionare con tutti i dati fa trapelare informazione dall'insieme di test (*data leakage*). Le trasformazioni fisse (come `age / 10`) vanno bene; tutto ciò che è stimato dai dati appartiene alla fase di addestramento (con `recipes` dalla [lezione 44](../10-ml/44-ml-workflow.qmd)).
+7. **Usare i grafici diagnostici di `plot(glm_model)` pensati per `lm()`.** Usa invece i residui raggruppati e i grafici di calibrazione.
+:::
+
+## 11. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Un coefficiente sulla scala dei log-odds è −0.69. Qual è l'odds ratio e che cosa significa?
+
+$e^{-0.69} \approx 0.50$: ogni aumento di una unità del predittore **dimezza gli odds** dell'evento, a parità degli altri predittori.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. La probabilità di un evento è 0.75. Quali sono gli odds e i log-odds?
+
+Odds = 0.75 / 0.25 = 3 ("3 a 1"); log-odds = log(3) ≈ 1.10.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Un classificatore ha AUC = 0.88 ma le sue probabilità previste sono tutte comprese tra 0.4 e 0.6. È un problema?
+
+Ordina bene le persone (AUC), ma è mal **calibrato**: le probabilità non possono essere prese alla lettera (un tasso di eventi del 5% o del 95% in certi gruppi viene riportato come circa 50%). Controlla un grafico di calibrazione prima di usare le probabilità per prendere decisioni.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Perché qui servono un insieme di validazione oltre all'insieme di test?
+
+Perché facciamo una scelta guidata dai dati (la soglia). Se la scegliessimo sull'insieme di test, le prestazioni sul test sarebbero ottimistiche. L'insieme di validazione assorbe la scelta; quello di test resta intatto per la stima finale e onesta. (La convalida incrociata sull'insieme di addestramento è un'alternativa a un insieme di validazione separato.)
+:::
+
+## 12. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — odds ratio.** Usando `adelie`, stima `glm(sex ~ bill_len, family = binomial)`. Riporta l'odds ratio per mm di lunghezza del becco con il suo IC al 95% e scrivi una frase che lo interpreti.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+m_bl <- glm(sex ~ bill_len, family = binomial, data = adelie)
+tidy(m_bl, exponentiate = TRUE, conf.int = TRUE)
+```
+L'OR è circa 2.0 per mm (IC al 95% grosso modo da 1.6 a 2.5): ogni millimetro in più di lunghezza del becco raddoppia all'incirca gli odds di essere maschio. Ricorda che il modello descrive $P(\text{male})$ perché "male" è il secondo livello.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — prevedi l'output.** Senza eseguirlo: quanto vale `exp(confint(m_sex))["mass_100g", ]` se la massa corporea è inserita in **grammi** (`body_mass`) invece che in centinaia di grammi? Poi controlla.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Il coefficiente per grammo è 1/100 del coefficiente per 100 g, quindi l'OR per grammo è la radice centesima dell'OR per 100 g: circa $2.05^{1/100} \approx 1.007$, con IC circa da 1.005 a 1.010. Il modello e le sue previsioni sono identici; cambia solo l'unità. Scegli unità che rendano leggibile l'OR.
+
+```r
+m_g <- glm(sex ~ body_mass + bill_dep, family = binomial, data = adelie)
+exp(confint(m_g))["body_mass", ]
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — diagnostica.** Disegna il grafico dei residui raggruppati per `m_inc2` (con il termine quadratico nell'età) usando `binned_resid()`. Poi disegna un secondo grafico dei residui raggruppati rispetto a `hours_10` per `m_inc2`. L'effetto lineare delle ore è adeguato?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+plot_binned <- function(df, xlab) {
+  ggplot(df, aes(x, mean_resid)) +
+    geom_hline(yintercept = 0) +
+    geom_line(aes(y = 2 * se), linetype = 2) +
+    geom_line(aes(y = -2 * se), linetype = 2) +
+    geom_point() +
+    labs(x = xlab, y = "Residuo medio")
+}
+binned_resid(m_inc2, adult_train, age_10) |> plot_binned("Età (decenni)")
+binned_resid(m_inc2, adult_train, hours_10) |> plot_binned("Ore / 10")
+```
+Rispetto all'età, la U rovesciata è sparita. Rispetto alle ore, anche i residui mostrano un andamento: molte persone lavorano esattamente 40 ore e l'effetto delle ore non è lineare (si appiattisce oltre circa 50 ore). Un termine quadratico o una spline per le ore migliorerebbe il modello — prova ad aggiungere `I(hours_10^2)` e a confrontare l'AIC.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — correggi l'errore.** Uno studente calcola l'AUC e ottiene 0.12:
+
+```r
+val_pred |> roc_auc(truth = income, .pred_high)
+```
+
+Che cosa è andato storto? E che dire di `roc_auc(val_pred, truth = income, 1 - .pred_high)`?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+yardstick tratta il **primo** livello (`"low"`) come evento, ma `.pred_high` è la probabilità del **secondo** livello. Il risultato è $1 - \text{AUC}$. Si corregge con `event_level = "second"`. Anche la seconda versione è corretta, perché $1 - \hat p$ è la probabilità prevista di "low", il primo livello — ma è meno leggibile. Essere espliciti con `event_level` è l'abitudine più sicura.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi: una diversa regola per la soglia.** Supponi che mancare un reddito alto costi tre volte più di un falso allarme (per esempio una banca che propone un prodotto premium). Sull'insieme di **validazione**, trova la soglia che minimizza il costo totale $3 \times \text{FN} + 1 \times \text{FP}$. Confrontala con `best_t`, poi riporta sensibilità e precisione sull'insieme di **test** alla nuova soglia.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+cost <- sapply(thresholds, \(t) {
+  pred <- val_pred$.pred_high > t
+  truth <- val_pred$income == "high"
+  3 * sum(!pred & truth) + sum(pred & !truth)
+})
+t_cost <- thresholds[which.min(cost)]
+t_cost
+
+class_summary(test_pred$.pred_high, test_pred$income == "high", t_cost)
+```
+La soglia basata sui costi è vicina a $1/(1 + 3) = 0.25$ — l'ottimo teorico per un modello ben calibrato con questi costi — e nella stessa zona di `best_t`. Sul test la sensibilità è alta (intorno a 0.85) e la precisione moderata (intorno a 0.5). Un diverso rapporto tra i costi darebbe una soglia diversa: la soglia "migliore" è una decisione, non una proprietà del modello.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| `qlogis(p)`, `plogis(x)` | probabilità → log-odds, log-odds → probabilità |
+| `glm(y ~ x, family = binomial)` | regressione logistica (modella il **secondo** livello) |
+| `exp(coef(m))`, `exp(confint(m))` | odds ratio e relativi IC |
+| `tidy(m, exponentiate = TRUE, conf.int = TRUE)` | tabella degli odds ratio |
+| `predict(m, newdata, type = "response")` | probabilità previste |
+| `anova(m0, m1, test = "Chisq")`, `AIC()` | test del rapporto di verosimiglianza, confronto tra modelli |
+| `initial_validation_split(strata = )` | suddivisione addestramento / validazione / test |
+| `roc_auc()`, `roc_curve()` con `event_level = "second"` | AUC e curva ROC |
+| `conf_mat()`, `metric_set(accuracy, sens, spec, precision)` | matrice di confusione e metriche di classificazione |
+| residui raggruppati, grafico di calibrazione | diagnostica per esiti binari |
+
+- La regressione logistica è lineare sulla scala dei **log-odds**; i coefficienti esponenziati sono **odds ratio**.
+- Comunica con le **probabilità previste** per profili significativi, non solo con gli OR.
+- La classificazione richiede una **soglia**, scelta sui dati di validazione in base ai costi degli errori.
+- Con classi sbilanciate l'accuratezza inganna: riporta sensibilità, specificità, precisione, AUC — e controlla la **calibrazione**.
+- Gli avvisi su probabilità stimate pari a 0 o 1 segnalano la **separazione**: lo stimatore di massima verosimiglianza non esiste.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2a ed.), capitolo sulla regressione logistica, <https://openintro-ims.netlify.app>
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2a ed.), capitolo 4, <https://www.statlearning.com>
+- Kuhn & Silge, *Tidy Modeling with R*, capitolo 9 sulle metriche di prestazione, <https://www.tmwr.org>
+- Documentazione di yardstick, <https://yardstick.tidymodels.org>
+:::

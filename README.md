@@ -15,6 +15,7 @@
 - Intuition first: every statistical idea starts from a concrete problem, a plot or a simulation; formulas live in collapsible "Going deeper" boxes
 - Modern, reproducible R: native pipe, tidyverse, **tidymodels**, Quarto, project-based workflows
 - Can support a university module of up to **9 ECTS / 72 hours**
+- 🇮🇹 **Italian version** of the whole course (except the optional deep-learning track): <https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/it/>
 
 ## Course structure
 

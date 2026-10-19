@@ -325,11 +325,11 @@ boot_cor_tidy <- vapply(boots$splits, \(s) {
 quantile(boot_cor_tidy, c(0.025, 0.975))
 ```
 
-`vapply(..., numeric(1))` applica la funzione a ogni split e controlla che ciascun risultato sia un singolo numero (vedi [Iterazione](../03-programming/17-iteration.qmd)). L'intervallo concorda con la nostra versione in R base, a meno del rumore Monte Carlo. Il vantaggio di `rsample` non è il bootstrap in sé — bastano tre righe di R base — ma il fatto che gli stessi oggetti si collegano direttamente agli strumenti di modellazione di [Il flusso di lavoro del machine learning](../../../lessons/10-ml/44-ml-workflow.qmd).
+`vapply(..., numeric(1))` applica la funzione a ogni split e controlla che ciascun risultato sia un singolo numero (vedi [Iterazione](../03-programming/17-iteration.qmd)). L'intervallo concorda con la nostra versione in R base, a meno del rumore Monte Carlo. Il vantaggio di `rsample` non è il bootstrap in sé — bastano tre righe di R base — ma il fatto che gli stessi oggetti si collegano direttamente agli strumenti di modellazione di [Il flusso di lavoro del machine learning](../10-ml/44-ml-workflow.qmd).
 
 ## 7. Uno sguardo avanti: bootstrap aggregating ("bagging")
 
-Il bootstrap ricompare nel machine learning con un ruolo diverso. Un singolo albero decisionale è molto sensibile ai dati esatti su cui viene stimato: cambia qualche riga e l'albero può cambiare completamente. Il **bagging** (*bootstrap aggregating*) stima un albero su **ciascun ricampione bootstrap** e ne **media** le previsioni. Fare la media di molti modelli rumorosi ma diversi riduce la varianza, proprio come fare la media di molte osservazioni riduce l'ES di una media. Le **random forest** aggiungono un ulteriore accorgimento (ogni suddivisione considera solo un sottoinsieme casuale delle variabili) e sono tra i metodi di previsione più usati; vedi [Random forest](../../../lessons/10-ml/46-random-forests.qmd).
+Il bootstrap ricompare nel machine learning con un ruolo diverso. Un singolo albero decisionale è molto sensibile ai dati esatti su cui viene stimato: cambia qualche riga e l'albero può cambiare completamente. Il **bagging** (*bootstrap aggregating*) stima un albero su **ciascun ricampione bootstrap** e ne **media** le previsioni. Fare la media di molti modelli rumorosi ma diversi riduce la varianza, proprio come fare la media di molte osservazioni riduce l'ES di una media. Le **random forest** aggiungono un ulteriore accorgimento (ogni suddivisione considera solo un sottoinsieme casuale delle variabili) e sono tra i metodi di previsione più usati; vedi [Random forest](../10-ml/46-random-forests.qmd).
 
 ::: {.callout-note .deeper collapse="true"}
 ## Per approfondire: la regola del 63.2% e le osservazioni out-of-bag

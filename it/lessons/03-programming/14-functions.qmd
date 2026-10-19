@@ -7,7 +7,7 @@ description: "Impara l'anatomia di una funzione in R, argomenti e valori predefi
 {{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
 
 ::: {.lesson-meta}
-[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Vettori](../01-foundations/04-vectors.qmd), [Liste](../01-foundations/07-lists.qmd), [I verbi di dplyr](../02-data/09-dplyr-verbs.qmd)]{}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Vettori](../01-foundations/04-vectors.qmd), [Liste](../01-foundations/07-lists.qmd), [Manipolazione dei dati con dplyr](../02-data/09-dplyr-verbs.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}
@@ -457,7 +457,7 @@ spl2 <- split_data(penguins, prop = 0.7, seed = 42)
 identical(spl$train, spl2$train)
 ```
 
-La funzione usa tutto ciò che abbiamo visto: valori predefiniti (`prop = 0.8`, `seed = NULL`), controlli sugli input, un `if` che viene eseguito solo quando è fornito un seme e una lista come valore restituito. Nella [lezione sul flusso di lavoro del ML](../../../lessons/10-ml/44-ml-workflow.qmd) userai `rsample::initial_split()`, che fa lo stesso lavoro con più opzioni (per esempio la stratificazione).
+La funzione usa tutto ciò che abbiamo visto: valori predefiniti (`prop = 0.8`, `seed = NULL`), controlli sugli input, un `if` che viene eseguito solo quando è fornito un seme e una lista come valore restituito. Nella [lezione sul flusso di lavoro del ML](../10-ml/44-ml-workflow.qmd) userai `rsample::initial_split()`, che fa lo stesso lavoro con più opzioni (per esempio la stratificazione).
 
 ::: {.callout-note .deeper collapse="true"}
 ## Per approfondire: `set.seed()` dentro una funzione

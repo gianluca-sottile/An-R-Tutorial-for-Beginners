@@ -7,7 +7,7 @@ description: "I quattro livelli del corso, le dipendenze tra i moduli e l'elenco
 Il corso si sviluppa su **quattro livelli**. Ogni livello usa gli strumenti dei precedenti, e ogni lezione elenca in apertura i propri prerequisiti. Il tempo totale di studio individuale è di circa **85 ore** (escluso il progetto finale), il che corrisponde a un modulo universitario fino a 9 CFU.
 
 ::: {.callout-note}
-La versione italiana copre attualmente i Livelli 1–3. Le lezioni contrassegnate con "(EN)" sono disponibili solo in inglese.
+La versione italiana copre tutto il corso tranne il percorso facoltativo di deep learning (lezioni 61–66), contrassegnato con "(EN)" e disponibile solo in inglese.
 :::
 
 ## La mappa
@@ -26,7 +26,7 @@ flowchart LR
   subgraph L3["Livello 3 · Incertezza e inferenza"]
     M7["7 · Probabilità e simulazione"] --> M8["8 · Inferenza statistica"]
   end
-  subgraph L4["Livello 4 · Modelli e apprendimento (EN)"]
+  subgraph L4["Livello 4 · Modelli e apprendimento"]
     M9["9 · Modelli di regressione"] --> M10["10 · Apprendimento supervisionato"]
     M11["11 · Riduzione della dimensionalità"] --> M12["12 · Clustering"]
     M10 -.-> M13["13 · Deep learning (facoltativo)"]
@@ -68,10 +68,10 @@ flowchart LR
 | # | Lezione | Tempo |
 |---|---|---|
 | 08 | [Data frame e tibble](lessons/02-data/08-data-frames.qmd) | ~60 min |
-| 09 | [Manipolare i dati con dplyr](lessons/02-data/09-dplyr-verbs.qmd) | ~75 min |
+| 09 | [Manipolazione dei dati con dplyr](lessons/02-data/09-dplyr-verbs.qmd) | ~75 min |
 | 10 | [Sintesi per gruppi](lessons/02-data/10-grouped-summaries.qmd) | ~60 min |
-| 11 | [Unire tabelle](lessons/02-data/11-joins.qmd) | ~60 min |
-| 12 | [Dati in formato tidy e ristrutturazione](lessons/02-data/12-tidy-reshape.qmd) | ~60 min |
+| 11 | [Unire tabelle (join)](lessons/02-data/11-joins.qmd) | ~60 min |
+| 12 | [Dati tidy e ristrutturazione](lessons/02-data/12-tidy-reshape.qmd) | ~60 min |
 | 13 | [Stringhe, fattori e date](lessons/02-data/13-strings-dates.qmd) | ~75 min |
 
 ### 3. Programmazione <small>(Livello 1)</small>
@@ -87,7 +87,7 @@ flowchart LR
 
 | # | Lezione | Tempo |
 |---|---|---|
-| 18 | [Importare dati](lessons/04-io/18-import.qmd) | ~60 min |
+| 18 | [Importare i dati](lessons/04-io/18-import.qmd) | ~60 min |
 | 19 | [Esportare dati e risultati](lessons/04-io/19-export.qmd) | ~40 min |
 | 20 | [Dati mancanti](lessons/04-io/20-missing-data.qmd) | ~75 min |
 
@@ -96,7 +96,7 @@ flowchart LR
 | # | Lezione | Tempo |
 |---|---|---|
 | 21 | [Tabelle di frequenza](lessons/05-descriptive/21-frequency-tables.qmd) | ~60 min |
-| 22 | [Statistiche di sintesi](lessons/05-descriptive/22-summary-statistics.qmd) | ~75 min |
+| 22 | [Indici di sintesi](lessons/05-descriptive/22-summary-statistics.qmd) | ~75 min |
 | 23 | [Descrivere due variabili](lessons/05-descriptive/23-two-variables.qmd) | ~75 min |
 
 ### 6. Visualizzazione <small>(Livello 2)</small>
@@ -104,8 +104,8 @@ flowchart LR
 | # | Lezione | Tempo |
 |---|---|---|
 | 24 | [La grammatica dei grafici](lessons/06-visualization/24-ggplot-grammar.qmd) | ~75 min |
-| 25 | [Rappresentare le distribuzioni](lessons/06-visualization/25-distribution-plots.qmd) | ~75 min |
-| 26 | [Rappresentare dati categoriali](lessons/06-visualization/26-categorical-plots.qmd) | ~60 min |
+| 25 | [Grafici per le distribuzioni](lessons/06-visualization/25-distribution-plots.qmd) | ~75 min |
+| 26 | [Grafici per variabili categoriali](lessons/06-visualization/26-categorical-plots.qmd) | ~60 min |
 | 27 | [Correlazione](lessons/06-visualization/27-correlation.qmd) | ~75 min |
 
 ### 7. Probabilità e simulazione <small>(Livello 3)</small>
@@ -132,44 +132,44 @@ flowchart LR
 
 | # | Lezione | Tempo |
 |---|---|---|
-| 38 | [Simple linear regression (EN)](../lessons/09-regression/38-simple-regression.qmd) | ~90 min |
-| 39 | [Multiple regression (EN)](../lessons/09-regression/39-multiple-regression.qmd) | ~100 min |
-| 40 | [Model selection and validation (EN)](../lessons/09-regression/40-model-selection.qmd) | ~90 min |
-| 41 | [Logistic regression (EN)](../lessons/09-regression/41-logistic-regression.qmd) | ~120 min |
-| 42 | [Poisson regression (EN)](../lessons/09-regression/42-poisson-regression.qmd) | ~100 min |
-| 43 | [Penalized regression: ridge, lasso and elastic net (EN)](../lessons/09-regression/43-penalized-regression.qmd) | ~120 min |
+| 38 | [Regressione lineare semplice](lessons/09-regression/38-simple-regression.qmd) | ~90 min |
+| 39 | [Regressione multipla](lessons/09-regression/39-multiple-regression.qmd) | ~100 min |
+| 40 | [Selezione e validazione del modello](lessons/09-regression/40-model-selection.qmd) | ~90 min |
+| 41 | [Regressione logistica](lessons/09-regression/41-logistic-regression.qmd) | ~120 min |
+| 42 | [Regressione di Poisson](lessons/09-regression/42-poisson-regression.qmd) | ~100 min |
+| 43 | [Regressione penalizzata: ridge, lasso ed elastic net](lessons/09-regression/43-penalized-regression.qmd) | ~120 min |
 
 ### 10. Apprendimento supervisionato <small>(Livello 4)</small>
 
 | # | Lezione | Tempo |
 |---|---|---|
-| 44 | [The machine-learning workflow (EN)](../lessons/10-ml/44-ml-workflow.qmd) | ~120 min |
-| 45 | [Decision trees (EN)](../lessons/10-ml/45-decision-trees.qmd) | ~90 min |
-| 46 | [Random forests (EN)](../lessons/10-ml/46-random-forests.qmd) | ~90 min |
-| 47 | [Gradient boosting (EN)](../lessons/10-ml/47-gradient-boosting.qmd) | ~100 min |
-| 48 | [Support vector machines (EN)](../lessons/10-ml/48-svm.qmd) | ~100 min |
-| 49 | [Comparing and choosing models (EN)](../lessons/10-ml/49-model-comparison.qmd) | ~90 min |
+| 44 | [Il flusso di lavoro del machine learning](lessons/10-ml/44-ml-workflow.qmd) | ~120 min |
+| 45 | [Alberi decisionali](lessons/10-ml/45-decision-trees.qmd) | ~90 min |
+| 46 | [Foreste casuali (random forest)](lessons/10-ml/46-random-forests.qmd) | ~90 min |
+| 47 | [Gradient boosting](lessons/10-ml/47-gradient-boosting.qmd) | ~100 min |
+| 48 | [Macchine a vettori di supporto (SVM)](lessons/10-ml/48-svm.qmd) | ~100 min |
+| 49 | [Confrontare e scegliere i modelli](lessons/10-ml/49-model-comparison.qmd) | ~90 min |
 
 ### 11. Riduzione della dimensionalità <small>(Livello 4)</small>
 
 | # | Lezione | Tempo |
 |---|---|---|
-| 50 | [Principal component analysis (EN)](../lessons/11-dimred/50-pca.qmd) | ~90 min |
-| 51 | [Factor analysis (EN)](../lessons/11-dimred/51-factor-analysis.qmd) | ~100 min |
-| 52 | [Correspondence analysis (EN)](../lessons/11-dimred/52-correspondence-analysis.qmd) | ~80 min |
-| 53 | [Multidimensional scaling (EN)](../lessons/11-dimred/53-mds.qmd) | ~75 min |
-| 54 | [t-SNE and UMAP (EN)](../lessons/11-dimred/54-tsne-umap.qmd) | ~90 min |
+| 50 | [Analisi delle componenti principali](lessons/11-dimred/50-pca.qmd) | ~90 min |
+| 51 | [Analisi fattoriale](lessons/11-dimred/51-factor-analysis.qmd) | ~100 min |
+| 52 | [Analisi delle corrispondenze](lessons/11-dimred/52-correspondence-analysis.qmd) | ~80 min |
+| 53 | [Scaling multidimensionale](lessons/11-dimred/53-mds.qmd) | ~75 min |
+| 54 | [t-SNE e UMAP](lessons/11-dimred/54-tsne-umap.qmd) | ~90 min |
 
 ### 12. Clustering <small>(Livello 4)</small>
 
 | # | Lezione | Tempo |
 |---|---|---|
-| 55 | [Clustering: the big picture (EN)](../lessons/12-clustering/55-clustering-intro.qmd) | ~70 min |
-| 56 | [k-means clustering (EN)](../lessons/12-clustering/56-kmeans.qmd) | ~90 min |
-| 57 | [Hierarchical clustering (EN)](../lessons/12-clustering/57-hierarchical.qmd) | ~80 min |
-| 58 | [DBSCAN: density-based clustering (EN)](../lessons/12-clustering/58-dbscan.qmd) | ~80 min |
-| 59 | [Model-based clustering: Gaussian mixtures (EN)](../lessons/12-clustering/59-model-based.qmd) | ~90 min |
-| 60 | [Spectral clustering (EN)](../lessons/12-clustering/60-spectral.qmd) | ~90 min |
+| 55 | [Clustering: il quadro generale](lessons/12-clustering/55-clustering-intro.qmd) | ~70 min |
+| 56 | [Clustering k-means](lessons/12-clustering/56-kmeans.qmd) | ~90 min |
+| 57 | [Clustering gerarchico](lessons/12-clustering/57-hierarchical.qmd) | ~80 min |
+| 58 | [DBSCAN: clustering basato sulla densità](lessons/12-clustering/58-dbscan.qmd) | ~80 min |
+| 59 | [Clustering basato su modelli: misture gaussiane](lessons/12-clustering/59-model-based.qmd) | ~90 min |
+| 60 | [Clustering spettrale](lessons/12-clustering/60-spectral.qmd) | ~90 min |
 
 ### 13. Deep learning <small>(Facoltativo)</small>
 
@@ -186,4 +186,4 @@ flowchart LR
 
 | # | Lezione | Tempo |
 |---|---|---|
-| 67 | [Capstone project (EN)](../lessons/67-capstone.qmd) | progetto |
+| 67 | [Progetto finale (capstone)](lessons/67-capstone.qmd) | progetto |

@@ -1,0 +1,598 @@
+---
+title: "Analisi delle componenti principali"
+subtitle: "Riassumere molte variabili correlate con poche variabili nuove — e sapere quante tenerne"
+description: "Comprendi la PCA come ricerca delle direzioni di massima varianza, eseguila con prcomp(), scegli il numero di componenti con criteri solidi, leggi loadings, scores e biplot, e usa la PCA in una pipeline predittiva senza data leakage."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~90 min]{} [Prerequisiti: [Matrici](../01-foundations/05-matrices.qmd), [Correlazione](../06-visualization/27-correlation.qmd), [Il flusso di lavoro del machine learning](../10-ml/44-ml-workflow.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare una componente principale come la **direzione di massima varianza** in una nuvola di punti;
+- decidere quando **standardizzare** le variabili ed eseguire la PCA con `prcomp(scale. = TRUE)`;
+- scegliere il numero di componenti con lo **scree plot, la varianza cumulata, la regola di Kaiser e l'analisi parallela**;
+- interpretare **pesi (loadings), punteggi (scores) e biplot**, ricordando che i segni sono arbitrari;
+- usare la PCA in una pipeline predittiva **stimata solo sui dati di addestramento**.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(tidymodels)   # rsample, recipes, parsnip, workflows, yardstick
+
+# tidymodels carica modeldata, il cui `penguins` (con nomi di colonna
+# diversi) maschererebbe quello di base R: assicuriamoci di usare la
+# versione incorporata in R.
+penguins <- datasets::penguins
+```
+
+## 1. Perché ridurre le dimensioni?
+
+Immagina di misurare quattro caratteristiche di ogni fiore: lunghezza del sepalo, larghezza del sepalo, lunghezza del petalo e larghezza del petalo. Molti di questi numeri si muovono insieme: i petali lunghi tendono a essere anche larghi. Perciò le quattro colonne contengono **meno informazione di quattro colonne indipendenti**.
+
+L'analisi delle componenti principali (PCA) costruisce un piccolo numero di **variabili nuove**, dette *componenti principali* (PC), che
+
+- sono combinazioni delle variabili originali (somme pesate),
+- sono **incorrelate** tra loro e
+- catturano la maggior parte possibile della variabilità dei dati, in ordine decrescente.
+
+A che serve? Puoi **rappresentare** in due dimensioni dati con molte variabili, **comprimere** misure ridondanti e fornire a un modello poche componenti stabili invece di molti predittori correlati.
+
+## 2. L'idea in due dimensioni
+
+Partiamo con sole due variabili: lunghezza della pinna e massa corporea dei pinguini. Sono fortemente correlate. Per metterle sullo stesso piano le **standardizziamo** (sottraiamo la media, dividiamo per la deviazione standard): la sezione 3 spiega perché.
+
+```{r}
+#| label: two-vars
+two <- penguins |>
+  select(flipper_len, body_mass) |>
+  na.omit() |>
+  scale()
+
+cor(two)[1, 2]
+```
+
+Ora immagina di tracciare una retta passante per il centro della nuvola e di **proiettare** ogni punto su di essa (tracciando la perpendicolare). I valori proiettati formano una nuova variabile unidimensionale. Rette diverse producono proiezioni con dispersioni diverse. Proviamo ogni direzione da 0° a 180° e calcoliamo la varianza delle proiezioni:
+
+```{r}
+#| label: fig-angle
+#| fig-cap: "Varianza dei punti proiettati per ogni direzione passante per il centro della nuvola. Il massimo individua la prima componente principale."
+angles <- seq(0, 180, by = 1)
+proj_var <- sapply(angles, \(a) {
+  u <- c(cos(a * pi / 180), sin(a * pi / 180))   # vettore unitario
+  var(two %*% u)
+})
+
+ggplot(data.frame(angle = angles, variance = proj_var),
+       aes(angle, variance)) +
+  geom_line(linewidth = 1) +
+  geom_vline(xintercept = angles[which.max(proj_var)], linetype = "dashed") +
+  labs(x = "Direzione della retta (gradi)",
+       y = "Varianza delle proiezioni")
+```
+
+La direzione migliore è a `r angles[which.max(proj_var)]`°, dove le proiezioni hanno varianza `r round(max(proj_var), 2)`. Quella direzione è la **prima componente principale** (PC1). La seconda componente (PC2) è semplicemente la direzione perpendicolare: raccoglie ciò che resta.
+
+`prcomp()` trova la stessa risposta senza provare gli angoli:
+
+```{r}
+#| label: two-pca
+pca_two <- prcomp(two)
+pca_two$rotation        # le direzioni (una colonna per ogni PC)
+pca_two$sdev^2          # varianza lungo ciascuna direzione
+```
+
+```{r}
+#| label: fig-cloud
+#| fig-cap: "La prima componente principale è la retta che meglio si adatta alla nuvola: massimizza la dispersione delle proiezioni e, in modo equivalente, minimizza le distanze perpendicolari al quadrato (segmenti grigi)."
+v1   <- pca_two$rotation[, 1]
+proj <- (two %*% v1) %*% t(v1)            # punti proiettati su PC1
+
+cloud <- data.frame(two, px = proj[, 1], py = proj[, 2])
+
+ggplot(cloud, aes(flipper_len, body_mass)) +
+  geom_segment(aes(xend = px, yend = py), colour = "grey70") +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = v1[2] / v1[1], intercept = 0,
+              colour = "#D55E00", linewidth = 1) +
+  coord_equal() +
+  labs(x = "Lunghezza della pinna (standardizzata)",
+       y = "Massa corporea (standardizzata)")
+```
+
+Due modi equivalenti di descrivere PC1:
+
+1. la direzione lungo la quale i dati **variano di più**;
+2. la retta **più vicina** a tutti i punti (minima somma dei quadrati delle distanze perpendicolari — attenzione: perpendicolari, non verticali come nella regressione).
+
+PC1 da sola conserva il `r round(100 * pca_two$sdev[1]^2 / sum(pca_two$sdev^2))`% della varianza totale delle due variabili. Sostituire due numeri per pinguino con uno solo fa perdere pochissimo.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: due variabili standardizzate
+
+Per due variabili standardizzate con correlazione $r > 0$, la matrice di covarianza è $\begin{pmatrix}1 & r\\ r & 1\end{pmatrix}$. I suoi autovettori sono sempre $(1, 1)/\sqrt 2$ e $(1, -1)/\sqrt 2$ — le rette a 45° e 135° — con autovalori $1 + r$ e $1 - r$. Qui $r =$ `r round(cor(two)[1, 2], 3)`, quindi le varianze sono `r round(1 + cor(two)[1, 2], 3)` e `r round(1 - cor(two)[1, 2], 3)`, esattamente ciò che ha restituito `prcomp()`. Più forte è la correlazione, più varianza raccoglie PC1.
+:::
+
+## 3. Perché standardizzare? Le unità di misura contano
+
+La PCA cerca la **varianza**. La varianza dipende dalle unità di misura: la massa corporea in grammi ha una varianza di centinaia di migliaia, la profondità del becco in millimetri una varianza di circa 4. Vediamo che cosa succede senza standardizzare:
+
+```{r}
+#| label: unscaled
+peng_num <- penguins |>
+  select(bill_len, bill_dep, flipper_len, body_mass) |>
+  na.omit()
+
+round(apply(peng_num, 2, var), 1)
+
+pca_raw <- prcomp(peng_num)                 # senza standardizzazione
+round(pca_raw$rotation[, 1], 3)
+```
+
+PC1 è sostanzialmente **la sola massa corporea** (peso `r round(abs(pca_raw$rotation["body_mass", 1]), 3)`), semplicemente perché i grammi producono numeri grandi. Se avessimo registrato la massa in chilogrammi, il risultato sarebbe cambiato completamente. Non è una proprietà dei pinguini, è una proprietà delle nostre unità di misura.
+
+**Regola pratica:** quando le variabili sono misurate in unità diverse (o su scale molto diverse), usa `scale. = TRUE`. Equivale a eseguire la PCA sulla **matrice di correlazione** invece che sulla matrice di covarianza. Lascia perdere la standardizzazione solo quando tutte le variabili condividono la stessa unità e le loro diverse varianze sono significative (per esempio intensità di pixel, o lo stesso punteggio di un test misurato in momenti diversi).
+
+## 4. PCA su `iris`
+
+```{r}
+#| label: iris-pca
+iris_num <- iris |> select(where(is.numeric))
+
+pca_iris <- prcomp(iris_num, center = TRUE, scale. = TRUE)
+summary(pca_iris)
+```
+
+`prcomp()` restituisce una lista. Gli elementi che userai di più:
+
+| Elemento | Che cos'è |
+|---|---|
+| `sdev` | deviazione standard di ciascuna PC; `sdev^2` sono gli **autovalori** (varianze) |
+| `rotation` | i **pesi (loadings)**: i coefficienti che definiscono ciascuna PC (una colonna per PC) |
+| `x` | i **punteggi (scores)**: il valore di ciascuna PC per ogni osservazione |
+| `center`, `scale` | le medie e le DS usate per standardizzare — servono per proiettare nuovi dati |
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **Standard deviation** — la `sdev` di ciascuna componente. Elevate al quadrato, sono gli autovalori: `r paste(round(pca_iris$sdev^2, 2), collapse = ", ")`. Con dati standardizzati la loro somma è pari al numero di variabili (`r round(sum(pca_iris$sdev^2), 2)`).
+- **Proportion of Variance** — ogni autovalore diviso per la loro somma. PC1 spiega il `r round(100 * summary(pca_iris)$importance[2, 1], 1)`% della varianza totale, PC2 il `r round(100 * summary(pca_iris)$importance[2, 2], 1)`%.
+- **Cumulative Proportion** — il totale cumulato: le prime due PC insieme conservano il `r round(100 * summary(pca_iris)$importance[3, 2], 1)`% della varianza delle quattro variabili.
+:::
+
+## 5. Quante componenti tenere?
+
+Non esiste un'unica risposta corretta. Esistono diversi criteri; è buona pratica guardarne più di uno.
+
+### Scree plot e varianza cumulata
+
+```{r}
+#| label: fig-scree
+#| fig-cap: "Scree plot per iris (barre: autovalori) con la percentuale cumulata di varianza (etichette). La linea tratteggiata segna autovalore = 1."
+eig_iris <- data.frame(
+  pc     = factor(paste0("PC", 1:4), levels = paste0("PC", 1:4)),
+  eigen  = pca_iris$sdev^2,
+  cum_pc = 100 * cumsum(pca_iris$sdev^2) / sum(pca_iris$sdev^2)
+)
+
+ggplot(eig_iris, aes(pc, eigen)) +
+  geom_col(fill = "#56B4E9") +
+  geom_line(aes(group = 1), linewidth = 0.8) +
+  geom_point(size = 2) +
+  geom_text(aes(label = paste0(round(cum_pc), "%")), vjust = -0.8) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  labs(x = NULL, y = "Autovalore (varianza della PC)")
+```
+
+- **Regola del gomito** — tieni le componenti che precedono il punto in cui la curva si appiattisce. Qui il grande salto è tra PC1 e PC2 e la curva è quasi piatta dopo PC2, quindi una o due componenti.
+- **Percentuale di varianza** — tieni abbastanza PC da raggiungere un obiettivo come l'80% o il 90%. PC1 da sola arriva al `r round(eig_iris$cum_pc[1])`%, PC1 + PC2 al `r round(eig_iris$cum_pc[2])`%.
+
+### Regola di Kaiser (autovalore > 1)
+
+Su dati **standardizzati** ogni variabile originale ha varianza 1. La regola di Kaiser tiene le componenti che spiegano più della varianza di una singola variabile:
+
+```{r}
+#| label: kaiser
+round(pca_iris$sdev^2, 3)
+sum(pca_iris$sdev^2 > 1)
+```
+
+Solo **PC1** supera la soglia (`r round(pca_iris$sdev[1]^2, 2)`); PC2 è appena sotto (`r round(pca_iris$sdev[2]^2, 2)`). La regola è semplice ma grossolana: ha senso solo su dati standardizzati, e una componente con autovalore 0.99 non è davvero diversa da una con 1.01.
+
+### Analisi parallela
+
+Anche il **puro rumore** produce autovalori superiori a 1 per le prime componenti, solo per caso. L'analisi parallela si chiede: *ciascun autovalore è più grande di quello che darebbero dati casuali e incorrelati delle stesse dimensioni?* Possiamo simularlo in poche righe:
+
+```{r}
+#| label: parallel
+set.seed(2026)
+n <- nrow(iris_num)
+p <- ncol(iris_num)
+
+random_eig <- replicate(500, {
+  noise <- matrix(rnorm(n * p), nrow = n)
+  eigen(cor(noise), only.values = TRUE)$values
+})
+
+parallel <- data.frame(
+  pc        = 1:p,
+  observed  = pca_iris$sdev^2,
+  random_95 = apply(random_eig, 1, quantile, probs = 0.95)
+)
+parallel
+```
+
+Tieni le componenti il cui autovalore osservato supera il 95° percentile di quelli casuali: qui `r sum(parallel$observed > parallel$random_95)` componente/i. L'analisi parallela è generalmente considerata più affidabile della regola di Kaiser. (Il pacchetto `psych` la automatizza con `psych::fa.parallel()`; vedi [Analisi fattoriale](51-factor-analysis.qmd).)
+
+::: {.callout-tip .read-output}
+## Mettere insieme i criteri per iris
+
+Kaiser e analisi parallela indicano **una** componente; il gomito e l'obiettivo del 90% puntano a **due**. Una scelta sensata per la *visualizzazione* è tenere due componenti (PC2 porta ancora il `r round(100 * summary(pca_iris)$importance[2, 2])`% della varianza e, come vedremo, un contrasto interpretabile). La scelta dipende dallo scopo: in un modello predittivo potresti persino ottimizzare (tuning) il numero di componenti con la convalida incrociata (sezione 9).
+:::
+
+## 6. Pesi (loadings): che cosa significa ciascuna componente?
+
+```{r}
+#| label: loadings
+round(pca_iris$rotation[, 1:2], 3)
+```
+
+Ogni colonna contiene i **pesi** delle variabili originali (standardizzate) in quella componente. Per interpretare una componente, cerca le variabili con **pesi grandi in valore assoluto** e nota quali hanno lo stesso segno e quali segni opposti.
+
+Una seconda vista, spesso più facile da leggere, è la **correlazione** tra ciascuna variabile originale e ciascuna componente (per dati standardizzati è pari al peso × `sdev`):
+
+```{r}
+#| label: var-pc-cor
+round(cor(iris_num, pca_iris$x[, 1:2]), 2)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere i pesi
+
+- **PC1** ha pesi grandi dello stesso segno su `Petal.Length`, `Petal.Width` e `Sepal.Length`, e un peso minore di segno opposto su `Sepal.Width`. È una componente di **dimensione**, guidata dai petali e dalla lunghezza del sepalo: i fiori con punteggi alti a un'estremità di PC1 hanno petali lunghi e larghi e sepali lunghi.
+- **PC2** è dominata da **`Sepal.Width`** (peso `r round(pca_iris$rotation["Sepal.Width", 2], 2)`; correlazione `r round(cor(iris_num$Sepal.Width, pca_iris$x[, 2]), 2)`), con un contributo minore di `Sepal.Length` nella stessa direzione. Le variabili dei petali hanno un peso quasi nullo. PC2 misura essenzialmente **quanto sono larghi i sepali**, indipendentemente dalla dimensione complessiva.
+:::
+
+### I segni sono arbitrari
+
+Se $v$ è una direzione principale, lo è anche $-v$: invertire il segno di una componente non cambia nulla della varianza che spiega. Software, versioni o perfino computer diversi possono restituire il segno opposto. Perciò **non interpretare mai il solo segno**: interpreta lo *schema* (quali variabili vanno insieme e quali in direzioni opposte).
+
+```{r}
+#| label: sign-flip
+flipped_rot    <- pca_iris$rotation %*% diag(c(-1, 1, 1, 1))
+flipped_scores <- pca_iris$x       %*% diag(c(-1, 1, 1, 1))
+
+# entrambe le versioni ricostruiscono esattamente i dati standardizzati
+all.equal(unname(pca_iris$x %*% t(pca_iris$rotation)),
+          unname(flipped_scores %*% t(flipped_rot)))
+```
+
+## 7. Punteggi (scores) e biplot
+
+I **punteggi** (`pca_iris$x`) sono le coordinate di ciascun fiore sui nuovi assi. Rappresentare PC1 contro PC2 offre la migliore vista bidimensionale dei dati quadridimensionali:
+
+```{r}
+#| label: fig-scores
+#| fig-cap: "Punteggi dei 150 fiori di iris sulle prime due componenti principali, colorati per specie (la specie NON è stata usata per calcolare la PCA)."
+pve <- round(100 * summary(pca_iris)$importance[2, ], 1)
+
+scores <- data.frame(pca_iris$x, species = iris$Species)
+
+ggplot(scores, aes(PC1, PC2, colour = species)) +
+  geom_point(size = 2, alpha = 0.8) +
+  labs(x = paste0("PC1 (", pve[1], "%)"),
+       y = paste0("PC2 (", pve[2], "%)"),
+       colour = "Specie")
+```
+
+Setosa è chiaramente separata lungo PC1 (petali piccoli); versicolor e virginica si sovrappongono in parte. Ricorda: la PCA **non conosceva** le specie. Che le specie si separino è un risultato, non qualcosa che alla PCA è stato chiesto di fare: la PCA massimizza la varianza, non la separazione tra classi.
+
+Un **biplot** mostra insieme i punteggi (punti) e le variabili (frecce):
+
+```{r}
+#| label: fig-biplot
+#| fig-cap: "Biplot in base R della PCA su iris. Le frecce mostrano come ciascuna variabile si relaziona alle due componenti."
+biplot(pca_iris, cex = 0.6, col = c("grey50", "#D55E00"))
+```
+
+Il `biplot()` predefinito (`scale = 1`) disegna un biplot "in stile correlazione": **l'angolo tra due frecce approssima la correlazione** tra quelle variabili (angolo piccolo → forte correlazione positiva; 90° → incorrelate; opposte → correlazione negativa), e la lunghezza della freccia riflette quanto bene la variabile è rappresentata in questo piano. I punti che giacciono nella direzione di una freccia hanno valori alti di quella variabile.
+
+Una versione in ggplot dà più controllo. Disegniamo le correlazioni della sezione 6 come frecce sopra i punteggi standardizzati:
+
+```{r}
+#| label: fig-biplot-gg
+#| fig-cap: "Un biplot in ggplot: punteggi divisi per la loro DS, frecce = correlazioni tra variabili e PC."
+arrows <- data.frame(
+  variable = colnames(iris_num),
+  cor(iris_num, pca_iris$x[, 1:2])
+)
+scores_std <- scores |>
+  mutate(PC1 = PC1 / pca_iris$sdev[1], PC2 = PC2 / pca_iris$sdev[2])
+
+ggplot(scores_std, aes(PC1, PC2)) +
+  geom_point(aes(colour = species), alpha = 0.5) +
+  geom_segment(data = arrows, aes(x = 0, y = 0, xend = 2 * PC1,
+               yend = 2 * PC2), arrow = arrow(length = unit(0.2, "cm"))) +
+  geom_text(data = arrows, aes(2.3 * PC1, 2.3 * PC2, label = variable)) +
+  labs(x = "PC1 (punteggi standardizzati)", y = "PC2 (punteggi standardizzati)",
+       colour = "Specie")
+```
+
+(Le frecce sono allungate di un fattore 2 solo per renderle visibili; contano le loro *direzioni* e le lunghezze relative.)
+
+## 8. Un secondo esempio: i pinguini
+
+```{r}
+#| label: peng-pca
+peng <- penguins |>
+  select(species, bill_len, bill_dep, flipper_len, body_mass) |>
+  na.omit()
+
+pca_peng <- prcomp(peng |> select(-species), scale. = TRUE)
+summary(pca_peng)
+round(pca_peng$rotation[, 1:2], 2)
+```
+
+```{r}
+#| label: fig-peng-scores
+#| fig-cap: "Punteggi PCA di 342 pinguini, colorati per specie."
+data.frame(pca_peng$x, species = peng$species) |>
+  ggplot(aes(PC1, PC2, colour = species)) +
+  geom_point(alpha = 0.7) +
+  labs(colour = "Specie")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo esempio
+
+- PC1 spiega il `r round(100 * summary(pca_peng)$importance[2, 1])`% della varianza. Lunghezza della pinna, massa corporea e lunghezza del becco hanno peso dello stesso segno, la profondità del becco di segno opposto: un asse "corpo grande, becco lungo ma poco profondo". I pinguini Gentoo stanno a un'estremità, gli Adelie all'altra.
+- PC2 (`r round(100 * summary(pca_peng)$importance[2, 2])`%) è dominata dalle due misure del **becco**, con lo stesso segno (pesi `r round(pca_peng$rotation["bill_len", 2], 2)` e `r round(pca_peng$rotation["bill_dep", 2], 2)`): separa gli esemplari con becco grande rispetto alla dimensione del corpo. È l'asse che allontana i **Chinstrap** dagli Adelie.
+- Kaiser tiene `r sum(pca_peng$sdev^2 > 1)` componente/i; le prime due componenti conservano il `r round(100 * summary(pca_peng)$importance[3, 2])`% della varianza.
+:::
+
+## 9. La PCA in una pipeline predittiva: niente leakage
+
+Quando la PCA è un **passo di preprocessing** per un modello, le sue medie, DS e pesi sono *stimati dai dati*. Se li stimi sull'intero insieme di dati e solo dopo dividi in addestramento e test, informazione del test set è filtrata nel modello (*data leakage*) e l'errore sul test risulterà ottimistico. (Vedi [Il flusso di lavoro del machine learning](../10-ml/44-ml-workflow.qmd).)
+
+La regola: **stima la PCA sul training set, poi applica la stessa trasformazione al test set.** In base R, `predict()` su un oggetto `prcomp` fa esattamente questo: usa centro, scala e pesi del training.
+
+```{r}
+#| label: pca-predict
+set.seed(123)
+idx       <- sample(nrow(peng), size = round(0.75 * nrow(peng)))
+pca_train <- prcomp(peng[idx, -1], scale. = TRUE)
+test_pcs  <- predict(pca_train, newdata = peng[-idx, -1])
+head(round(test_pcs[, 1:2], 2), 3)
+```
+
+Con tidymodels, `step_pca()` dentro una recipe se ne occupa automaticamente: la recipe viene stimata (`prep()`) solo sui dati di addestramento, ogni volta — anche all'interno di ciascun fold della convalida incrociata.
+
+```{r}
+#| label: pca-recipe
+set.seed(123)
+peng_split <- initial_split(peng, prop = 0.75, strata = species)
+peng_train <- training(peng_split)
+peng_test  <- testing(peng_split)
+
+pca_rec <- recipe(species ~ ., data = peng_train) |>
+  step_normalize(all_numeric_predictors()) |>
+  step_pca(all_numeric_predictors(), num_comp = 2)
+
+knn_spec <- nearest_neighbor(neighbors = 5) |>
+  set_engine("kknn") |>              # richiede il pacchetto kknn
+  set_mode("classification")
+
+pca_wf  <- workflow(pca_rec, knn_spec)
+pca_fit <- fit(pca_wf, data = peng_train)
+
+augment(pca_fit, new_data = peng_test) |>
+  accuracy(truth = species, estimate = .pred_class)
+```
+
+Puoi ispezionare i pesi appresi sui dati di addestramento con `tidy()`:
+
+```{r}
+#| label: pca-tidy
+prep(pca_rec) |>
+  tidy(number = 2) |>                # il 2° passo = step_pca
+  filter(component %in% c("PC1", "PC2"))
+```
+
+Per scegliere il numero di componenti ai fini della previsione, imposta `num_comp = tune()` e ottimizzalo con la convalida incrociata come qualsiasi altro iperparametro.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la PCA tramite decomposizione ai valori singolari
+
+Sia $Z$ la matrice $n \times p$ dei dati standardizzati. La sua **decomposizione ai valori singolari** (SVD) è
+
+$$
+Z = U D V^\top ,
+$$
+
+dove $U$ ($n \times p$) e $V$ ($p \times p$) hanno colonne ortonormali e $D$ è diagonale con valori singolari $d_1 \ge d_2 \ge \dots \ge 0$. Allora
+
+- i **pesi** (loadings) sono le colonne di $V$ (`rotation`),
+- i **punteggi** (scores) sono $UD = ZV$ (`x`),
+- gli **autovalori** della matrice di correlazione sono $\lambda_k = d_k^2/(n-1)$ (`sdev^2`).
+
+La matrice di correlazione stessa è $R = Z^\top Z/(n-1) = V \,\mathrm{diag}(\lambda_k)\, V^\top$ — la decomposizione spettrale. `prcomp()` usa la SVD perché è numericamente più stabile che calcolare prima $R$.
+
+```{r}
+#| label: svd-check
+z <- scale(iris_num)
+s <- svd(z)
+s$d^2 / (nrow(z) - 1)                   # uguale a pca_iris$sdev^2
+all.equal(abs(s$u %*% diag(s$d)), abs(unname(pca_iris$x)))  # punteggi
+```
+
+(Confrontiamo i valori assoluti a causa dell'indeterminazione dei segni.) Tenere solo le prime $k$ componenti dà la migliore approssimazione di rango $k$ di $Z$ nel senso dei minimi quadrati: $Z \approx U_k D_k V_k^\top$ (teorema di Eckart–Young).
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Dimenticare di standardizzare** variabili misurate in unità diverse: la variabile con i numeri più grandi si prende PC1.
+2. **Applicare la regola di Kaiser a dati non standardizzati**, o trattare "autovalore > 1" come una legge. Confronta più criteri; l'analisi parallela è più affidabile.
+3. **Interpretare il segno di una componente** ("PC1 è negativa, quindi i fiori sono piccoli"). I segni sono arbitrari; interpreta lo schema.
+4. **Eseguire la PCA su tutti i dati prima di dividerli** per un modello predittivo (leakage). Metti `step_pca()` in una recipe, oppure usa `predict()` su una PCA stimata sul training set.
+5. **Passare colonne non numeriche o `NA`** a `prcomp()`. Seleziona le colonne numeriche e gestisci prima i dati mancanti (`prcomp()` si ferma con "infinite or missing values in 'x'").
+6. **Aspettarsi che la PCA trovi dei gruppi.** La PCA massimizza la varianza; i gruppi possono o no allinearsi con le prime componenti. Inoltre è **lineare**: le strutture curve richiedono altri strumenti ([t-SNE e UMAP](54-tsne-umap.qmd)).
+:::
+
+## 10. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Su dati standardizzati con 6 variabili, quanto vale la somma di tutti gli autovalori?
+
+**6.** Ogni variabile standardizzata ha varianza 1, e la PCA si limita a ridistribuire la varianza totale tra le componenti.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. L'output della PCA di un collega ha i pesi di PC1 con segno opposto al tuo, sugli stessi dati. Chi ha sbagliato?
+
+Nessuno. $v$ e $-v$ definiscono la stessa direzione; anche i punteggi cambiano segno, e ogni interpretazione dello schema resta identica.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Perché "tieni le componenti con autovalore > 1" non è una regola sensata per dati non standardizzati?
+
+Senza standardizzazione gli autovalori sono espressi nelle unità originali al quadrato (per esempio grammi²), quindi "1" non ha alcun significato speciale. La soglia ha senso solo quando ogni variabile ha varianza 1.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Perché la PCA va stimata dentro la convalida incrociata / sui dati di addestramento quando precede un modello?
+
+Centratura, scala e pesi sono stimati dai dati. Stimarli su dati che includono il test set permette al test set di influenzare le variabili (feature), rendendo ottimistica la prestazione stimata (data leakage).
+:::
+
+## 11. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — la standardizzazione conta.** I dati incorporati `USArrests` contengono tre tassi di criminalità (ogni 100.000 abitanti) e la percentuale di popolazione urbana per i 50 stati USA. (a) Esegui `prcomp()` senza e con `scale. = TRUE`. (b) Quale variabile domina PC1 senza standardizzazione, e perché?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+round(apply(USArrests, 2, var))
+prcomp(USArrests)$rotation[, 1]
+prcomp(USArrests, scale. = TRUE)$rotation[, 1]
+```
+Senza standardizzazione, PC1 è quasi interamente `Assault` (peso circa 0.995 in valore assoluto) perché le aggressioni sono molto più frequenti degli omicidi o degli stupri, quindi la loro varianza (circa 6.900) schiaccia le altre. Dopo la standardizzazione, PC1 dà pesi simili a `Murder`, `Assault` e `Rape` (circa 0.54–0.58) e uno minore a `UrbanPop`: una componente di "livello generale di criminalità".
+:::
+:::
+
+::: {.exercise}
+[★]{.stars} **Esercizio 2 — prevedi l'output.** Converti `Sepal.Length` in `iris` da centimetri a *micrometri* (moltiplica per 10.000). Senza eseguire codice: l'output di `prcomp(iris_num, scale. = TRUE)` cambia? E quello di `prcomp(iris_num)`? Poi verifica.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Con `scale. = TRUE` **non cambia nulla**: ogni variabile è divisa per la propria DS, quindi le unità scompaiono. Senza standardizzazione, `Sepal.Length` ha ora una varianza enorme e PC1 diventa essenzialmente la sola `Sepal.Length` (peso ≈ 1).
+```r
+iris_um <- iris_num
+iris_um$Sepal.Length <- iris_um$Sepal.Length * 10000
+all.equal(prcomp(iris_num, scale. = TRUE)$sdev,
+          prcomp(iris_um,  scale. = TRUE)$sdev)   # TRUE
+round(prcomp(iris_um)$rotation[, 1], 3)
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — debug.** Questo codice si interrompe con un errore. Trova i due problemi e correggili.
+
+```r
+pca <- prcomp(penguins[, 3:6], scale = TRUE)
+```
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+L'errore è `infinite or missing values in 'x'`: due pinguini hanno misure mancanti. (Nota anche che l'argomento si chiama `scale.` con il punto; `scale = TRUE` funziona per caso grazie al riconoscimento parziale dei nomi, ma scrivere il nome completo è più chiaro e sicuro.)
+```r
+pca <- penguins |>
+  select(bill_len, bill_dep, flipper_len, body_mass) |>
+  na.omit() |>
+  prcomp(scale. = TRUE)
+```
+Selezionare le colonne per **nome** è anche più sicuro che per posizione (`3:6`), che si rompe in silenzio se l'ordine delle colonne cambia.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — interpreta.** Per la PCA standardizzata di `USArrests` gli autovalori sono circa 2.48, 0.99, 0.36 e 0.17. (a) Quante componenti terrebbe la regola di Kaiser? (b) Quale percentuale di varianza spiegano le prime due componenti? (c) Perché qui la decisione di Kaiser è fragile?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+(a) Una (solo 2.48 > 1). (b) (2.48 + 0.99) / 4 ≈ 87%. (c) PC2 ha autovalore 0.99, praticamente 1. Una piccolissima variazione dei dati potrebbe spingerlo sopra la soglia. Il limite è arbitrario; guarda lo scree plot, l'analisi parallela e, soprattutto, se PC2 è interpretabile (qui è dominata da `UrbanPop`).
+```r
+pca_us <- prcomp(USArrests, scale. = TRUE)
+pca_us$sdev^2
+summary(pca_us)
+round(pca_us$rotation[, 1:2], 2)
+```
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi.** Esegui una PCA completa sulle 11 variabili di `mtcars`: (a) standardizza e stima; (b) decidi quante componenti tenere con la regola di Kaiser **e** con un'analisi parallela (500 simulazioni); (c) descrivi a parole PC1 e PC2 usando i pesi; (d) rappresenta i punteggi delle auto su PC1–PC2 con i loro nomi.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+pca_mt <- prcomp(mtcars, scale. = TRUE)
+round(pca_mt$sdev^2, 2)          # circa 6.61, 2.65, 0.63, ...
+
+set.seed(1)
+rand <- replicate(500, eigen(cor(matrix(rnorm(32 * 11), 32)),
+                             only.values = TRUE)$values)
+data.frame(observed = pca_mt$sdev^2,
+           random_95 = apply(rand, 1, quantile, 0.95))
+
+round(pca_mt$rotation[, 1:2], 2)
+
+data.frame(pca_mt$x, car = rownames(mtcars)) |>
+  ggplot(aes(PC1, PC2, label = car)) +
+  geom_text(size = 3) +
+  labs(title = "mtcars sulle prime due PC")
+```
+Sia Kaiser sia l'analisi parallela tengono **due** componenti (PC1 + PC2 ≈ 84% della varianza). PC1 contrappone `cyl`, `disp`, `wt`, `hp` a `mpg`, `drat`, `vs`: un asse "grandi, potenti, assetate vs leggere, economiche". PC2 è guidata da `gear`, `am`, `carb` contro `qsec`: auto veloci con cambio manuale e molti carburatori contro auto con accelerazione lenta. (I tuoi segni potrebbero essere invertiti.)
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| `prcomp(x, scale. = TRUE)` | PCA su dati standardizzati (= matrice di correlazione) |
+| `summary(pca)` | DS, proporzione e proporzione cumulata di varianza |
+| `pca$sdev^2` | autovalori (varianza di ciascuna PC) |
+| `pca$rotation` | pesi (loadings: coefficienti che definiscono le PC) |
+| `pca$x` | punteggi (scores: coordinate delle osservazioni) |
+| `biplot(pca)` | punteggi e variabili in un unico grafico |
+| `predict(pca, newdata)` | proietta nuovi dati con la trasformazione del *training* |
+| `step_pca()` | PCA dentro una recipe di tidymodels (niente leakage) |
+
+- Una componente principale è la **direzione di massima varianza**; la successiva è perpendicolare e raccoglie ciò che resta.
+- **Standardizza** quando le variabili hanno unità diverse.
+- Scegli il numero di componenti con **più criteri** — scree, % cumulata, Kaiser, analisi parallela — e tenendo a mente lo scopo.
+- Interpreta gli **schemi dei pesi**, mai il solo segno.
+- Nella previsione, la PCA fa parte del modello: **stimala solo sui dati di addestramento**.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2a ed.), capitolo 12, <https://www.statlearning.com>
+- Kuhn & Silge, *Tidy Modeling with R*, capitolo 16 "Dimensionality reduction", <https://www.tmwr.org>
+- Documentazione di `recipes::step_pca()`, <https://recipes.tidymodels.org/reference/step_pca.html>
+:::

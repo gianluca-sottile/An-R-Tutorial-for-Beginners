@@ -1,0 +1,676 @@
+---
+title: "Regressione di Poisson"
+subtitle: "Modellare i conteggi: rapporti tra tassi, offset di esposizione e sovradispersione"
+description: "Perché la regressione ordinaria non funziona con i dati di conteggio, come funziona un GLM di Poisson con funzione di legame logaritmica, come leggere i coefficienti come rapporti tra tassi, come modellare i tassi con un offset e che cosa fare quando i dati sono sovradispersi (quasi-Poisson, binomiale negativa) o contengono troppi zeri."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~100 min]{} [Prerequisiti: [Regressione logistica](41-logistic-regression.qmd), [Distribuzioni di probabilità](../07-probability/29-distributions.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare perché `lm()` è una scelta poco adatta per variabili risposta di **conteggio** (previsioni impossibili, varianza che cresce con la media);
+- stimare una **regressione di Poisson** con `glm(family = poisson)` e interpretarne i coefficienti come **rapporti tra tassi** con i relativi intervalli di confidenza;
+- modellare i **tassi** (conteggi per unità di esposizione) con un **offset**;
+- individuare la **sovradispersione** con la statistica di Pearson e gestirla con modelli **quasi-Poisson** o **binomiale negativa**;
+- riconoscere quando un **eccesso di zeri** richiede un modello zero-inflated o hurdle.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(broom)
+```
+
+## 1. Perché non usare semplicemente `lm()` per i conteggi?
+
+Molte variabili risposta sono **conteggi**: il numero di insetti su una pianta, di rotture in un tratto di filato, di ricoveri ospedalieri in una settimana, di gol in una partita. I conteggi hanno tre caratteristiche che una retta ignora:
+
+- non sono **mai negativi**;
+- sono **numeri interi** (0, 1, 2, ...);
+- la loro **variabilità cresce con la media**: i luoghi con una media di 2 insetti variano tra 0 e 5, quelli con una media di 20 variano tra 10 e 30.
+
+Simuliamo dei conteggi la cui media cresce con un predittore $x$ e adattiamo un modello lineare ordinario:
+
+```{r}
+#| label: sim-counts
+set.seed(2026)
+sim <- tibble::tibble(x = runif(100, 0, 10),
+                      y = rpois(100, lambda = exp(-1 + 0.35 * x)))
+m_lm <- lm(y ~ x, data = sim)
+range(fitted(m_lm))
+sum(fitted(m_lm) < 0)
+```
+
+Il modello lineare prevede **conteggi negativi** per `r sum(fitted(m_lm) < 0)` delle 100 osservazioni: una risposta impossibile.
+
+```{r}
+#| label: fig-sim-lm
+#| fig-cap: "Conteggi simulati. La retta (lm) scende sotto lo zero per valori piccoli di x e non coglie la curvatura; la dispersione dei punti cresce al crescere della media."
+ggplot(sim, aes(x, y)) +
+  geom_jitter(height = 0.1, width = 0, alpha = 0.6) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE,
+              colour = "#D55E00") +
+  geom_hline(yintercept = 0, linetype = 3) +
+  labs(x = "x", y = "Conteggio")
+```
+
+Il secondo problema si vede in un dataset reale. `InsectSprays` riporta il numero di insetti trovati su 72 appezzamenti agricoli trattati con uno di sei insetticidi (da A a F), 12 appezzamenti ciascuno.
+
+```{r}
+#| label: insect-mean-var
+InsectSprays |>
+  summarise(mean = mean(count), variance = var(count), .by = spray)
+```
+
+Gli spray con un conteggio medio alto (A, B, F) hanno anche una varianza molto più grande di quelli con una media bassa (C, D, E). `lm()` assume la **stessa** varianza ovunque, quindi i suoi errori standard e i suoi p-value sarebbero sbagliati. Serve un modello costruito per i conteggi.
+
+## 2. La distribuzione di Poisson
+
+La **distribuzione di Poisson** descrive il numero di eventi che si verificano in un intervallo fisso di tempo o di spazio quando gli eventi avvengono in modo indipendente con un tasso medio costante $\mu$ (l'hai già incontrata in [Distribuzioni di probabilità](../07-probability/29-distributions.qmd)). La sua proprietà chiave è
+
+$$
+\text{media} = \text{varianza} = \mu .
+$$
+
+```{r}
+#| label: fig-poisson-dist
+#| fig-cap: "Distribuzioni di Poisson con media 1, 4 e 10. Al crescere della media, la distribuzione si sposta a destra, diventa più simmetrica e più dispersa."
+tidyr::expand_grid(mu = c(1, 4, 10), y = 0:20) |>
+  mutate(prob = dpois(y, mu), mu = paste("media =", mu)) |>
+  ggplot(aes(y, prob)) +
+  geom_col(width = 0.8) +
+  facet_wrap(~ mu) +
+  labs(x = "Conteggio", y = "Probabilità")
+```
+
+Questa proprietà "varianza uguale alla media" è esattamente lo schema che abbiamo visto (all'incirca) in `InsectSprays`: la regressione di Poisson lo incorpora nel modello invece di assumere una varianza costante.
+
+## 3. Regressione di Poisson: un GLM con funzione di legame logaritmica
+
+Come la [regressione logistica](41-logistic-regression.qmd), la regressione di Poisson è un **modello lineare generalizzato** (GLM) con tre ingredienti:
+
+1. una **distribuzione** per $y$: Poisson, con media $\mu$;
+2. un **predittore lineare**: $\eta = \beta_0 + \beta_1 x_1 + \dots + \beta_p x_p$;
+3. una **funzione di legame** che li collega: il **logaritmo**, $\log \mu = \eta$.
+
+Il legame logaritmico garantisce che la media prevista $\mu = e^{\eta}$ sia sempre **positiva**, qualunque siano i valori dei predittori. Rende inoltre gli effetti **moltiplicativi**: aumentare $x_1$ di 1 aggiunge $\beta_1$ a $\log\mu$, quindi **moltiplica** $\mu$ per $e^{\beta_1}$.
+
+Torniamo ai dati simulati:
+
+```{r}
+#| label: sim-glm
+m_sim <- glm(y ~ x, family = poisson, data = sim)
+coef(m_sim)
+exp(coef(m_sim))
+```
+
+Le stime (`r round(coef(m_sim)[1], 2)` e `r round(coef(m_sim)[2], 2)`) sono vicine ai valori usati per simulare i dati ($-1$ e $0.35$). Ogni aumento di una unità di $x$ moltiplica il conteggio atteso per circa `r round(exp(coef(m_sim)[2]), 2)`, cioè un aumento di circa il `r round(100 * (exp(coef(m_sim)[2]) - 1))`%. E tutti i valori stimati sono positivi:
+
+```{r}
+#| label: fig-sim-glm
+#| fig-cap: "La curva della regressione di Poisson (legame logaritmico) segue la curvatura dei dati e non scende mai sotto lo zero."
+sim |>
+  mutate(fit_lm = fitted(m_lm), fit_pois = fitted(m_sim)) |>
+  ggplot(aes(x, y)) +
+  geom_jitter(height = 0.1, width = 0, alpha = 0.5) +
+  geom_line(aes(y = fit_lm, colour = "lm"), linewidth = 1) +
+  geom_line(aes(y = fit_pois, colour = "GLM di Poisson"), linewidth = 1) +
+  geom_hline(yintercept = 0, linetype = 3) +
+  labs(x = "x", y = "Conteggio", colour = NULL)
+```
+
+## 4. Stimare e leggere un modello di Poisson
+
+Gli insetticidi differiscono per efficacia?
+
+```{r}
+#| label: fig-insects
+#| fig-cap: "Numero di insetti per appezzamento per ciascuno dei sei spray (12 appezzamenti ciascuno)."
+ggplot(InsectSprays, aes(spray, count)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.5) +
+  labs(x = "Spray", y = "Insetti per appezzamento")
+```
+
+```{r}
+#| label: insect-glm
+m_ins <- glm(count ~ spray, family = poisson, data = InsectSprays)
+summary(m_ins)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- I **coefficienti** sono sulla **scala logaritmica**. Lo spray A è il livello di riferimento. L'intercetta, `r round(coef(m_ins)[1], 2)`, è il logaritmo del conteggio medio per lo spray A: $e^{`r round(coef(m_ins)[1], 3)`} = `r round(exp(coef(m_ins)[1]), 1)`$, esattamente la media campionaria del gruppo A.
+- **`sprayC` = `r round(coef(m_ins)["sprayC"], 2)`**: il logaritmo del conteggio medio è più basso di `r abs(round(coef(m_ins)["sprayC"], 2))` per lo spray C rispetto allo spray A. Negativo = meno insetti.
+- **`z value`, `Pr(>|z|)`**: test di Wald di $H_0: \beta = 0$ (nessuna differenza rispetto allo spray A).
+- **Dispersion parameter for poisson family taken to be 1**: il modello *assume* varianza = media. Lo verificheremo nel paragrafo 7.
+- **Null / Residual deviance**: la mancanza di adattamento del modello con la sola intercetta e del nostro modello, come nella regressione logistica. Il calo da `r round(m_ins$null.deviance, 1)` a `r round(deviance(m_ins), 1)` mostra che lo spray conta molto.
+:::
+
+## 5. Interpretazione: rapporti tra tassi
+
+I logaritmi dei conteggi sono difficili da interpretare. Esponenziando un coefficiente si ottiene un **rapporto tra tassi** (*rate ratio*, RR, detto anche *incidence rate ratio*): il fattore per cui viene moltiplicato il conteggio atteso.
+
+```{r}
+#| label: rate-ratios
+exp(coef(m_ins))
+exp(confint(m_ins))    # IC al 95% basati sulla verosimiglianza profilo, poi esponenziati
+```
+
+```{r}
+#| label: rr-values
+#| include: false
+rr_c <- exp(coef(m_ins))["sprayC"]
+rr_c_ci <- exp(confint(m_ins))["sprayC", ]
+rr_f <- exp(coef(m_ins))["sprayF"]
+```
+
+- **Spray C rispetto ad A**: RR = `r round(rr_c, 2)` (IC al 95% da `r round(rr_c_ci[1], 2)` a `r round(rr_c_ci[2], 2)`). Gli appezzamenti trattati con C hanno, in media, `r round(rr_c, 2)` volte gli insetti di quelli trattati con A — circa il `r round(100 * (1 - rr_c))`% in meno.
+- **Spray F rispetto ad A**: RR = `r round(rr_f, 2)`, con un IC che include 1: nessuna differenza chiara.
+- RR = 1 significa nessuna differenza; RR > 1 più eventi, RR < 1 meno eventi. Un IC che esclude 1 corrisponde a p < 0.05.
+- Il valore esponenziato dell'**intercetta** non è un rapporto: è il conteggio atteso nel gruppo di riferimento.
+
+Con **broom**:
+
+```{r}
+#| label: tidy-rr
+tidy(m_ins, exponentiate = TRUE, conf.int = TRUE)
+```
+
+I conteggi previsti si ottengono con `predict(..., type = "response")`; il valore predefinito `type = "link"` restituisce invece il logaritmo del conteggio atteso.
+
+```{r}
+#| label: insect-predict
+new_sprays <- tibble::tibble(spray = c("A", "C", "F"))
+new_sprays |>
+  mutate(expected = predict(m_ins, newdata = new_sprays, type = "response"))
+```
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la verosimiglianza di Poisson
+
+Per conteggi $y_i$ con medie $\mu_i = \exp(x_i^\top\beta)$, la probabilità dei dati è $\prod_i e^{-\mu_i}\mu_i^{y_i}/y_i!$, quindi la log-verosimiglianza è
+
+$$
+\ell(\beta) = \sum_{i=1}^n \big[y_i \log\mu_i - \mu_i - \log(y_i!)\big].
+$$
+
+`glm()` la massimizza con i minimi quadrati iterativamente ripesati. La **devianza** è
+
+$$
+D = 2\sum_{i=1}^n \Big[y_i \log\frac{y_i}{\hat\mu_i} - (y_i - \hat\mu_i)\Big],
+$$
+
+il doppio della distanza tra la log-verosimiglianza di un modello perfetto ("saturo") e la nostra. Come nella regressione logistica, la differenza di devianza tra modelli annidati è approssimativamente $\chi^2$ con tanti gradi di libertà quanti sono i parametri aggiunti (test del rapporto di verosimiglianza). Con un solo predittore categoriale, le medie stimate coincidono con le medie campionarie dei gruppi.
+:::
+
+## 6. Due fattori e un'interazione: `warpbreaks`
+
+`warpbreaks` riporta il numero di **rotture** del filo dell'ordito per telaio, per due tipi di lana (A, B) e tre livelli di tensione (L = bassa, M = media, H = alta), 9 telai per ogni combinazione.
+
+```{r}
+#| label: fig-warpbreaks
+#| fig-cap: "Numero di rotture dell'ordito per telaio, per tipo di lana e tensione. Le linee uniscono le medie dei gruppi."
+ggplot(warpbreaks, aes(tension, breaks, colour = wool)) +
+  geom_jitter(width = 0.1, alpha = 0.6) +
+  stat_summary(aes(group = wool), fun = mean, geom = "line",
+               linewidth = 1) +
+  labs(x = "Tensione", y = "Rotture per telaio", colour = "Lana")
+```
+
+Le linee non sono parallele: passare da tensione bassa a media riduce molto le rotture per la lana A, ma non per la lana B. Questo suggerisce un'**interazione**: l'effetto della tensione dipende dalla lana. Confrontiamo il modello additivo e quello con interazione con un test del rapporto di verosimiglianza:
+
+```{r}
+#| label: wb-models
+m_add <- glm(breaks ~ wool + tension, family = poisson, data = warpbreaks)
+m_int <- glm(breaks ~ wool * tension, family = poisson, data = warpbreaks)
+anova(m_add, m_int, test = "Chisq")
+```
+
+Preso alla lettera, il risultato dice che l'interazione è schiacciantemente significativa. Tieni a mente questo p-value: lo riprenderemo nel paragrafo 7.
+
+```{r}
+#| label: wb-rr
+tidy(m_int, exponentiate = TRUE, conf.int = TRUE) |>
+  select(term, rate_ratio = estimate, conf.low, conf.high) |>
+  mutate(across(where(is.numeric), \(x) round(x, 2)))
+```
+
+In presenza di un'interazione, i rapporti tra tassi degli effetti principali si riferiscono al **livello di riferimento dell'altro fattore**:
+
+- `woolB` = `r round(exp(coef(m_int))["woolB"], 2)`: a tensione **bassa**, la lana B ha `r round(exp(coef(m_int))["woolB"], 2)` volte le rotture della lana A.
+- `woolB:tensionM` = `r round(exp(coef(m_int))["woolB:tensionM"], 2)`: il rapporto lana B / lana A a tensione media è `r round(exp(coef(m_int))["woolB:tensionM"], 2)` volte il rapporto a tensione bassa, cioè $`r round(exp(coef(m_int))["woolB"], 2)` \times `r round(exp(coef(m_int))["woolB:tensionM"], 2)` = `r round(exp(coef(m_int)["woolB"] + coef(m_int)["woolB:tensionM"]), 2)`$. A tensione media la lana B è leggermente *peggiore* della A.
+
+I termini di interazione su scala moltiplicativa sono facili da fraintendere. Il riepilogo più chiaro è una tabella di **conteggi previsti**:
+
+```{r}
+#| label: wb-predict
+wb_grid <- tidyr::expand_grid(wool = c("A", "B"), tension = c("L", "M", "H"))
+wb_grid |>
+  mutate(expected = predict(m_int, newdata = wb_grid, type = "response")) |>
+  tidyr::pivot_wider(names_from = tension, values_from = expected)
+```
+
+Poiché il modello ha un parametro per ciascuna delle 6 combinazioni, queste previsioni coincidono con le sei medie campionarie.
+
+## 7. Sovradispersione: quando la varianza supera la media
+
+Il modello di Poisson **assume** che la varianza sia uguale alla media. I conteggi reali sono spesso più variabili — ad esempio perché i telai differiscono in modi che non abbiamo misurato. Questa è la **sovradispersione** (*overdispersion*). Se la ignoriamo, il modello è troppo sicuro di sé: gli **errori standard sono troppo piccoli**, gli intervalli di confidenza troppo stretti e i p-value troppo piccoli.
+
+### Verifica con la statistica di Pearson
+
+Un **residuo di Pearson** è $(y_i - \hat\mu_i)/\sqrt{\hat\mu_i}$: il residuo grezzo diviso per la deviazione standard che il modello di Poisson si aspetta. Se il modello è corretto, i residui di Pearson al quadrato hanno media circa 1, quindi
+
+$$
+\hat\phi = \frac{\sum_i r_i^2}{n - p} \approx 1,
+$$
+
+dove $n - p$ sono i gradi di libertà residui. Valori nettamente superiori a 1 indicano sovradispersione.
+
+```{r}
+#| label: dispersion
+dispersion <- function(model) {
+  sum(residuals(model, type = "pearson")^2) / df.residual(model)
+}
+dispersion(m_int)
+dispersion(m_ins)
+```
+
+Per `warpbreaks` la dispersione stimata è `r round(dispersion(m_int), 2)`: la varianza è quasi quattro volte quella assunta dal modello di Poisson. Per `InsectSprays` è `r round(dispersion(m_ins), 2)`: più contenuta, ma comunque superiore a 1.
+
+Quanto lontano da 1 significa "nettamente superiore"? Una piccola simulazione con dati realmente di Poisson mostra l'intervallo tipico:
+
+```{r}
+#| label: dispersion-null
+set.seed(3)
+disp_null <- replicate(500, {
+  d <- data.frame(g = gl(3, 20))
+  d$y <- rpois(60, lambda = c(3, 6, 9)[d$g])
+  dispersion(glm(y ~ g, family = poisson, data = d))
+})
+quantile(disp_null, c(0.025, 0.5, 0.975))
+```
+
+Con 60 osservazioni, dati genuinamente di Poisson producono valori compresi tra circa `r round(quantile(disp_null, 0.025), 1)` e `r round(quantile(disp_null, 0.975), 1)`. Un valore vicino a 3.8 è ben al di fuori di questo intervallo. (Formalmente, $\sum r_i^2$ può essere confrontata con una distribuzione $\chi^2_{n-p}$, ma il numero utile è il rapporto stesso: ti dice *quanto* sono sbagliati gli errori standard.)
+
+::: {.callout-note}
+## Sovradispersione o predittore mancante?
+
+Prima di ricorrere a una nuova distribuzione, chiediti se manca un predittore importante, oppure se serve un'interazione o un termine non lineare. Una struttura non spiegata nella media si manifesta come varianza aggiuntiva. I modelli per la sovradispersione servono per la variabilità che rimane **dopo** aver modellato bene la media.
+:::
+
+### Quasi-Poisson: gonfiare gli errori standard
+
+La correzione più semplice mantiene il modello di Poisson per la media, ma assume $\text{Var}(y) = \phi\,\mu$ e stima $\phi$ dai dati:
+
+```{r}
+#| label: quasipoisson
+m_qp <- glm(breaks ~ wool * tension, family = quasipoisson, data = warpbreaks)
+summary(m_qp)$dispersion
+
+tibble::tibble(term = names(coef(m_int)),
+               estimate = coef(m_int),
+               se_poisson = sqrt(diag(vcov(m_int))),
+               se_quasi = sqrt(diag(vcov(m_qp))))
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- I **coefficienti sono identici**: il quasi-Poisson cambia solo l'incertezza, non le stime.
+- Ogni errore standard è moltiplicato per $\sqrt{\hat\phi} = `r round(sqrt(summary(m_qp)$dispersion), 2)`$.
+- `summary(m_qp)` riporta test **t** invece di test z, perché $\phi$ è stimato.
+:::
+
+I modelli ora si confrontano con un **test F** (come in `lm()`), perché la dispersione è stimata:
+
+```{r}
+#| label: qp-anova
+m_qp_add <- glm(breaks ~ wool + tension, family = quasipoisson,
+                data = warpbreaks)
+anova(m_qp_add, m_qp, test = "F")
+```
+
+L'interazione è ancora supportata, ma il p-value è ora `r round(anova(m_qp_add, m_qp, test = "F")[2, "Pr(>F)"], 3)` invece di `r format.pval(anova(m_add, m_int, test = "Chisq")[2, "Pr(>Chi)"], digits = 2)`. L'analisi di Poisson ingenua sovrastimava l'evidenza di diversi ordini di grandezza.
+
+Il quasi-Poisson non ha una verosimiglianza, quindi **non esiste l'AIC** (`AIC(m_qp)` restituisce `NA`).
+
+### Regressione binomiale negativa
+
+La distribuzione **binomiale negativa** è una distribuzione per conteggi con un parametro aggiuntivo $\theta$ che permette alla varianza di crescere più velocemente della media:
+
+$$
+\text{Var}(y) = \mu + \frac{\mu^2}{\theta}.
+$$
+
+Un $\theta$ piccolo indica una forte sovradispersione; per $\theta \to \infty$ diventa la Poisson. Ha una vera verosimiglianza, quindi sono disponibili AIC e test del rapporto di verosimiglianza. Si stima con `glm.nb()` del pacchetto **MASS** (installato con R):
+
+```{r}
+#| label: negbin
+m_nb <- MASS::glm.nb(breaks ~ wool * tension, data = warpbreaks)
+m_nb$theta
+AIC(m_int, m_nb)
+```
+
+```{r}
+#| label: negbin-rr
+tidy(m_nb, exponentiate = TRUE, conf.int = TRUE) |>
+  select(term, rate_ratio = estimate, conf.low, conf.high) |>
+  mutate(across(where(is.numeric), \(x) round(x, 2)))
+```
+
+Il $\theta$ stimato è `r round(m_nb$theta, 1)` e l'AIC scende da `r round(AIC(m_int), 1)` (Poisson) a `r round(AIC(m_nb), 1)`: la binomiale negativa descrive questi dati molto meglio. Qui i rapporti tra tassi sono gli stessi dell'adattamento di Poisson (con un insieme completo di medie di gruppo, entrambi i modelli riproducono le sei medie campionarie), ma gli intervalli di confidenza sono più ampi.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: quasi-Poisson o binomiale negativa?
+
+Entrambi ammettono una varianza aggiuntiva, ma in forme diverse:
+
+| | Varianza | Pesi dati ai conteggi grandi | Verosimiglianza / AIC |
+|---|---|---|---|
+| Quasi-Poisson | $\phi\,\mu$ (proporzionale alla media) | come nella Poisson | no |
+| Binomiale negativa | $\mu + \mu^2/\theta$ (cresce quadraticamente) | minori (i conteggi grandi sono più rumorosi) | sì |
+
+Quando il modello contiene predittori continui, i due possono dare **coefficienti diversi**, perché pesano le osservazioni in modo diverso. Un controllo pratico consiste nel raggruppare le osservazioni per valore stimato e rappresentare la varianza osservata in funzione della media: una retta suggerisce il quasi-Poisson, una curva che si piega verso l'alto suggerisce la binomiale negativa. La binomiale negativa si può ricavare come una Poisson la cui media varia tra le unità secondo una distribuzione gamma — un modello per l'*eterogeneità non osservata*.
+
+Il test del rapporto di verosimiglianza tra Poisson e binomiale negativa non è standard ($\theta = \infty$ si trova sul bordo dello spazio dei parametri), quindi la pratica abituale è confrontare gli AIC, o semplicemente guardare $\hat\phi$.
+:::
+
+### Perché conta: una simulazione di copertura
+
+Quanto è grave ignorare la sovradispersione? Simuliamo 1000 studi con due gruppi di 30 unità, vero rapporto tra tassi 1.5 e conteggi binomiali negativi (sovradispersi), e registriamo quanto spesso l'usuale intervallo di confidenza di Wald al 95% per il rapporto tra tassi contiene il valore vero:
+
+```{r}
+#| label: coverage
+set.seed(5)
+cover <- replicate(1000, {
+  g <- gl(2, 30, labels = c("a", "b"))
+  y <- rnbinom(60, mu = ifelse(g == "a", 4, 6), size = 2)
+  sapply(c("poisson", "quasipoisson"), \(fam) {
+    m <- glm(y ~ g, family = fam)
+    est <- coef(m)["gb"]
+    se <- sqrt(vcov(m)["gb", "gb"])
+    est - 1.96 * se < log(1.5) & log(1.5) < est + 1.96 * se
+  })
+})
+rowMeans(cover)
+```
+
+Gli intervalli di Poisson "al 95%" contengono il valore vero solo il `r round(100 * rowMeans(cover)[1])`% delle volte; quelli quasi-Poisson il `r round(100 * rowMeans(cover)[2])`%. Ignorare la sovradispersione produce intervalli troppo stretti e troppe false scoperte.
+
+## 8. Esposizione e offset: modellare i tassi
+
+Spesso le unità su cui contiamo hanno **dimensioni** diverse: le cliniche servono numeri diversi di pazienti, le strade hanno lunghezze diverse, i periodi di osservazione hanno durate diverse. Una clinica con 8000 anni-persona di follow-up vedrà più casi di una con 500 semplicemente perché è più grande. Ciò che vogliamo confrontare è il **tasso**: casi per anno-persona.
+
+Simuliamo 40 cliniche. Le cliniche urbane sono grandi, quelle rurali piccole, e il **tasso vero** è 2 casi ogni 1000 anni-persona nelle aree urbane e 3 in quelle rurali (rapporto tra tassi 1.5).
+
+```{r}
+#| label: clinics-sim
+set.seed(1)
+n_cl <- 40
+clinics <- tibble::tibble(
+  area = factor(rep(c("urban", "rural"), each = n_cl / 2),
+                levels = c("urban", "rural")),
+  person_years = c(round(runif(n_cl / 2, 2000, 8000)),
+                   round(runif(n_cl / 2, 200, 2000)))
+)
+true_rate <- ifelse(clinics$area == "urban", 2, 3) / 1000
+clinics$cases <- rpois(n_cl, true_rate * clinics$person_years)
+
+clinics |>
+  summarise(cases = sum(cases), person_years = sum(person_years), .by = area)
+```
+
+Un modello dei conteggi grezzi risponde alla domanda sbagliata:
+
+```{r}
+#| label: clinics-naive
+m_naive <- glm(cases ~ area, family = poisson, data = clinics)
+exp(coef(m_naive))
+```
+
+Dice che le cliniche rurali hanno `r round(exp(coef(m_naive))["arearural"], 2)` volte i casi — perché sono più piccole, non perché il rischio sia più basso. Per modellare il tasso scriviamo
+
+$$
+\log\frac{\mu_i}{t_i} = \beta_0 + \beta_1 x_i
+\quad\Longleftrightarrow\quad
+\log\mu_i = \log t_i + \beta_0 + \beta_1 x_i ,
+$$
+
+dove $t_i$ è l'esposizione (anni-persona). Il termine $\log t_i$ entra nel modello con un coefficiente **fissato a 1**: è un **offset**, non un parametro da stimare.
+
+```{r}
+#| label: clinics-offset
+m_rate <- glm(cases ~ area + offset(log(person_years)),
+              family = poisson, data = clinics)
+exp(coef(m_rate))
+exp(confint(m_rate))
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **Intercetta**: $e^{\beta_0}$ = `r signif(exp(coef(m_rate))[1], 3)` casi per anno-persona nelle cliniche urbane, cioè `r round(1000 * exp(coef(m_rate))[1], 2)` per 1000 anni-persona (valore vero: 2).
+- **`arearural`**: il rapporto tra tassi. Le cliniche rurali hanno un tasso `r round(exp(coef(m_rate))["arearural"], 2)` volte quello delle urbane (IC al 95% da `r round(exp(confint(m_rate))["arearural", 1], 2)` a `r round(exp(confint(m_rate))["arearural", 2], 2)`; valore vero 1.5). Il modello ingenuo sbagliava la direzione.
+- L'offset non compare nella tabella dei coefficienti, perché non ha un coefficiente.
+:::
+
+Anche le previsioni richiedono l'esposizione. Per ottenere i tassi per 1000 anni-persona, prevedi con `person_years = 1000`:
+
+```{r}
+#| label: clinics-predict
+new_cl <- tibble::tibble(area = c("urban", "rural"), person_years = 1000)
+new_cl |>
+  mutate(cases_per_1000 = predict(m_rate, newdata = new_cl,
+                                  type = "response"))
+```
+
+Due punti pratici:
+
+- L'offset deve essere sulla scala **logaritmica** (perché il legame è logaritmico): `offset(log(person_years))`, non `offset(person_years)`.
+- Inserire `log(person_years)` come predittore ordinario (`+ log(person_years)`) è diverso: R *stimerebbe* il suo coefficiente. Può essere un controllo utile (una stima vicina a 1 sostiene l'ipotesi di "tasso"), ma non è più un modello per il tasso.
+
+## 9. Troppi zeri
+
+A volte i dati contengono molti più zeri di quelli previsti da un modello di Poisson (o anche binomiale negativa). Esempio: il numero di sigarette fumate ieri — i non fumatori danno sempre 0, i fumatori danno un conteggio raramente nullo. Un primo controllo consiste nel confrontare il numero osservato di zeri con quello atteso dal modello stimato, $\sum_i P(Y_i = 0) = \sum_i e^{-\hat\mu_i}$:
+
+```{r}
+#| label: zeros
+c(observed = sum(InsectSprays$count == 0),
+  expected = sum(dpois(0, fitted(m_ins))))
+```
+
+Per `InsectSprays` i due valori concordano bene, quindi non c'è un eccesso di zeri. Quando c'è, sono comuni due famiglie di modelli:
+
+- i modelli **zero-inflated**: una mistura di un gruppo di "zeri strutturali" (ad es. i non fumatori) e di un modello di conteggio (che può produrre anch'esso zeri);
+- i modelli **hurdle**: una parte modella zero contro positivo, una seconda parte modella i conteggi positivi.
+
+Entrambi sono disponibili nel pacchetto **pscl**, con la stessa interfaccia a formula:
+
+```{r}
+#| label: zeroinfl
+#| eval: false
+# parte di conteggio | parte degli zeri
+m_zip <- pscl::zeroinfl(y ~ x1 + x2 | x1, data = my_data, dist = "poisson")
+m_hnb <- pscl::hurdle(y ~ x1 + x2 | x1, data = my_data, dist = "negbin")
+```
+
+Anche il pacchetto **glmmTMB** stima questi modelli e aggiunge gli effetti casuali. Usali quando gli zeri hanno un meccanismo separato plausibile, non solo perché i dati contengono zeri: una Poisson con media piccola produce già molti zeri da sola.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Usare `lm()` sui conteggi** (o su `log(y + 1)`). Le previsioni possono essere negative, la varianza è sbagliata e la trasformazione inversa di una media logaritmica non è la media.
+2. **Leggere i coefficienti come variazioni additive.** Sono sulla scala logaritmica: esponenzia per ottenere i rapporti tra tassi e usa i conteggi previsti per le differenze assolute.
+3. **Ignorare la sovradispersione.** Calcola sempre la dispersione di Pearson. Valori ben superiori a 1 rendono i p-value di Poisson molto troppo piccoli; usa il quasi-Poisson o la binomiale negativa.
+4. **Dimenticare l'esposizione** quando le unità differiscono per dimensione o tempo di osservazione, oppure scrivere `offset(t)` invece di `offset(log(t))`.
+5. **Confrontare modelli quasi-Poisson con l'AIC o con test χ².** Non c'è una verosimiglianza: usa `anova(..., test = "F")`.
+6. **Fraintendere gli effetti principali in un modello con interazione.** Con `wool * tension`, il rapporto tra tassi `woolB` si riferisce solo alla tensione di riferimento. Riporta i conteggi previsti per tutte le combinazioni.
+:::
+
+## 10. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Un coefficiente di Poisson è 0.18. Qual è il rapporto tra tassi e che cosa significa?
+
+$e^{0.18} \approx 1.20$: ogni aumento di una unità del predittore moltiplica il conteggio atteso per 1.2, cioè circa il 20% di eventi in più, a parità degli altri predittori.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Stimi un modello quasi-Poisson e i coefficienti sono esattamente quelli del modello di Poisson. È andato storto qualcosa?
+
+No. Il quasi-Poisson usa le stesse equazioni di stima della Poisson; riscala soltanto gli errori standard per $\sqrt{\hat\phi}$.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Perché l'offset entra come `log(esposizione)` con un coefficiente fissato a 1?
+
+Perché modelliamo $\log(\mu/t) = \eta$, che equivale a $\log\mu = \log t + \eta$. Se $t$ raddoppia, il conteggio atteso raddoppia. Stimare il coefficiente permetterebbe altre relazioni e il modello non sarebbe più un modello del tasso.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. La dispersione di Pearson del tuo modello è 0.95. Dovresti passare a una binomiale negativa?
+
+No: un valore vicino a 1 è ciò che produce un modello di Poisson ben specificato. (Valori nettamente *inferiori* a 1 — sottodispersione — sono più rari e richiederebbero un trattamento diverso.)
+:::
+
+## 11. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — rapporti tra tassi.** Stima di nuovo `m_ins` con lo spray C come livello di riferimento (suggerimento: `relevel()`). Riporta il rapporto tra tassi dello spray A rispetto a C con il suo IC al 95% e scrivi una frase che lo interpreti.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+ins_c <- InsectSprays |> mutate(spray = relevel(spray, ref = "C"))
+m_c <- glm(count ~ spray, family = poisson, data = ins_c)
+tidy(m_c, exponentiate = TRUE, conf.int = TRUE)
+```
+L'RR dello spray A rispetto a C è circa 7.0 (IC al 95% da circa 4.7 a 10.8): gli appezzamenti trattati con A hanno circa sette volte gli insetti di quelli trattati con C. È semplicemente $1/0.144$ — cambiare il livello di riferimento inverte il rapporto; il modello è lo stesso.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — interpreta un output.** Dai coefficienti di `m_int`, calcola il rapporto tra tassi della lana B rispetto alla lana A a tensione **media**. Confronta la risposta con il rapporto tra le due medie campionarie.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+b <- coef(m_int)
+exp(b["woolB"] + b["woolB:tensionM"])
+
+means <- with(warpbreaks, tapply(breaks, list(wool, tension), mean))
+means["B", "M"] / means["A", "M"]
+```
+Entrambi danno circa 1.20: a tensione media la lana B ha circa il 20% di rotture *in più* rispetto alla lana A, mentre a tensione bassa ne ha circa il 37% in meno (RR 0.63). L'interazione è proprio questo cambiamento del rapporto.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — sovradispersione in InsectSprays.** La dispersione di `m_ins` è circa 1.5. Stima di nuovo il modello con `family = quasipoisson`. Che cosa succede al coefficiente e all'errore standard di `sprayC`? La conclusione "lo spray C è molto più efficace di A" cambia?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+m_ins_qp <- glm(count ~ spray, family = quasipoisson, data = InsectSprays)
+summary(m_ins_qp)$coefficients["sprayC", ]
+exp(confint.default(m_ins_qp))["sprayC", ]
+```
+Il coefficiente è invariato ($-1.94$, RR 0.14); l'errore standard è moltiplicato per $\sqrt{1.51} \approx 1.23$. L'IC di Wald al 95% per il rapporto tra tassi si allarga a circa 0.09–0.24, ancora lontano da 1. La conclusione resta valida; cambia solo la precisione, che diventa più onesta. (`confint.default()` fornisce intervalli di Wald, che funzionano per i modelli quasi.)
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — correggi l'errore.** Un collega modella i dati delle cliniche con
+
+```r
+glm(cases ~ area + offset(person_years), family = poisson, data = clinics)
+```
+
+e ottiene un errore: *no valid set of coefficients has been found*. Che cosa non va? Che cosa stimerebbe invece `glm(cases ~ area + log(person_years), ...)`?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+L'offset deve essere sulla scala del predittore lineare, che è il **logaritmo** della media: `offset(log(person_years))`. Con `offset(person_years)` il modello afferma che $\log\mu$ cresce di 1 per ogni anno-persona in più, cioè conteggi attesi dell'ordine di $e^{8000}$, e l'algoritmo di stima non riesce nemmeno a partire.
+
+`+ log(person_years)` stima un coefficiente per il logaritmo dell'esposizione invece di fissarlo a 1. In questi dati simulati i conteggi sono davvero proporzionali all'esposizione, quindi la stima dovrebbe essere compatibile con 1 (risulta circa 0.85, con un intervallo di confidenza che include 1 — 40 cliniche non lo determinano con precisione). In dati reali, una stima nettamente diversa da 1 significa che i conteggi non sono semplicemente proporzionali all'esposizione.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — prevedi l'output.** In `m_rate`, supponi di misurare l'esposizione in **migliaia** di anni-persona (`py_k = person_years / 1000`) e di usare `offset(log(py_k))`. Quali coefficienti cambiano e come? Verifica.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Cambia solo l'intercetta: $\log(\mu) = \log(t/1000) + \beta_0' + \dots$ significa $\beta_0' = \beta_0 + \log(1000)$, quindi $e^{\beta_0'}$ è il tasso per 1000 anni-persona (circa 1.9). Il rapporto tra tassi per `arearural` è identico.
+
+```r
+clinics <- clinics |> mutate(py_k = person_years / 1000)
+m_rate_k <- glm(cases ~ area + offset(log(py_k)), family = poisson,
+                data = clinics)
+exp(coef(m_rate_k))
+```
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 6 — mini-analisi.** Con `warpbreaks`, stima il modello **additivo** `breaks ~ wool + tension` con Poisson, quasi-Poisson e binomiale negativa. Per ciascuno, riporta il rapporto tra tassi tra tensione alta e bassa con il suo IC al 95% (usa `confint.default()` per tutti e tre, per un confronto equo). Di quali intervalli ti fideresti, e perché?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+f <- breaks ~ wool + tension
+fits <- list(
+  poisson = glm(f, family = poisson, data = warpbreaks),
+  quasi   = glm(f, family = quasipoisson, data = warpbreaks),
+  negbin  = MASS::glm.nb(f, data = warpbreaks)
+)
+sapply(fits, \(m) exp(c(coef(m)["tensionH"],
+                        confint.default(m)["tensionH", ])))
+sapply(fits[c(1, 3)], AIC)
+```
+Tutti e tre danno un rapporto tra tassi di circa 0.6 (circa il 40% di rotture in meno a tensione alta). L'intervallo di Poisson è il più stretto; quelli quasi-Poisson e binomiale negativa sono circa due volte più ampi. Poiché la dispersione di Pearson di questo modello è ben superiore a 1 (circa 4.3), l'intervallo di Poisson è troppo ottimista; quelli da riportare sono il quasi-Poisson e la binomiale negativa, e l'AIC preferisce nettamente la binomiale negativa alla Poisson.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| `glm(y ~ x, family = poisson)` | regressione di Poisson, legame logaritmico |
+| `exp(coef(m))`, `exp(confint(m))` | rapporti tra tassi e relativi IC |
+| `tidy(m, exponentiate = TRUE, conf.int = TRUE)` | tabella dei rapporti tra tassi |
+| `predict(m, newdata, type = "response")` | conteggi attesi |
+| `anova(m0, m1, test = "Chisq")` | test del rapporto di verosimiglianza (Poisson, NB) |
+| `offset(log(exposure))` | modellare i tassi per unità di esposizione |
+| `sum(residuals(m, "pearson")^2) / df.residual(m)` | dispersione di Pearson (≈ 1 per la Poisson) |
+| `glm(..., family = quasipoisson)`, `anova(..., test = "F")` | gonfiare gli ES per la sovradispersione |
+| `MASS::glm.nb()` | regressione binomiale negativa |
+| `pscl::zeroinfl()`, `pscl::hurdle()` | modelli per l'eccesso di zeri |
+
+- I conteggi sono non negativi e la loro varianza cresce con la media: usa un **GLM di Poisson con legame logaritmico**, non `lm()`.
+- I coefficienti esponenziati sono **rapporti tra tassi**: effetti moltiplicativi sul conteggio atteso.
+- Quando le unità differiscono per dimensione o tempo di osservazione, modella il **tasso** con un **offset**.
+- Controlla sempre la **sovradispersione**; se presente, usa il quasi-Poisson o la binomiale negativa — altrimenti i p-value sono molto troppo piccoli.
+- Un eccesso di zeri con un meccanismo separato richiede modelli **zero-inflated** o **hurdle**.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2a ed.), <https://openintro-ims.netlify.app>
+- Roback & Legler, *Beyond Multiple Linear Regression*, capitolo 4 sulla regressione di Poisson, <https://bookdown.org/roback/bookdown-BeyondMLR/>
+- Zeileis, Kleiber & Jackman, "Regression Models for Count Data in R", *Journal of Statistical Software* 27(8), 2008, <https://www.jstatsoft.org/article/view/v027i08>
+:::

@@ -18,7 +18,7 @@ library(tibble)
 ```
 
 ::: {.lesson-meta}
-[Livello 1 · Fondamenti]{.level-1} [⏱ ~75 min]{} [Prerequisiti: [Data frame](08-data-frames.qmd)]{}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~75 min]{} [Prerequisiti: [Data frame e tibble](08-data-frames.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}

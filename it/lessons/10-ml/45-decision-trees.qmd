@@ -1,0 +1,521 @@
+---
+title: "Alberi decisionali"
+subtitle: "Prevedere ponendo una sequenza di domande sì/no — e sapere quando smettere di chiedere"
+description: "Come gli alberi di classificazione e di regressione scelgono le suddivisioni (Gini, entropia, somma dei quadrati), come la potatura per costo-complessità e la regola dell'errore standard ne controllano la dimensione, come leggerli con rpart.plot, come ottimizzarli con tidymodels e perché la loro instabilità motiva i metodi d'insieme."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~90 min]{} [Prerequisiti: [Il flusso di lavoro del machine learning](44-ml-workflow.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare come si fa crescere un albero con la **suddivisione binaria ricorsiva**, e calcolare a mano l'**impurità di Gini** e l'**entropia** per una suddivisione;
+- far crescere la suddivisione di un **albero di regressione** e spiegare che cosa minimizza;
+- controllare la dimensione dell'albero con la **potatura per costo-complessità** e applicare correttamente la **regola 1-SE**;
+- stimare, rappresentare e leggere un albero con `rpart` e `rpart.plot`, e ottimizzarlo con `decision_tree()` in tidymodels;
+- mostrare che gli alberi sono **instabili** e spiegare perché questo motiva i metodi d'insieme.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(tidymodels)
+library(rpart)        # motore per gli alberi decisionali
+library(rpart.plot)   # grafici degli alberi
+
+# tidymodels carica modeldata, il cui `penguins` (con nomi di colonna diversi)
+# oscurerebbe quello di R base: assicuriamoci di usare la versione di R.
+penguins <- datasets::penguins
+```
+
+## 1. Perché gli alberi? Il gioco delle "20 domande"
+
+Nel gioco delle *20 domande*, un giocatore pensa a un oggetto e l'altro deve indovinarlo ponendo domande sì/no. I bravi giocatori fanno domande che **dividono nel modo più netto possibile le possibilità rimaste**: "È vivo?" è meglio di "È un tostapane?".
+
+Un **albero decisionale** prevede allo stesso modo. Per prevedere se un passeggero del Titanic sia sopravvissuto potrebbe chiedere: *Il passeggero è un uomo?* Se sì: *Ha più di 9.5 anni?* … Ogni domanda divide i passeggeri in due gruppi; alla fine di ciascun percorso (una **foglia**) l'albero prevede la classe di maggioranza (o le proporzioni di classe) dei passeggeri di addestramento che sono arrivati lì.
+
+Gli alberi sono attraenti perché:
+
+- sono **facili da spiegare** — un albero con cinque foglie è un insieme di cinque regole;
+- colgono automaticamente **effetti non lineari e interazioni** (l'effetto dell'età può essere diverso per uomini e donne);
+- **non richiedono standardizzazione** dei predittori e gestiscono in modo naturale le variabili categoriali.
+
+La loro debolezza, come vedremo, è l'**instabilità**: piccole variazioni nei dati possono produrre un albero molto diverso.
+
+Usiamo la stessa preparazione dei dati del Titanic della [lezione sul flusso di lavoro del ML](44-ml-workflow.qmd):
+
+```{r}
+#| label: titanic-data
+titanic <- readr::read_csv(data_path("titanic_data.csv"),
+                           na = c("", "NA", "?"), show_col_types = FALSE) |>
+  select(survived, pclass, sex, age, sibsp, parch, fare, embarked) |>
+  mutate(
+    survived = factor(survived, levels = c(1, 0), labels = c("yes", "no")),
+    pclass   = factor(pclass, levels = 1:3, labels = c("1st", "2nd", "3rd")),
+    sex      = factor(sex),
+    embarked = factor(embarked)
+  )
+
+set.seed(2026)
+titanic_split <- initial_split(titanic, prop = 0.75, strata = survived)
+titanic_train <- training(titanic_split)
+titanic_test  <- testing(titanic_split)
+set.seed(2026)
+titanic_folds <- vfold_cv(titanic_train, v = 5, strata = survived)
+titanic_metrics <- metric_set(roc_auc, accuracy, sensitivity, specificity,
+                              brier_class, mn_log_loss)
+```
+
+## 2. Come un albero di classificazione sceglie una suddivisione
+
+### Impurità
+
+Un gruppo di passeggeri è **puro** se tutti condividono lo stesso destino. Ci serve un numero che sia 0 per un gruppo puro e grande per un gruppo misto. Con proporzioni di classe $p_1, \dots, p_K$ in un nodo, le due scelte più comuni sono
+
+$$
+\text{Gini} = 1 - \sum_k p_k^2, \qquad \text{Entropia} = -\sum_k p_k \log_2 p_k .
+$$
+
+Con due classi, entrambe valgono 0 quando $p = 0$ o $p = 1$ e sono massime per $p = 0.5$ (Gini 0.5, entropia 1).
+
+```{r}
+#| label: impurity-functions
+gini <- function(counts) {
+  p <- counts / sum(counts)
+  1 - sum(p^2)
+}
+entropy <- function(counts) {
+  p <- counts / sum(counts)
+  p <- p[p > 0]                # 0 * log(0) si considera uguale a 0
+  -sum(p * log2(p))
+}
+```
+
+### Una suddivisione a mano: il sesso
+
+```{r}
+#| label: split-sex
+tab <- table(titanic$sex, titanic$survived)
+tab
+
+root <- colSums(tab)                     # tutti i passeggeri insieme
+w <- rowSums(tab) / sum(tab)             # quota di passeggeri in ciascun figlio
+gini_children <- apply(tab, 1, gini)
+entropy_children <- apply(tab, 1, entropy)
+
+c(gini_root = gini(root),
+  gini_after = sum(w * gini_children),
+  entropy_root = entropy(root),
+  entropy_after = sum(w * entropy_children))
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Prima della suddivisione, l'impurità di Gini di tutti i passeggeri è `r round(gini(root), 3)`.
+- Dopo la suddivisione per sesso, ogni nodo figlio è più puro: Gini `r round(gini_children["female"], 3)` per le donne e `r round(gini_children["male"], 3)` per gli uomini. La loro **media ponderata** (pesi = quota di passeggeri) è `r round(sum(w * gini_children), 3)`.
+- La **diminuzione di impurità** è `r round(gini(root) - sum(w * gini_children), 3)` (Gini) oppure `r round(entropy(root) - sum(w * entropy_children), 3)` bit (entropia; questa diminuzione si chiama *guadagno di informazione*, *information gain*).
+:::
+
+L'algoritmo di crescita dell'albero prova semplicemente **ogni possibile suddivisione di ogni predittore** — per una variabile numerica, ogni soglia tra valori consecutivi; per un fattore, i raggruppamenti dei suoi livelli — e sceglie quella con la maggiore diminuzione di impurità. Verifichiamo che "sesso" batta "terza classe contro le altre":
+
+```{r}
+#| label: split-class
+tab_cl <- table(titanic$pclass == "3rd", titanic$survived)
+w_cl <- rowSums(tab_cl) / sum(tab_cl)
+c(sex = gini(root) - sum(w * gini_children),
+  third_class = gini(root) - sum(w_cl * apply(tab_cl, 1, gini)))
+```
+
+Poi la stessa ricerca viene ripetuta **dentro ciascun nodo figlio**, e di nuovo dentro i nipoti: questa è la **suddivisione binaria ricorsiva**. È *greedy* (miope): ogni suddivisione è la migliore in quel momento, senza guardare avanti.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: perché non usare semplicemente il tasso di errore?
+
+Si potrebbe misurare l'impurità con il tasso di classificazione errata $1 - \max_k p_k$. Si usa di rado per far crescere gli alberi perché non è abbastanza sensibile: molte suddivisioni producono lo stesso tasso di errore anche se una di esse crea un nodo figlio molto più puro. Gini ed entropia sono strettamente concave in $p$, quindi qualunque suddivisione che cambi le proporzioni di classe le riduce strettamente. In pratica Gini ed entropia scelgono quasi sempre le stesse suddivisioni; `rpart` usa Gini per impostazione predefinita (`parms = list(split = "information")` passa all'entropia).
+:::
+
+## 3. Alberi di regressione
+
+Per una risposta numerica, una foglia prevede la **media** delle sue osservazioni di addestramento, e l'impurità è la **somma dei quadrati degli errori** (SSE) intorno a quella media. Una suddivisione alla soglia $s$ sul predittore $x$ viene scelta in modo da minimizzare
+
+$$
+\sum_{i:\,x_i < s} (y_i - \bar y_{\text{sinistra}})^2 + \sum_{i:\,x_i \ge s} (y_i - \bar y_{\text{destra}})^2 .
+$$
+
+Cerchiamo la migliore suddivisione singola della massa corporea dei pinguini in base alla lunghezza delle pinne:
+
+```{r}
+#| label: reg-split
+peng <- penguins[!is.na(penguins$body_mass) & !is.na(penguins$flipper_len), ]
+
+best_split <- function(x, y) {
+  cuts <- sort(unique(x))
+  cuts <- (head(cuts, -1) + tail(cuts, -1)) / 2   # punti medi
+  sse <- vapply(cuts, \(s) {
+    left <- y[x < s]
+    right <- y[x >= s]
+    sum((left - mean(left))^2) + sum((right - mean(right))^2)
+  }, numeric(1))
+  list(cut = cuts[which.min(sse)], cuts = cuts, sse = sse)
+}
+sp <- best_split(peng$flipper_len, peng$body_mass)
+sp$cut
+tapply(peng$body_mass, peng$flipper_len < sp$cut, mean)
+```
+
+```{r}
+#| label: fig-reg-split
+#| fig-cap: "A sinistra: SSE di ogni suddivisione candidata; il minimo dà la soglia migliore. A destra: l'albero di regressione risultante con una sola suddivisione (una funzione a gradini)."
+#| fig-width: 9
+#| fig-height: 3.8
+par(mfrow = c(1, 2))
+plot(sp$cuts, sp$sse / 1e6, type = "l",
+     xlab = "Soglia sulla lunghezza delle pinne (mm)", ylab = "SSE (milioni)")
+abline(v = sp$cut, lty = 2)
+plot(peng$flipper_len, peng$body_mass, col = "grey50",
+     xlab = "Lunghezza delle pinne (mm)", ylab = "Massa corporea (g)")
+means <- tapply(peng$body_mass, peng$flipper_len >= sp$cut, mean)
+segments(c(min(peng$flipper_len), sp$cut), means,
+         c(sp$cut, max(peng$flipper_len)), means, lwd = 3, col = "#D55E00")
+par(mfrow = c(1, 1))
+```
+
+La migliore suddivisione, a `r sp$cut` mm, riduce l'SSE del `r round(100 * (1 - min(sp$sse) / sum((peng$body_mass - mean(peng$body_mass))^2)))`% rispetto al prevedere la media generale. Un albero di regressione completo ripete questa operazione dentro ciascuna metà, producendo una funzione a gradini con sempre più gradini.
+
+## 4. Far crescere e potare un albero con `rpart`
+
+### Un albero volutamente grande
+
+```{r}
+#| label: rpart-full
+set.seed(2026)
+tree_full <- rpart(
+  survived ~ ., data = titanic_train, method = "class",
+  control = rpart.control(cp = 0, minsplit = 10, xval = 10)
+)
+nrow(tree_full$frame[tree_full$frame$var == "<leaf>", ])   # numero di foglie
+```
+
+Con `cp = 0` e `minsplit = 10`, l'albero continua a suddividersi finché un nodo ha almeno 10 passeggeri: cresce fino a `r sum(tree_full$frame$var == "<leaf>")` foglie e sovradatta di sicuro. (`rpart` gestisce da sé le età mancanti, usando suddivisioni *surrogate* su variabili correlate.)
+
+### Potatura per costo-complessità
+
+Invece di fermarsi presto, la strategia standard è far crescere un albero grande e poi **potarlo**. Per un valore $\alpha \ge 0$, la potatura trova il sottoalbero $T$ che minimizza
+
+$$
+R_\alpha(T) = R(T) + \alpha\, |T|,
+$$
+
+dove $R(T)$ è l'errore sul training e $|T|$ il numero di foglie. $\alpha = 0$ mantiene l'albero completo; un $\alpha$ grande pota tutto fino alla radice. `rpart` chiama **parametro di complessità** `cp` una versione riscalata di $\alpha$ e, per ogni `cp` candidato, riporta un errore convalidato in modo incrociato a 10 gruppi:
+
+```{r}
+#| label: printcp
+printcp(tree_full)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Ogni riga è un sottoalbero. `CP` è il parametro di complessità al quale diventa ottimale, `nsplit` il suo numero di suddivisioni (foglie = `nsplit + 1`).
+- `rel error` è l'errore di **training** relativo alla radice (diminuisce sempre).
+- `xerror` è l'errore **convalidato in modo incrociato** relativo alla radice, e `xstd` il suo errore standard. Sono le colonne da usare per scegliere la dimensione.
+:::
+
+```{r}
+#| label: fig-plotcp
+#| fig-cap: "Errore relativo in convalida incrociata in funzione di cp (e della dimensione dell'albero). La linea orizzontale è tracciata un errore standard sopra il minimo."
+plotcp(tree_full)
+```
+
+### La regola 1-SE — applicata correttamente
+
+Scegliere la riga con il più piccolo `xerror` tende a selezionare alberi più grandi del necessario: la curva di CV è spesso piatta vicino al minimo, e il minimo esatto è in parte rumore. La **regola dell'errore standard** (1-SE, Breiman et al., 1984) sceglie **l'albero più semplice il cui errore di CV è entro un errore standard dal minimo**:
+
+```{r}
+#| label: one-se
+cpt <- tree_full$cptable
+i_min <- which.min(cpt[, "xerror"])                       # errore di CV minimo
+threshold <- cpt[i_min, "xerror"] + cpt[i_min, "xstd"]   # minimo + 1 ES
+i_1se <- which(cpt[, "xerror"] <= threshold)[1]           # l'albero più semplice di questo tipo
+c(splits_min = cpt[i_min, "nsplit"], splits_1se = cpt[i_1se, "nsplit"])
+
+tree_1se <- prune(tree_full, cp = cpt[i_1se, "CP"])
+```
+
+Le righe di `cptable` sono ordinate dall'albero più semplice (`cp` più grande) al più complesso, quindi la **prima** riga sotto la soglia è l'albero accettabile più semplice. (La vecchia versione di questa lezione annunciava la regola 1-SE ma usava `which.min(xerror)`, cioè il minimo — una regola diversa.) Qui l'albero a errore minimo ha `r cpt[i_min, "nsplit"]` suddivisioni e l'albero 1-SE `r cpt[i_1se, "nsplit"]`.
+
+### Leggere l'albero potato
+
+```{r}
+#| label: fig-tree-1se
+#| fig-cap: "L'albero potato (regola 1-SE). Ogni riquadro mostra la classe prevista, la probabilità prevista di ciascuna classe (yes, no) e la percentuale di passeggeri di addestramento nel nodo."
+rpart.plot(tree_1se, extra = 104, under = TRUE)
+```
+
+Leggi un percorso dalla radice a una foglia come una regola. La prima suddivisione è sul `sex`, come suggeriva il nostro calcolo a mano. Le stesse regole in forma testuale:
+
+```{r}
+#| label: rules
+rpart.rules(tree_1se, cover = TRUE)
+```
+
+Per una risposta a due classi, `rpart.rules()` stampa la probabilità stimata del **secondo** livello della risposta (qui `no`, cioè la morte) — controlla l'intestazione di colonna che stampa. `cover` è la percentuale di passeggeri di addestramento che seguono ciascuna regola.
+
+## 5. Ottimizzare un albero con tidymodels
+
+La CV di `rpart` è comoda ma specifica di rpart. In tidymodels ottimizziamo l'albero come qualsiasi altro modello, con gli stessi gruppi e le stesse metriche della regressione logistica della lezione 44, così i risultati sono direttamente confrontabili.
+
+```{r}
+#| label: tm-spec
+tree_spec <- decision_tree(cost_complexity = tune(), tree_depth = tune(),
+                           min_n = 10) |>
+  set_engine("rpart") |>
+  set_mode("classification")
+
+tree_rec <- recipe(survived ~ ., data = titanic_train) |>
+  step_impute_median(all_numeric_predictors()) |>
+  step_impute_mode(all_nominal_predictors())
+
+tree_wf <- workflow() |>
+  add_recipe(tree_rec) |>
+  add_model(tree_spec)
+```
+
+Gli alberi non richiedono né variabili dummy né normalizzazione, quindi la recipe si limita a imputare i valori mancanti (rpart potrebbe gestirli anche da solo; imputare mantiene la pipeline identica tra i modelli).
+
+```{r}
+#| label: tm-grid
+tree_grid <- grid_regular(cost_complexity(),
+                          tree_depth(range = c(1L, 10L)),
+                          levels = c(5, 4))
+nrow(tree_grid)
+
+set.seed(2026)
+tree_res <- tune_grid(tree_wf, resamples = titanic_folds,
+                      grid = tree_grid, metrics = titanic_metrics)
+```
+
+Una griglia di `r nrow(tree_grid)` combinazioni × 5 gruppi = `r 5 * nrow(tree_grid)` stime; gli alberi sono veloci, quindi bastano pochi secondi.
+
+```{r}
+#| label: fig-tune-tree
+#| fig-cap: "Prestazioni degli alberi in convalida incrociata per costo-complessità e profondità massima."
+autoplot(tree_res, metric = c("roc_auc", "brier_class"))
+```
+
+```{r}
+#| label: tm-best
+show_best(tree_res, metric = "roc_auc", n = 5)
+
+best_tree <- select_by_one_std_err(tree_res, desc(cost_complexity),
+                                   tree_depth, metric = "roc_auc")
+best_tree
+```
+
+`select_best()` restituirebbe la combinazione con la AUC media più alta. `select_by_one_std_err()` implementa la regola 1-SE: tra le combinazioni entro un errore standard dalla migliore, restituisce la **più semplice**, dove definiamo "semplice" ordinando per `desc(cost_complexity)` (più potatura) e poi per `tree_depth` (meno profondo).
+
+```{r}
+#| label: tm-final
+tree_final <- tree_wf |>
+  finalize_workflow(best_tree) |>
+  last_fit(titanic_split, metrics = titanic_metrics)
+collect_metrics(tree_final)
+```
+
+```{r}
+#| label: fig-tm-tree
+#| fig-cap: "L'albero ottimizzato, stimato sull'intero insieme di addestramento."
+tree_final |>
+  extract_workflow() |>
+  extract_fit_engine() |>
+  rpart.plot(extra = 104, under = TRUE)
+```
+
+`extract_fit_engine()` restituisce l'oggetto `rpart` sottostante, quindi tutti gli strumenti di rpart (`rpart.plot()`, `rpart.rules()`, `printcp()`) funzionano su di esso.
+
+## 6. Gli alberi sono instabili
+
+Stima lo stesso tipo di albero su quattro **campioni bootstrap** dei dati di addestramento (campioni della stessa dimensione, estratti con reinserimento — vedi la [lezione sul bootstrap](../07-probability/31-bootstrap.qmd)):
+
+```{r}
+#| label: fig-boot-trees
+#| fig-cap: "Quattro alberi stimati su quattro campioni bootstrap degli stessi dati di addestramento."
+#| fig-height: 7
+set.seed(45)
+boot_trees <- lapply(1:4, \(b) {
+  idx <- sample(nrow(titanic_train), replace = TRUE)
+  rpart(survived ~ ., data = titanic_train[idx, ], method = "class",
+        control = rpart.control(cp = 0.01))
+})
+par(mfrow = c(2, 2))
+for (tr in boot_trees) rpart.plot(tr, extra = 0, cex = 0.7)
+par(mfrow = c(1, 1))
+```
+
+La prima suddivisione (sesso) è stabile, perché il suo segnale è forte. Sotto di essa, gli alberi scelgono variabili e soglie diverse. Le previsioni per un singolo passeggero possono cambiare molto:
+
+```{r}
+#| label: boot-pred
+passenger <- tibble(
+  pclass = factor("2nd", levels = levels(titanic$pclass)),
+  sex = factor("male", levels = levels(titanic$sex)),
+  age = 30, sibsp = 0, parch = 0, fare = 13,
+  embarked = factor("S", levels = levels(titanic$embarked))
+)
+set.seed(45)
+p_boot <- replicate(50, {
+  idx <- sample(nrow(titanic_train), replace = TRUE)
+  fit <- rpart(survived ~ ., data = titanic_train[idx, ], method = "class",
+               control = rpart.control(cp = 0.01))
+  predict(fit, passenger, type = "prob")[, "yes"]
+})
+summary(p_boot)
+```
+
+Su 50 alberi bootstrap, la probabilità di sopravvivenza prevista per un uomo di 30 anni in seconda classe va da `r round(min(p_boot), 2)` a `r round(max(p_boot), 2)`. È la **varianza elevata** del paragrafo 3 della lezione 44, in azione. Poiché ogni suddivisione dipende dalle precedenti, una piccola modifica vicino alla cima si propaga lungo tutto l'albero.
+
+Il rimedio naturale è **mediare molti alberi**: la media riduce la varianza. È l'idea alla base delle [foreste casuali](46-random-forests.qmd) e, in modo diverso, del [boosting](47-gradient-boosting.qmd).
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Tenere l'albero non potato.** Un albero fatto crescere finché le foglie sono pure ha un errore di training quasi nullo e prestazioni di test scarse. Pota (oppure ottimizza `cost_complexity` / `tree_depth` / `min_n`).
+2. **Chiamare "albero 1-SE" l'albero con `xerror` minimo.** La regola 1-SE sceglie l'albero *più semplice* entro un ES dal minimo.
+3. **Interpretare troppo la struttura.** Un campione diverso potrebbe dare un albero diverso; interpreta solo le suddivisioni forti e stabili.
+4. **Leggere `rel error` di `printcp()` come errore di test.** È l'errore di training; usa `xerror`.
+5. **Dimenticare `set.seed()`** prima di `rpart()`: la sua convalida incrociata interna è casuale, quindi `xerror` cambia da un'esecuzione all'altra.
+:::
+
+## 7. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Un nodo contiene 40 sopravvissuti e 60 non sopravvissuti. Quali sono la sua impurità di Gini e la sua entropia?
+
+Gini $= 1 - (0.4^2 + 0.6^2) = 0.48$. Entropia $= -(0.4\log_2 0.4 + 0.6\log_2 0.6) \approx 0.971$ bit.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Perché `rel error` in `printcp()` diminuisce sempre, mentre `xerror` no?
+
+`rel error` è misurato sui dati di addestramento, e un albero più grande può sempre adattarsi ai dati di addestramento almeno altrettanto bene. `xerror` è misurato sui gruppi esclusi, quindi oltre una certa dimensione le suddivisioni aggiuntive si adattano al rumore e l'errore smette di scendere o risale.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Un albero decisionale richiede predittori standardizzati?
+
+No. Una suddivisione "age < 9.5" equivale a "età in mesi < 114": qualsiasi trasformazione monotona di un predittore dà le stesse partizioni. Gli alberi sono invarianti rispetto alla scala.
+:::
+
+## 8. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — impurità a mano.** Usando `gini()` ed `entropy()`, calcola la diminuzione di impurità della suddivisione "prima classe contro le altre" su `titanic`. È migliore o peggiore della suddivisione per sesso?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+tab_1st <- table(titanic$pclass == "1st", titanic$survived)
+w_1st <- rowSums(tab_1st) / sum(tab_1st)
+gini(root) - sum(w_1st * apply(tab_1st, 1, gini))
+entropy(root) - sum(w_1st * apply(tab_1st, 1, entropy))
+```
+La diminuzione (circa 0.04 per Gini) è molto più piccola di quella per il sesso (circa 0.13): il sesso è la prima domanda migliore.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — prevedi l'output.** Senza eseguirlo: se moltiplichi `flipper_len` per 10 (millimetri → decimi di millimetro) e riesegui `best_split()`, che cosa succede alla soglia e all'SSE minima? Poi verifica.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+La soglia viene moltiplicata per 10 (diventa `r 10 * sp$cut`) e l'SSE minima **non cambia**: gli stessi pinguini finiscono da ciascun lato, quindi le due medie di gruppo sono le stesse.
+```r
+sp10 <- best_split(10 * peng$flipper_len, peng$body_mass)
+c(sp10$cut, min(sp10$sse) - min(sp$sse))
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi la regola 1-SE.** Uno studente scrive `cp_1se <- cpt[which.min(cpt[, "xerror"] + cpt[, "xstd"]), "CP"]`. Spiega che cosa seleziona e perché non è la regola 1-SE.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Sceglie l'albero con il valore più piccolo di `xerror + xstd` — un minimo penalizzato, che di solito è lo stesso albero (o uno vicino) dell'albero a errore minimo. La regola 1-SE invece calcola **una sola soglia** (il minimo di `xerror` più *il suo* `xstd`) e poi prende l'albero **più semplice** (la prima riga) il cui `xerror` è sotto quella soglia:
+```r
+i_min <- which.min(cpt[, "xerror"])
+i_1se <- which(cpt[, "xerror"] <= cpt[i_min, "xerror"] + cpt[i_min, "xstd"])[1]
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — un albero di regressione.** Stima `rpart(body_mass ~ ., data = penguins, method = "anova")` (escludendo prima `year`). Rappresentalo con `rpart.plot()`. Quale variabile viene usata per la prima suddivisione? È quella che hai trovato con `best_split()` sulla sola lunghezza delle pinne?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+peng_tree <- rpart(body_mass ~ ., method = "anova",
+                   data = select(penguins, -year))
+rpart.plot(peng_tree)
+```
+Poiché ora l'albero può scegliere tra tutti i predittori (compresi `species` e `sex`), la prima suddivisione non deve per forza essere sulla lunghezza delle pinne: l'algoritmo prende l'unica suddivisione con la maggiore riduzione di SSE tra tutte le variabili. Confronta la suddivisione alla radice nel grafico con la soglia `r sp$cut` mm trovata sopra. Le foglie mostrano la massa corporea media (in grammi) e la percentuale di pinguini.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — quantifica l'instabilità.** Ripeti l'esperimento bootstrap del paragrafo 6 con 100 alberi. Per ogni albero registra l'**insieme di variabili che usa** (suggerimento: `tr$frame$var` elenca la variabile di suddivisione di ogni nodo, e `"<leaf>"` per le foglie). Tabula i risultati: quanti insiemi di variabili diversi compaiono?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+set.seed(45)
+var_sets <- replicate(100, {
+  idx <- sample(nrow(titanic_train), replace = TRUE)
+  tr <- rpart(survived ~ ., data = titanic_train[idx, ], method = "class",
+              control = rpart.control(cp = 0.01))
+  used <- setdiff(as.character(tr$frame$var), "<leaf>")
+  paste(sort(unique(used)), collapse = ", ")
+})
+sort(table(var_sets), decreasing = TRUE)
+length(unique(var_sets))
+```
+`sex` compare in ogni albero, ma le altre variabili usate (`age`, `pclass`, `fare`, `sibsp`, …) cambiano da un campione bootstrap all'altro, dando molti insiemi di variabili distinti. Alberi che sui dati sembrano ugualmente buoni possono raccontare storie diverse.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| Gini $1-\sum p_k^2$, entropia $-\sum p_k\log_2 p_k$ | Impurità di un nodo (classificazione) |
+| SSE intorno alla media | Impurità di un nodo (regressione) |
+| `rpart(y ~ ., method = "class")` | Far crescere un albero (`"anova"` per la regressione) |
+| `printcp()`, `plotcp()`, `prune()` | Percorso di costo-complessità e potatura |
+| Regola 1-SE | Albero più semplice entro 1 ES dall'errore di CV minimo |
+| `rpart.plot()`, `rpart.rules()` | Rappresentare / elencare le regole |
+| `decision_tree(cost_complexity, tree_depth, min_n)` | Specifica in tidymodels (`set_engine("rpart")`) |
+| `select_by_one_std_err()` | Regola 1-SE per qualsiasi risultato di ottimizzazione |
+
+- Gli alberi dividono i dati in modo greedy con la domanda che riduce di più l'impurità.
+- Gli alberi grandi sovradattano; la **potatura** scambia un po' di distorsione con molta meno varianza.
+- Gli alberi sono facili da leggere ma **instabili** — piccole variazioni nei dati, alberi diversi.
+- Mediare molti alberi risolve l'instabilità: prossima lezione.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2a ed.), capitolo 8, <https://www.statlearning.com>
+- Therneau & Atkinson, *An Introduction to Recursive Partitioning Using the RPART Routines* (vignette di rpart), <https://cran.r-project.org/package=rpart>
+- Kuhn & Silge, *Tidy Modeling with R*, capitoli sull'ottimizzazione, <https://www.tmwr.org>
+:::

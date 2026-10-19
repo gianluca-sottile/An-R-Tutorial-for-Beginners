@@ -1,0 +1,482 @@
+---
+title: "Analisi fattoriale"
+subtitle: "Scoprire i tratti latenti dietro gli item di un questionario — e valutare se il modello regge"
+description: "Impara il modello fattoriale, in cosa differisce dalla PCA, come verificare la fattorizzabilità, scegliere il numero di fattori, usare le correlazioni policoriche per gli item Likert, applicare una rotazione obliqua, leggere pesi e indici di adattamento e valutare l'affidabilità con alfa e omega."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~100 min]{} [Prerequisiti: [Analisi delle componenti principali](50-pca.qmd), [Correlazione](../06-visualization/27-correlation.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare il **modello fattoriale** $X = \Lambda F + \varepsilon$ e in cosa differisce dalla PCA (varianza comune vs totale);
+- verificare se i dati sono adatti all'analisi fattoriale (**KMO**, **Bartlett**) e scegliere il numero di fattori con l'**analisi parallela** e con la teoria;
+- stimare un'analisi fattoriale esplorativa con `psych::fa()` usando **correlazioni policoriche** e una **rotazione obliqua**;
+- interpretare **pesi (loadings), comunalità, unicità, correlazioni tra fattori e indici di adattamento**;
+- calcolare i **punteggi fattoriali** e l'**affidabilità** di una scala (α di Cronbach, ω di McDonald), gestendo gli item con codifica inversa.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(psych)    # fa(), fa.parallel(), KMO(), alpha(), omega(); richiede GPArotation per oblimin
+```
+
+## 1. Perché l'analisi fattoriale?
+
+I questionari di personalità chiedono cose come *"Sono l'anima della festa"* o *"Mi stresso facilmente"* su una scala da 1 a 6. A nessuno interessa un singolo item in sé. Ci interessano i **tratti** che stanno dietro — estroversione, nevroticismo — che non possiamo misurare direttamente. Queste quantità non osservabili si chiamano **variabili latenti** (o *fattori*).
+
+L'idea dell'analisi fattoriale (AF) è:
+
+> Gli item a cui le stesse persone rispondono in modo simile sono probabilmente guidati da una **causa comune**. Se riusciamo a spiegare le correlazioni tra molti item con pochi fattori latenti, abbiamo trovato la struttura del questionario.
+
+L'AF risponde a domande come: *Quanti tratti misura questo questionario? Quali item appartengono a quale tratto? I tratti sono correlati? Quanta parte di ciascun item è "tratto" e quanta è rumore?*
+
+## 2. Il modello fattoriale, e in cosa differisce dalla PCA
+
+Ogni item osservato (standardizzato) è modellato come una somma pesata di pochi fattori comuni più una parte unica di quell'item:
+
+$$
+\text{item}_j \;=\; \lambda_{j1} F_1 + \lambda_{j2} F_2 + \dots + \lambda_{jm} F_m \;+\; \varepsilon_j .
+$$
+
+- I $\lambda$ sono i **pesi** (*loadings*): quanto fortemente l'item $j$ dipende da ciascun fattore.
+- $\varepsilon_j$ è la parte **unica**: errore di misura più tutto ciò che è specifico di quell'item.
+- La **comunalità** $h^2_j$ è la quota di varianza dell'item $j$ spiegata dai fattori comuni; l'**unicità** è $u^2_j = 1 - h^2_j$.
+
+**PCA contro AF.** La PCA ([lezione precedente](50-pca.qmd)) costruisce componenti che riassumono **tutta** la varianza delle variabili: non ha un termine di errore. L'AF modella solo la varianza **comune** (condivisa) e mette da parte la parte unica di ciascun item. La conseguenza pratica: quando gli item contengono errore di misura, i pesi della PCA risultano gonfiati, mentre l'AF cerca di recuperare i pesi "veri".
+
+Vediamolo con dati simulati di cui *conosciamo* la verità: un fattore latente e cinque item con pesi veri 0.8, 0.7, 0.6, 0.5 e 0.4.
+
+```{r}
+#| label: simulate-one-factor
+set.seed(2025)
+n <- 500
+f <- rnorm(n)                              # il fattore latente
+true_load <- c(0.8, 0.7, 0.6, 0.5, 0.4)
+items <- sapply(true_load, \(l) l * f + sqrt(1 - l^2) * rnorm(n))
+colnames(items) <- paste0("item", 1:5)
+
+fa_1 <- factanal(items, factors = 1)        # AF di massima verosimiglianza in base R
+pca_1 <- prcomp(items, scale. = TRUE)
+
+data.frame(
+  true = true_load,
+  fa   = round(as.vector(fa_1$loadings), 2),
+  pca  = round(abs(pca_1$rotation[, 1] * pca_1$sdev[1]), 2)
+)
+```
+
+I pesi dell'AF sono vicini al vero; i "pesi" della PCA (le correlazioni degli item con PC1) sono sistematicamente troppo grandi, soprattutto per gli item deboli, perché PC1 assorbe anche parte del rumore unico di ciascun item.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la struttura di covarianza
+
+Con $p$ item, $m$ fattori, matrice dei pesi $\Lambda$ ($p \times m$), matrice di correlazione dei fattori $\Phi$ e matrice diagonale delle unicità $\Psi$, il modello fattoriale implica
+
+$$
+\Sigma \;=\; \Lambda \Phi \Lambda^\top + \Psi .
+$$
+
+L'AF stima $\Lambda$, $\Phi$ e $\Psi$ in modo che la matrice implicata sia il più possibile vicina alla matrice di correlazione osservata — con la **massima verosimiglianza** (`fm = "ml"`, assume normalità multivariata) oppure con i **residui minimi / minimi quadrati** (`fm = "minres"`, il metodo predefinito in `psych`, senza assunzioni distributive). La PCA corrisponde invece a scomporre $\Sigma$ stessa, senza $\Psi$.
+
+La soluzione non è unica: per qualsiasi matrice invertibile $T$ di dimensione $m \times m$, i pesi $\Lambda T$ si adattano ai dati altrettanto bene. La **rotazione** (sezione 7) sfrutta questa libertà per scegliere la soluzione più interpretabile.
+:::
+
+## 3. I dati: il Big Five Inventory
+
+I dati `bfi` nel pacchetto **psych** contengono le risposte di 2.800 persone a 25 item di personalità (1 = molto inesatto … 6 = molto esatto), cinque item per ciascuno dei Big Five: **A**micalità (*Agreeableness*), **C**oscienziosità (*Conscientiousness*), **E**stroversione (*Extraversion*), **N**evroticismo (*Neuroticism*) e **O**penness (apertura all'esperienza). (Se la tua versione di psych non include `bfi`, si trova in `psychTools::bfi`.)
+
+```{r}
+#| label: data
+# bfi si trova in psychTools nelle versioni recenti (e in psych in quelle vecchie)
+bfi_raw <- if (requireNamespace("psychTools", quietly = TRUE)) {
+  psychTools::bfi
+} else {
+  psych::bfi
+}
+
+bfi_items <- bfi_raw[, 1:25] |>
+  na.omit() |>
+  as.data.frame()
+
+dim(bfi_items)
+head(bfi_items, 3)
+```
+
+Teniamo le `r nrow(bfi_items)` persone che hanno risposto a tutti i 25 item. Alcuni item hanno **codifica inversa**: per esempio A1 è *"Am indifferent to the feelings of others"* («Sono indifferente ai sentimenti degli altri») — essere d'accordo significa amicalità *bassa*. Gli item con codifica inversa sono A1, C4, C5, E1, E2, O2 e O5 (vedi `psychTools::bfi.dictionary`). Compariranno con pesi negativi.
+
+## 4. Item Likert: le correlazioni policoriche
+
+L'AF parte da una matrice di correlazione. Le correlazioni di Pearson presuppongono variabili continue; le risposte Likert sono **categorie ordinate**. Trattare "1, 2, …, 6" come numeri continui **attenua** le correlazioni (le rende più piccole), soprattutto quando le risposte si accumulano a un'estremità della scala.
+
+La **correlazione policorica** assume che dietro ogni risposta ordinale ci sia una "risposta latente" continua e normalmente distribuita, tagliata in categorie da certe soglie, e stima la correlazione tra queste risposte latenti. Una breve simulazione mostra l'attenuazione:
+
+```{r}
+#| label: attenuation
+set.seed(31)
+z1 <- rnorm(5000)
+z2 <- 0.6 * z1 + sqrt(1 - 0.6^2) * rnorm(5000)   # correlazione vera 0.6
+cuts <- c(-Inf, -0.5, 0.3, 0.9, 1.5, Inf)        # 5 categorie di risposta
+likert1 <- as.integer(cut(z1, cuts))
+likert2 <- as.integer(cut(z2, cuts))
+
+c(latent = cor(z1, z2), pearson_on_categories = cor(likert1, likert2))
+```
+
+Calcolata sulle categorie, la correlazione di Pearson è `r round(cor(likert1, likert2), 2)` invece di `r round(cor(z1, z2), 2)`. La correlazione policorica recupera il valore latente. In psych:
+
+```{r}
+#| label: polychoric
+r_poly <- psych::polychoric(bfi_items)$rho
+r_pear <- cor(bfi_items)
+
+# le correlazioni policoriche sono più grandi in valore assoluto
+mean(abs(r_poly[lower.tri(r_poly)])) - mean(abs(r_pear[lower.tri(r_pear)]))
+```
+
+Con 6 categorie la differenza è modesta ma sistematica. Con 4 categorie o meno, o con item molto asimmetrici, può essere grande.
+
+## 5. I dati sono adatti? La fattorizzabilità
+
+Prima di estrarre i fattori, verifica che gli item condividano abbastanza varianza comune.
+
+```{r}
+#| label: factorability
+kmo <- KMO(r_poly)
+kmo$MSA                                    # KMO complessivo
+round(sort(kmo$MSAi)[1:3], 2)               # i tre item più deboli
+
+cortest.bartlett(r_poly, n = nrow(bfi_items))
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **KMO** (misura di adeguatezza campionaria di Kaiser–Meyer–Olkin) confronta le correlazioni con le correlazioni parziali. Se gli item condividono fattori comuni, le correlazioni parziali sono piccole e il KMO è vicino a 1. Guida di Kaiser: ≥ 0.90 meraviglioso, anni 0.80 meritorio, 0.70 medio, 0.60 mediocre, 0.50 miserabile, sotto 0.50 inaccettabile. Qui il KMO complessivo è `r round(kmo$MSA, 2)`. I valori per item (`MSAi`) segnalano gli item che si adattano male.
+- Il **test di Bartlett** verifica se la matrice di correlazione è una matrice identità (nessuna correlazione). Un p-value minuscolo significa "ci sono correlazioni": un requisito minimo. Con migliaia di rispondenti è quasi sempre significativo, quindi da solo dice poco.
+:::
+
+## 6. Quanti fattori?
+
+### Analisi parallela
+
+Come nella PCA, confrontiamo gli autovalori osservati con quelli ottenuti da dati casuali delle stesse dimensioni. `fa.parallel()` lo fa per noi (qui con correlazioni policoriche, quindi richiede un po' di tempo):
+
+```{r}
+#| label: fig-parallel
+#| fig-cap: "Analisi parallela dei 25 item bfi: autovalori osservati a confronto con quelli di dati casuali simulati/ricampionati."
+set.seed(2026)
+pa <- fa.parallel(bfi_items, fm = "minres", fa = "both", cor = "poly",
+                  n.iter = 20, main = "Analisi parallela (policorica)")
+```
+
+L'analisi parallela suggerisce **`r pa$nfact` fattori** (e `r pa$ncomp` componenti).
+
+### Quando i dati non concordano con la teoria
+
+Il questionario è stato **progettato** per misurare cinque tratti. Se l'analisi parallela suggerisce un numero diverso (con campioni grandi per questi item ne suggerisce spesso sei — la documentazione di psych osserva che il numero suggerito per `bfi` cresce con la numerosità campionaria), che cosa fare?
+
+1. **Ricorda che cos'è l'analisi parallela**: una regola empirica, non un test del numero vero. Con $n$ grande, gli autovalori casuali si avvicinano molto a 1, quindi anche piccoli fattori "minori" (per esempio due item con formulazione simile) superano la soglia.
+2. **Stima entrambe le soluzioni** (5 e 6 fattori) e **confrontale**: il fattore in più è interpretabile? Ha almeno tre item con pesi sostanziali, o è un "doppietto" di due item? Divide un tratto noto in due sfaccettature sensate?
+3. **Scegli la soluzione che sai difendere** su basi teoriche *ed* empiriche, e riporta com'erano le alternative.
+
+Per i Big Five la teoria è solida e il sesto fattore (se c'è) tende a essere piccolo, quindi proseguiamo con **cinque** fattori — e guarderai la soluzione a sei fattori nell'Esercizio 4.
+
+## 7. Stimare il modello
+
+```{r}
+#| label: fa5
+fa5 <- fa(bfi_items,
+          nfactors = 5,
+          fm       = "minres",     # estrazione a residui minimi
+          rotate   = "oblimin",    # rotazione obliqua: i fattori possono correlare
+          cor      = "poly")       # correlazioni policoriche
+```
+
+### Perché una rotazione obliqua?
+
+La soluzione grezza ("non ruotata") è matematicamente valida ma difficile da interpretare. La **rotazione** ruota gli assi dei fattori per ottenere una *struttura semplice*: ogni item pesa fortemente su un fattore e debolmente sugli altri.
+
+- Le rotazioni **ortogonali** (per esempio `"varimax"`) impongono che i fattori siano **incorrelati**.
+- Le rotazioni **oblique** (per esempio `"oblimin"`, `"promax"`) **permettono** correlazioni tra i fattori.
+
+I tratti di personalità *sono* correlati nelle persone reali (per esempio stabilità emotiva e coscienziosità). Costringerli a essere incorrelati distorce i pesi. Una rotazione obliqua lascia decidere ai dati: se i fattori sono davvero incorrelati, oblimin restituirà una soluzione quasi uguale a varimax. Perciò la rotazione obliqua è la scelta predefinita sensata per i tratti psicologici.
+
+### Pesi (loadings)
+
+```{r}
+#| label: loadings
+print(fa5$loadings, cutoff = 0.3, sort = TRUE)
+```
+
+psych nomina i fattori in base al metodo di estrazione — **MR1, MR2, …** per minres, **ML1, ML2, …** per la massima verosimiglianza, **PA1, …** per gli assi principali — e li ordina per varianza spiegata, quindi i numeri non seguono l'ordine A, C, E, N, O. Scopriamo quale tratto rappresenta ciascun fattore guardando quale gruppo di item pesa di più su di esso:
+
+```{r}
+#| label: name-factors
+L <- unclass(fa5$loadings)
+trait <- substr(rownames(L), 1, 1)          # "A", "C", "E", "N", "O"
+factor_trait <- apply(abs(L), 2, \(l) names(which.max(tapply(l, trait, mean))))
+factor_trait
+```
+
+::: {.callout-tip .read-output}
+## Come leggere i pesi
+
+- Ogni numero è un **peso di pattern**: l'effetto diretto del fattore sull'item, al netto degli altri fattori. I pesi inferiori a 0.3 in valore assoluto sono nascosti per far emergere la struttura.
+- Ogni fattore raccoglie gli item di un tratto: `r paste(names(factor_trait), "=", factor_trait, collapse = ", ")`.
+- I **pesi negativi** appartengono agli item con codifica inversa (per esempio A1, C4, C5, E1, E2): non sono un problema, mostrano che l'item misura il polo *opposto*.
+- Un item con due pesi sopra 0.3 è un item con **cross-loading**: è meno pulito come misura di un solo tratto.
+:::
+
+### Comunalità e unicità
+
+```{r}
+#| label: communalities
+data.frame(h2 = round(fa5$communality, 2),
+           u2 = round(fa5$uniquenesses, 2)) |>
+  arrange(h2) |>
+  head(5)
+```
+
+La comunalità media è `r round(mean(fa5$communality), 2)`: in media i cinque fattori spiegano circa il `r round(100 * mean(fa5$communality))`% della varianza di un item. È tipico per i singoli item di personalità, che contengono molta varianza specifica dell'item e rumore. Gli item con $h^2$ molto basso sono debolmente legati ai fattori.
+
+### Correlazioni tra fattori
+
+```{r}
+#| label: phi
+Phi <- fa5$Phi
+dimnames(Phi) <- list(factor_trait, factor_trait)
+round(Phi, 2)
+```
+
+La matrice di correlazione dei fattori $\Phi$ esiste solo per le rotazioni oblique. La correlazione più grande (in valore assoluto) è `r round(max(abs(Phi[lower.tri(Phi)])), 2)`. Queste correlazioni sono moderate, non nulle — ed è proprio per questo che una rotazione ortogonale si adatterebbe male alla teoria.
+
+## 8. Quanto bene si adatta il modello?
+
+```{r}
+#| label: fit
+c(TLI   = fa5$TLI,
+  RMSEA = unname(fa5$RMSEA[1]),
+  RMSR  = fa5$rms)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere gli indici di adattamento
+
+Linee guida convenzionali (per esempio Hu & Bentler, 1999), da usare con **cautela**: sono state sviluppate per modelli confermativi con dati continui e sono indicazioni approssimative nell'analisi esplorativa.
+
+| Indice | Che cosa misura | Comunemente letto come accettabile | Buono |
+|---|---|---|---|
+| **RMSEA** (radice dell'errore quadratico medio di approssimazione) | mancato adattamento per grado di libertà | < 0.08 | < 0.06 (≤ 0.05 "vicino") |
+| **TLI** (indice di Tucker–Lewis) e **CFI** (indice di adattamento comparativo) | miglioramento rispetto a un modello nullo senza correlazioni | ≥ 0.90 | ≥ 0.95 |
+| **RMSR** (radice dello scarto quadratico medio dei residui) | residuo medio delle correlazioni | < 0.08 | < 0.05 |
+
+Qui TLI = `r round(fa5$TLI, 2)` e RMSEA = `r round(unname(fa5$RMSEA[1]), 3)`. psych non riporta il CFI per `fa()`; è un output standard dei software di analisi fattoriale confermativa come **lavaan**. Con le correlazioni policoriche questi indici sono solo approssimati. Qui il TLI è `r if (fa5$TLI < 0.90) "sotto" else "sopra"` la linea guida di 0.90. I modelli esplorativi dei singoli item di personalità spesso si adattano solo moderatamente, perché gli item hanno molte piccole associazioni secondarie (formulazione simile, sfaccettature minori) che un modello a cinque fattori non cattura; valuta l'adattamento insieme a interpretabilità e residui, non con un'unica soglia.
+:::
+
+Per confronto, stima lo stesso modello con una rotazione ortogonale e la massima verosimiglianza:
+
+```{r}
+#| label: compare-varimax
+fa5_ml_vmx <- fa(bfi_items, nfactors = 5, fm = "ml",
+                 rotate = "varimax", cor = "poly")
+colnames(fa5_ml_vmx$loadings)               # ML1, ML2, ... per la massima verosimiglianza
+```
+
+Gli indici di adattamento di una rotazione ortogonale e di una obliqua della stessa estrazione sono **identici**: la rotazione non cambia quanto bene il modello riproduce le correlazioni, ma solo come i fattori vengono descritti. Cambiano l'interpretabilità e la possibilità di avere correlazioni tra fattori.
+
+## 9. Punteggi fattoriali
+
+La posizione stimata di ciascuna persona su ciascun fattore:
+
+```{r}
+#| label: scores
+scores <- fa5$scores
+colnames(scores) <- factor_trait[colnames(scores)]
+head(round(scores, 2), 3)
+```
+
+I punteggi fattoriali sono **stime** (esistono diversi metodi; quello predefinito è la "regressione"). Sono utili per l'esplorazione, ma nella ricerca è comune usare semplici **punteggi somma o media** degli item di ciascuna scala (dopo aver invertito gli item con codifica inversa), oppure modellare direttamente le variabili latenti in un modello di equazioni strutturali.
+
+## 10. Affidabilità: α di Cronbach e ω di McDonald
+
+Una volta saputo quali item formano una scala, verifica la sua **coerenza interna**: con quanta coerenza gli item misurano la stessa cosa.
+
+```{r}
+#| label: alpha
+consc <- bfi_items[, paste0("C", 1:5)]
+alpha_c <- psych::alpha(consc, keys = c("C4", "C5"))   # inverte C4 e C5
+alpha_c$total[, c("raw_alpha", "std.alpha", "average_r")]
+```
+
+L'argomento `keys` dice ad `alpha()` quali item **invertire** prima di combinarli. Dimenticarlo rende α artificialmente basso (o persino negativo), perché gli item con codifica inversa tirano in direzione opposta; psych ti avvisa se alcuni item correlano negativamente con il totale.
+
+**α di Cronbach** = `r round(alpha_c$total$raw_alpha, 2)`. Valori attorno a 0.7–0.8 sono di solito considerati adeguati per le scale di ricerca. α assume che tutti gli item pesino *ugualmente* sul fattore (tau-equivalenza); quando i pesi differiscono, sottostima l'affidabilità. **ω totale di McDonald** usa i pesi fattoriali e non richiede questa assunzione:
+
+```{r}
+#| label: omega
+#| warning: false
+#| message: false
+omega_c <- psych::omega(consc, nfactors = 1, key = c(1, 1, 1, -1, -1),
+                        plot = FALSE)
+omega_c$omega.tot
+```
+
+ω totale è `r round(omega_c$omega.tot, 2)`. (Con un solo fattore, ω gerarchico non ha significato e psych te lo segnala; per i questionari a più fattori, `omega()` con 3 o più fattori di gruppo riporta anche ω gerarchico, la quota di varianza dovuta a un fattore generale.)
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Usare varimax per tratti che ci si aspetta correlati.** Preferisci una rotazione obliqua (oblimin); si riduce a una soluzione ortogonale se i fattori sono davvero incorrelati.
+2. **Usare le correlazioni di Pearson su item Likert con poche categorie.** Attenuano le correlazioni; usa `cor = "poly"`.
+3. **Lasciare che una sola regola decida il numero di fattori.** Analisi parallela, scree, teoria e interpretabilità vanno pesate insieme — e le alternative riportate.
+4. **Applicare meccanicamente le soglie degli indici di adattamento** (o usarne di inventate come "TLI > 0.88 è eccellente"). Usa le guide convenzionali (RMSEA < .06–.08, TLI/CFI ≥ .90–.95) con cautela.
+5. **Dimenticare gli item con codifica inversa** quando si calcolano α o i punteggi somma.
+6. **Chiamare la PCA "analisi fattoriale".** La PCA riassume la varianza totale; l'AF modella la varianza comune con un termine di errore esplicito.
+:::
+
+## 11. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Un item ha comunalità 0.25. Quanto vale la sua unicità e che cosa significa?
+
+Unicità = 1 − 0.25 = **0.75**: tre quarti della varianza dell'item non sono spiegati dai fattori comuni (sono varianza specifica dell'item o errore di misura).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Passare dalla rotazione varimax a oblimin cambia TLI e RMSEA?
+
+**No.** La rotazione ri-esprime lo stesso modello stimato; la matrice di correlazione riprodotta — e quindi l'adattamento — è la stessa. Cambiano i pesi e la possibilità che i fattori correlino.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Perché i pesi della PCA possono sembrare "migliori" (più grandi) di quelli dell'AF sugli stessi dati?
+
+La PCA spiega la varianza totale, compreso il rumore unico di ciascun item, quindi le componenti assorbono errore e i pesi risultano gonfiati. L'AF separa varianza comune e varianza unica.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. L'item E1 ha un peso di −0.55 sul fattore Estroversione. È un cattivo item?
+
+Non necessariamente: E1 («Non parlo molto», "Don't talk a lot") ha **codifica inversa**. Il suo peso negativo significa che misura l'introversione, il polo opposto del fattore, come previsto.
+:::
+
+## 12. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — un fattore in base R.** Usando gli `items` simulati della sezione 2, (a) calcola le comunalità da `factanal()` (suggerimento: `1 - fa_1$uniquenesses`) e confrontale con i pesi veri al quadrato; (b) spiega in una frase perché l'item 5 ha la comunalità più piccola.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+data.frame(true_h2 = true_load^2,
+           estimated_h2 = round(1 - fa_1$uniquenesses, 2))
+```
+Le stime sono vicine a 0.64, 0.49, 0.36, 0.25, 0.16 (l'errore campionario le fa differire leggermente). L'item 5 ha il peso vero più debole (0.4), quindi solo il 16% della sua varianza proviene dal fattore; il resto è rumore.
+:::
+:::
+
+::: {.exercise}
+[★]{.stars} **Esercizio 2 — prevedi.** Stimi `fa(bfi_items, 5, rotate = "varimax", cor = "poly")` e `fa(bfi_items, 5, rotate = "oblimin", cor = "poly")`. Senza eseguire: (a) quale output contiene una matrice di correlazione dei fattori `Phi`? (b) i due valori di TLI differiranno? (c) i pesi differiranno?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+(a) Solo la soluzione oblimin (i fattori varimax sono incorrelati per costruzione). (b) No: stessa estrazione, stesso adattamento. (c) Sì, un po': i pesi oblimin sono più puliti quando i fattori correlano davvero, perché la soluzione varimax deve esprimere la varianza condivisa tra tratti come cross-loading.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi l'affidabilità.** Una studentessa calcola l'affidabilità della scala Amicalità e ottiene un α sorprendentemente basso, con un avviso su item correlati negativamente:
+
+```r
+psych::alpha(bfi_items[, paste0("A", 1:5)])
+```
+
+Spiega il problema e correggilo.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+A1 («Sono indifferente ai sentimenti degli altri») ha codifica inversa e correla negativamente con gli altri item. Invertilo:
+```r
+psych::alpha(bfi_items[, paste0("A", 1:5)], keys = "A1")
+```
+α aumenta sensibilmente una volta che A1 è codificato nella direzione giusta. (`check.keys = TRUE` lo invertirebbe automaticamente, ma specificare le chiavi dalla documentazione del questionario è più sicuro.)
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — cinque o sei?** Stima una soluzione a sei fattori (`fm = "minres"`, `rotate = "oblimin"`, `cor = "poly"`). Stampa i pesi con `cutoff = 0.3`. Quali item pesano sul sesto fattore? È un tratto significativo, una sfaccettatura di un tratto esistente o un fattore minore? Quale soluzione riporteresti, e perché?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+fa6 <- fa(bfi_items, nfactors = 6, fm = "minres",
+          rotate = "oblimin", cor = "poly")
+print(fa6$loadings, cutoff = 0.3, sort = TRUE)
+c(TLI5 = fa5$TLI, TLI6 = fa6$TLI)
+```
+L'adattamento migliora sempre un poco con più fattori. Guarda il fattore in più: di solito ha solo pochi item con pesi modesti (spesso un sottoinsieme di item di Openness o Estroversione), e gran parte della struttura a cinque fattori resta invariata. Se il sesto fattore è debole, ha meno di tre item salienti e manca di un chiaro significato teorico, la soluzione a cinque fattori è più facile da difendere — ma riporta che l'analisi parallela ne suggeriva sei e com'era il sesto fattore.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi su una scala breve.** Prendi solo i 10 item di Nevroticismo ed Estroversione (`N1`–`N5`, `E1`–`E5`). (a) Esegui un'analisi parallela con correlazioni policoriche. (b) Stima una soluzione obliqua a due fattori e interpreta i pesi. (c) Quanto vale la correlazione tra i due fattori? (d) Calcola α per ciascuna scala (ricorda gli E1 ed E2 con codifica inversa).
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+ne <- bfi_items[, c(paste0("N", 1:5), paste0("E", 1:5))]
+
+set.seed(1)
+fa.parallel(ne, fa = "fa", cor = "poly", n.iter = 20)
+
+fa2 <- fa(ne, nfactors = 2, fm = "minres", rotate = "oblimin",
+          cor = "poly")
+print(fa2$loadings, cutoff = 0.3)
+round(fa2$Phi, 2)
+
+psych::alpha(ne[, paste0("N", 1:5)])$total$raw_alpha
+psych::alpha(ne[, paste0("E", 1:5)], keys = c("E1", "E2"))$total$raw_alpha
+```
+Gli item N pesano su un fattore e gli item E sull'altro, con E1 ed E2 negativi. I due fattori sono solo debolmente correlati (controlla segno e dimensione in `Phi`). Entrambe le scale hanno tipicamente α sopra 0.75. L'analisi parallela di solito suggerisce due fattori, forse di più con questo campione grande.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| $X = \Lambda F + \varepsilon$ | item = pesi × fattori latenti + parte unica |
+| `polychoric(x)$rho` | correlazioni per item ordinali (Likert) |
+| `KMO()`, `cortest.bartlett()` | verifiche di fattorizzabilità |
+| `fa.parallel(x, cor = "poly")` | analisi parallela per il numero di fattori |
+| `fa(x, nfactors, fm = "minres", rotate = "oblimin", cor = "poly")` | analisi fattoriale esplorativa |
+| `$loadings`, `$communality`, `$uniquenesses`, `$Phi` | pesi di pattern, $h^2$, $u^2$, correlazioni tra fattori |
+| `$TLI`, `$RMSEA`, `$rms` | indici di adattamento |
+| `alpha(x, keys = )`, `omega(x)` | affidabilità (α, ω), con item a codifica inversa |
+
+- L'AF spiega la **varianza comune** tramite fattori latenti; la PCA riassume la **varianza totale**.
+- Usa **correlazioni policoriche** per gli item Likert e una **rotazione obliqua** per i tratti che possono correlare.
+- Decidi il numero di fattori con l'**analisi parallela e la teoria**, e riporta le alternative.
+- Leggi gli indici di adattamento con soglie **convenzionali e prudenti**; la rotazione non cambia l'adattamento.
+- Verifica l'**affidabilità** con α e ω, dopo aver invertito gli item con codifica inversa.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Revelle, W., *An introduction to psychometric theory with applications in R*, <https://personality-project.org/r/book/>
+- Revelle, W. & Condon, D. M. (2019), "Reliability from α to ω: A tutorial", preprint <https://osf.io/preprints/psyarxiv/2y3w9>
+- Documentazione del pacchetto psych per `fa()`, <https://search.r-project.org/CRAN/refmans/psych/html/fa.html>
+:::

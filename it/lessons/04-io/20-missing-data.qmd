@@ -18,7 +18,7 @@ library(tidyr)
 ```
 
 ::: {.lesson-meta}
-[Livello 1 · Fondamenti]{.level-1} [⏱ ~75 min]{} [Prerequisiti: [Importare i dati](18-import.qmd), [I verbi di dplyr](../02-data/09-dplyr-verbs.qmd), [Iterazione](../03-programming/17-iteration.qmd)]{}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~75 min]{} [Prerequisiti: [Importare i dati](18-import.qmd), [Manipolazione dei dati con dplyr](../02-data/09-dplyr-verbs.qmd), [Iterazione con apply e purrr](../03-programming/17-iteration.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}
@@ -174,7 +174,7 @@ missing <- lapply(p_miss, \(p) runif(n) < p)
 sapply(missing, mean)                       # quota di valori mancanti
 ```
 
-`plogis()` trasforma qualsiasi numero in una probabilità tra 0 e 1 (è la funzione *logistica* che incontrerai nella [regressione logistica](../../../lessons/09-regression/41-logistic-regression.qmd)); un'età maggiore, o un reddito maggiore, significa una probabilità più alta di mancare. I tre meccanismi eliminano una quota simile di valori, ma valori **diversi**:
+`plogis()` trasforma qualsiasi numero in una probabilità tra 0 e 1 (è la funzione *logistica* che incontrerai nella [regressione logistica](../09-regression/41-logistic-regression.qmd)); un'età maggiore, o un reddito maggiore, significa una probabilità più alta di mancare. I tre meccanismi eliminano una quota simile di valori, ma valori **diversi**:
 
 ```{r}
 #| label: sim-cc

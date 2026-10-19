@@ -17,7 +17,7 @@ library(dplyr)
 ```
 
 ::: {.lesson-meta}
-[Livello 2 · Descrivere ed esplorare]{.level-2} [⏱ ~60 min]{} [Prerequisiti: [Fattori](../01-foundations/06-factors.qmd), [Riepiloghi per gruppi](../02-data/10-grouped-summaries.qmd)]{}
+[Livello 2 · Descrivere ed esplorare]{.level-2} [⏱ ~60 min]{} [Prerequisiti: [Fattori e tipi di variabili](../01-foundations/06-factors.qmd), [Sintesi per gruppi](../02-data/10-grouped-summaries.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}

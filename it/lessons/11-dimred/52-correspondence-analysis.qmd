@@ -1,0 +1,426 @@
+---
+title: "Analisi delle corrispondenze"
+subtitle: "Una mappa delle associazioni in una tabella di contingenza — e come leggerla correttamente"
+description: "Impara profili di riga e di colonna, masse e inerzia, esegui l'analisi delle corrispondenze con ca::ca(), costruisci una corretta mappa simmetrica con le coordinate principali e interpreta contributi e qualità della rappresentazione."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~80 min]{} [Prerequisiti: [Proporzioni e test chi-quadrato](../08-inference/35-proportions-chisq.qmd), [Analisi delle componenti principali](50-pca.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- descrivere una tabella di contingenza attraverso **profili di riga e di colonna**, **masse** e **inerzia** ($\chi^2 / n$);
+- spiegare l'analisi delle corrispondenze (CA) come una "PCA per le tabelle" ed eseguirla con `ca::ca()`;
+- distinguere le **coordinate standard e principali** e disegnare una corretta **mappa simmetrica**;
+- usare i **contributi** e la **qualità della rappresentazione (cos²)** per decidere che cosa una mappa può dirti;
+- interpretare una mappa CA senza i soliti errori.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(ca)
+```
+
+## 1. Perché l'analisi delle corrispondenze?
+
+In [Proporzioni e test chi-quadrato](../08-inference/35-proportions-chisq.qmd) hai imparato a chiederti *"colore dei capelli e colore degli occhi sono associati?"* Il test chi-quadrato risponde sì o no. Ma non dice **quali** colori di capelli vanno con **quali** colori di occhi, né come le categorie si relazionano tra loro.
+
+L'analisi delle corrispondenze (CA) trasforma una tabella di contingenza in una **mappa**: le categorie con profili simili sono disegnate vicine, e i principali schemi di associazione diventano direzioni sulla mappa. È a una tabella di frequenze ciò che la PCA è a una tabella di misure.
+
+## 2. I dati e il test chi-quadrato
+
+`HairEyeColor` classifica 592 studenti per colore dei capelli, colore degli occhi e sesso. Aggreghiamo sul sesso:
+
+```{r}
+#| label: table
+hair_eye <- margin.table(HairEyeColor, margin = c(1, 2))
+hair_eye
+
+chi <- chisq.test(hair_eye)
+chi
+```
+
+Il test dà $\chi^2 =$ `r round(chi$statistic, 1)` con `r chi$parameter` gradi di libertà ($(4-1)(4-1)$): evidenza schiacciante di associazione. I **residui di Pearson** (osservato − atteso) / √atteso mostrano dove si trova l'associazione:
+
+```{r}
+#| label: residuals
+round(chi$residuals, 1)
+```
+
+Grandi residui positivi (Blond–Blue, Black–Brown) segnalano combinazioni che si verificano molto più spesso di quanto prevederebbe l'indipendenza. La CA riassumerà in un'immagine l'intera tabella di residui.
+
+## 3. Profili, masse e inerzia
+
+La CA lavora con le **proporzioni**, non con le frequenze assolute.
+
+- Un **profilo di riga** è una riga divisa per il suo totale: la distribuzione dei colori degli occhi *all'interno* di un colore di capelli.
+- Il **profilo di riga medio** (i margini di colonna) è la distribuzione dei colori degli occhi nell'intero campione.
+
+```{r}
+#| label: profiles
+round(prop.table(hair_eye, margin = 1), 2)    # profili di riga
+round(prop.table(margin.table(hair_eye, 2)), 2)  # profilo medio
+```
+
+Gli studenti biondi hanno un profilo molto diverso dalla media (`r round(100 * prop.table(hair_eye, 1)["Blond", "Blue"])`% di occhi azzurri contro il `r round(100 * prop.table(margin.table(hair_eye, 2))["Blue"])`% complessivo), mentre gli studenti con capelli castani sono vicini alla media.
+
+- La **massa** di una riga è la sua quota sul totale ($n_{i+}/n$). Le righe pesanti (molte persone) contano di più nell'analisi.
+- L'**inerzia** di una tabella misura quanto i profili sono lontani, in media, dal profilo medio. È pari a
+
+$$
+\text{inerzia totale} = \frac{\chi^2}{n}.
+$$
+
+```{r}
+#| label: inertia
+n <- sum(hair_eye)
+unname(chi$statistic / n)
+```
+
+Se colore dei capelli e colore degli occhi fossero indipendenti, ogni profilo di riga sarebbe uguale al profilo medio e l'inerzia sarebbe 0. La CA scompone questa inerzia in **dimensioni**, proprio come la PCA scompone la varianza in componenti.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: le distanze chi-quadrato
+
+La distanza tra un profilo di riga $a_i$ e il profilo medio $c$ è la **distanza chi-quadrato**
+
+$$
+d^2(a_i, c) = \sum_j \frac{(a_{ij} - c_j)^2}{c_j}.
+$$
+
+Dividere per $c_j$ dà più peso alle differenze nelle colonne **rare**. L'inerzia totale è la media, pesata con le masse, di queste distanze al quadrato: $\sum_i r_i \, d^2(a_i, c) = \chi^2/n$, dove $r_i$ è la massa della riga. Lo stesso vale per le colonne.
+:::
+
+## 4. Eseguire la CA
+
+```{r}
+#| label: ca-fit
+ca_he <- ca(hair_eye)
+ca_he
+```
+
+Una tabella 4 × 4 ha al massimo $\min(4, 4) - 1 = 3$ dimensioni. Le **inerzie principali** (autovalori) sono i valori singolari al quadrato:
+
+```{r}
+#| label: inertia-dims
+eig <- ca_he$sv^2
+data.frame(dim = seq_along(eig),
+           inertia = round(eig, 4),
+           percent = round(100 * eig / sum(eig), 1),
+           cumulative = round(100 * cumsum(eig) / sum(eig), 1))
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Le inerzie si sommano all'inerzia totale: `r round(sum(eig), 4)` = $\chi^2/n$.
+- La **dimensione 1** da sola rappresenta il `r round(100 * eig[1] / sum(eig), 1)`% dell'inerzia, la **dimensione 2** il `r round(100 * eig[2] / sum(eig), 1)`%. Insieme, una mappa bidimensionale mostra il `r round(100 * sum(eig[1:2]) / sum(eig), 1)`% dell'associazione nella tabella: quasi tutta.
+:::
+
+## 5. Coordinate standard e coordinate principali
+
+È qui che si commettono la maggior parte degli errori, quindi andiamo con cautela. `ca()` restituisce le **coordinate standard** in `rowcoord` e `colcoord`. Ogni dimensione delle coordinate standard ha varianza (pesata) 1: **non** riflettono l'importanza della dimensione.
+
+Le **coordinate principali** sono le coordinate standard moltiplicate per il valore singolare di ciascuna dimensione:
+
+$$
+\text{principale} = \text{standard} \times \sqrt{\text{inerzia della dimensione}}.
+$$
+
+Nelle coordinate principali, la dispersione dei punti lungo ciascun asse riflette l'inerzia di quell'asse, e le distanze tra le righe (o tra le colonne) approssimano le loro distanze chi-quadrato.
+
+```{r}
+#| label: coords
+row_pc <- sweep(ca_he$rowcoord, 2, ca_he$sv, `*`)   # coordinate principali
+col_pc <- sweep(ca_he$colcoord, 2, ca_he$sv, `*`)
+round(row_pc[, 1:2], 3)
+round(col_pc[, 1:2], 3)
+```
+
+La **mappa simmetrica** — il grafico CA standard — mostra **sia le righe sia le colonne in coordinate principali**. È ciò che `plot()` disegna per impostazione predefinita:
+
+```{r}
+#| label: fig-ca-plot
+#| fig-cap: "Mappa CA simmetrica del colore dei capelli (blu) e del colore degli occhi (rosso), entrambi in coordinate principali."
+plot(ca_he, map = "symmetric")
+```
+
+La stessa mappa con ggplot:
+
+```{r}
+#| label: fig-ca-gg
+#| fig-cap: "Mappa CA simmetrica costruita con le coordinate principali. Le etichette degli assi mostrano la percentuale di inerzia."
+pct <- round(100 * eig / sum(eig), 1)
+
+ca_map <- bind_rows(
+  data.frame(label = ca_he$rownames, dim1 = row_pc[, 1], dim2 = row_pc[, 2],
+             type = "Capelli"),
+  data.frame(label = ca_he$colnames, dim1 = col_pc[, 1], dim2 = col_pc[, 2],
+             type = "Occhi")
+)
+
+ggplot(ca_map, aes(dim1, dim2, colour = type, shape = type)) +
+  geom_hline(yintercept = 0, colour = "grey70") +
+  geom_vline(xintercept = 0, colour = "grey70") +
+  geom_point(size = 3) +
+  geom_text(aes(label = label), vjust = -0.9, show.legend = FALSE) +
+  coord_equal() +
+  labs(x = paste0("Dimensione 1 (", pct[1], "%)"),
+       y = paste0("Dimensione 2 (", pct[2], "%)"),
+       colour = NULL, shape = NULL)
+```
+
+`coord_equal()` è importante: un'unità su ciascun asse deve avere la stessa lunghezza, altrimenti le distanze sulla mappa risultano distorte.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la CA come SVD dei residui standardizzati
+
+Sia $P = N/n$ la tabella delle proporzioni, $r$ e $c$ le masse di riga e di colonna, e $D_r = \mathrm{diag}(r)$, $D_c = \mathrm{diag}(c)$. La CA è la decomposizione ai valori singolari della matrice dei **residui standardizzati**
+
+$$
+S = D_r^{-1/2}\,(P - r c^\top)\,D_c^{-1/2} = U \Sigma V^\top .
+$$
+
+Ogni elemento di $S$ è un residuo di Pearson diviso per $\sqrt n$, quindi $\sum_{ij} s_{ij}^2 = \chi^2/n$, e i valori singolari al quadrato $\sigma_k^2$ sono le inerzie principali. Allora
+
+- coordinate standard: righe $D_r^{-1/2} U$, colonne $D_c^{-1/2} V$;
+- coordinate principali: righe $D_r^{-1/2} U \Sigma$, colonne $D_c^{-1/2} V \Sigma$.
+
+Possiamo verificarlo a mano:
+
+```{r}
+#| label: svd-by-hand
+P  <- hair_eye / n
+rm <- rowSums(P)
+cm <- colSums(P)
+S  <- diag(1 / sqrt(rm)) %*% (P - rm %o% cm) %*% diag(1 / sqrt(cm))
+s  <- svd(S)
+
+s$d[1:3]^2                                # inerzie principali
+ca_he$sv^2                                # uguali, da ca()
+all.equal(abs(diag(1 / sqrt(rm)) %*% s$u[, 1:3]),
+          abs(unname(ca_he$rowcoord)))    # coordinate standard delle righe
+```
+
+(Come nella PCA, il segno di ciascuna dimensione è arbitrario, quindi confrontiamo i valori assoluti.)
+:::
+
+## 6. Leggere correttamente la mappa
+
+In una mappa simmetrica, usa queste regole:
+
+1. Le **distanze tra le righe** (colori dei capelli) approssimano le distanze chi-quadrato tra i loro profili: colori di capelli vicini hanno distribuzioni dei colori degli occhi simili. Lo stesso vale **tra le colonne**.
+2. **Distanza dall'origine**: l'origine è il profilo medio. Le categorie lontane dall'origine hanno profili molto diversi dalla media; le categorie vicine all'origine sono "nella media".
+3. Le **relazioni riga–colonna** si leggono attraverso le **direzioni**, non le distanze: una riga e una colonna che si trovano nella **stessa direzione rispetto all'origine**, entrambe lontane da essa, sono associate positivamente (più frequenti insieme del previsto); direzioni opposte significano che compaiono insieme meno del previsto.
+4. **Le distanze tra un punto riga e un punto colonna non sono direttamente interpretabili** in una mappa simmetrica. I due insiemi di punti sono su scale diverse. (Le mappe *asimmetriche*, `plot(ca_he, map = "rowprincipal")`, permettono una lettura più rigorosa delle relazioni riga–colonna, al prezzo di un'immagine meno compatta.)
+
+::: {.callout-tip .read-output}
+## Che cosa mostra la mappa capelli–occhi
+
+- La **dimensione 1** (`r pct[1]`%) è un asse chiaro–scuro. I capelli **biondi** (Blond) e gli occhi **azzurri** (Blue) stanno insieme a un'estremità; i capelli **neri** (Black) e, in modo meno estremo, castani (Brown) stanno con gli occhi **marroni** (Brown) all'altra. Ciò corrisponde ai residui più grandi: Blond–Blue (`r round(chi$residuals["Blond", "Blue"], 1)`) e Black–Brown (`r round(chi$residuals["Black", "Brown"], 1)`).
+- La **dimensione 2** (`r pct[2]`%) separa i capelli **rossi** (Red) e gli occhi **verdi** (Green) (e in parte nocciola, Hazel) dai capelli neri (residuo Red–Green: `r round(chi$residuals["Red", "Green"], 1)`).
+- I capelli **castani** (Brown) sono vicini all'origine: il loro profilo dei colori degli occhi è vicino alla media, come avevamo visto nei profili.
+:::
+
+Evita di leggere i quadranti come categorie ("quadrante I = …"): i segni degli assi sono arbitrari e i quadranti non hanno significato in sé.
+
+## 7. Contributi e qualità della rappresentazione
+
+Due diagnostiche ti aiutano a decidere quali punti guidano una dimensione e quali punti sono mostrati fedelmente.
+
+- Il **contributo** di una riga a una dimensione è la quota di inerzia di quella dimensione dovuta alla riga: $\text{massa} \times (\text{coordinata standard})^2$. I contributi a ciascuna dimensione sommano a 1.
+- La **qualità** della rappresentazione di una riga su una dimensione (**cos²**) è la quota dell'inerzia propria della riga che la dimensione mostra: $(\text{coordinata principale})^2 / (\text{distanza chi-quadrato dal centroide})^2$. Sommata sulle dimensioni 1 e 2 dice quanto bene il punto è rappresentato sulla mappa (1 = perfettamente).
+
+```{r}
+#| label: ctr-cos2
+row_ctr  <- ca_he$rowmass * ca_he$rowcoord[, 1:2]^2
+row_cos2 <- row_pc[, 1:2]^2 / ca_he$rowdist^2
+col_ctr  <- ca_he$colmass * ca_he$colcoord[, 1:2]^2
+col_cos2 <- col_pc[, 1:2]^2 / ca_he$coldist^2
+
+round(cbind(ctr = row_ctr, cos2 = row_cos2, quality = rowSums(row_cos2)), 3)
+round(cbind(ctr = col_ctr, cos2 = col_cos2, quality = rowSums(col_cos2)), 3)
+```
+
+`summary()` riporta le stesse quantità, moltiplicate per 1000 (per mille):
+
+```{r}
+#| label: summary-ca
+summary(ca_he)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere `summary()`
+
+- `mass` — quota sul totale; `qlt` — qualità della rappresentazione nelle dimensioni mostrate (somma dei cos²); `inr` — quota dell'inerzia totale dovuta a questo punto.
+- Per ciascuna dimensione `k`: la coordinata principale, `cor` (cos², qualità su quella dimensione) e `ctr` (contributo alla dimensione).
+- La dimensione 1 è guidata soprattutto da **Blond** (contributo `r round(1000 * row_ctr["Blond", 1])`‰) e, tra i colori degli occhi, da **Blue** e **Brown** (`r round(1000 * col_ctr["Blue", 1])` e `r round(1000 * col_ctr["Brown", 1])`‰). La dimensione 2 è guidata da **Red** (capelli) e **Green** (occhi).
+- Tutti i punti sono ben rappresentati sulla mappa 2-D; il più debole è **`r names(which.min(c(rowSums(row_cos2), rowSums(col_cos2))))`** (qualità `r round(min(c(rowSums(row_cos2), rowSums(col_cos2))), 2)`), che ha comunque parte della sua inerzia sulla dimensione 3.
+:::
+
+Un punto con **bassa qualità** non va interpretato in base alla sua posizione sulla mappa: può sembrare vicino a un altro punto solo perché la differenza tra i due sta in una dimensione che non è mostrata.
+
+## 8. Oltre due variabili: l'analisi delle corrispondenze multiple
+
+Con **più di due** variabili categoriali (per esempio capelli, occhi *e* sesso, o le risposte a un intero sondaggio), usa l'**analisi delle corrispondenze multiple** (MCA). La MCA richiede una riga per individuo:
+
+```{r}
+#| label: mca
+#| eval: false
+he_df <- as.data.frame(HairEyeColor)
+people <- he_df[rep(seq_len(nrow(he_df)), he_df$Freq), c("Hair", "Eye", "Sex")]
+
+mca_fit <- FactoMineR::MCA(people, graph = FALSE)
+plot(mca_fit, invisible = "ind")    # mostra solo le categorie
+```
+
+(Non eseguito qui; richiede il pacchetto **FactoMineR**.) Le regole di lettura sono le stesse della CA, ma è noto che le percentuali di inerzia nella MCA sono pessimistiche, perciò non vanno confrontate con quelle della CA semplice.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Disegnare le coordinate standard** (`rowcoord`, `colcoord`) come se fossero la mappa. Moltiplica per i valori singolari (coordinate principali), oppure usa `plot(ca_obj)`.
+2. **Interpretare la distanza tra un punto riga e un punto colonna** in una mappa simmetrica. Leggi le associazioni riga–colonna attraverso le direzioni dall'origine.
+3. **Interpretare i quadranti** o il segno di un asse. I segni sono arbitrari.
+4. **Interpretare punti mal rappresentati** (bassa qualità / cos²) dalla loro posizione sulla mappa.
+5. **Chiamare "contributi" quelle che in realtà sono coordinate**: i contributi sono massa × coordinata standard², e sommano a 1 per dimensione.
+6. **Raggruppare le coordinate CA senza un motivo.** La CA è descrittiva; se vuoi gruppi di categorie, spiega perché e usa le distanze chi-quadrato, non un algoritmo arbitrario su una manciata di punti.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Una tabella 5 × 3 ha inerzia totale 0.10 e n = 500. Quanto valeva la statistica chi-quadrato e quante dimensioni ha la CA?
+
+$\chi^2 = 0.10 \times 500 = 50$. Le dimensioni sono $\min(5, 3) - 1 = 2$.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Su una mappa simmetrica il punto "Red" (capelli) è molto vicino al punto "Hazel" (occhi). Puoi concludere che le persone con i capelli rossi hanno per lo più occhi nocciola?
+
+No. Le **distanze** riga–colonna non sono interpretabili in una mappa simmetrica. Guarda le direzioni dall'origine, i residui o il profilo di riga dei capelli rossi (dove in realtà gli occhi marroni sono i più frequenti).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Qual è la differenza tra coordinate standard e coordinate principali?
+
+Coordinate principali = coordinate standard × valore singolare. Le coordinate principali riflettono l'importanza (inerzia) di ciascuna dimensione e approssimano le distanze chi-quadrato; le coordinate standard hanno varianza pesata unitaria su ogni dimensione.
+:::
+
+## 10. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — prevedi, poi verifica.** Aggrega `HairEyeColor` sulla tabella **Capelli × Sesso** (Hair × Sex). (a) Quante dimensioni avrà la CA? (b) Calcola la sua inerzia totale come $\chi^2/n$. (c) Quale percentuale di inerzia spiegherà la dimensione 1?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+hair_sex <- margin.table(HairEyeColor, c(1, 3))
+unname(chisq.test(hair_sex)$statistic / sum(hair_sex))   # circa 0.0135
+ca(hair_sex)$sv^2
+```
+(a) $\min(4, 2) - 1 = 1$ dimensione. (b) Circa 0.0135, molto meno che per capelli × occhi (≈ 0.23): sesso e colore dei capelli sono solo debolmente associati. (c) Con una sola dimensione, ne spiega il 100%.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — correggi la mappa.** Questo codice disegna una "mappa CA" per `hair_eye`. Che cosa c'è che non va, e come lo correggi?
+
+```r
+ca_he <- ca(hair_eye)
+plot(rbind(ca_he$rowcoord[, 1:2], ca_he$colcoord[, 1:2]), type = "n")
+text(ca_he$rowcoord[, 1:2], ca_he$rownames, col = "blue")
+text(ca_he$colcoord[, 1:2], ca_he$colnames, col = "red")
+```
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Disegna le coordinate **standard**, che danno alle due dimensioni la stessa dispersione benché la dimensione 1 abbia circa nove volte più inerzia della dimensione 2. Inoltre gli assi non hanno la stessa scala. Usa le coordinate principali e un rapporto d'aspetto 1:1:
+```r
+rp <- sweep(ca_he$rowcoord[, 1:2], 2, ca_he$sv[1:2], `*`)
+cp <- sweep(ca_he$colcoord[, 1:2], 2, ca_he$sv[1:2], `*`)
+plot(rbind(rp, cp), type = "n", asp = 1)
+text(rp, ca_he$rownames, col = "blue")
+text(cp, ca_he$colnames, col = "red")
+```
+oppure semplicemente `plot(ca_he)`.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — contributi a mano.** Per la CA capelli–occhi, verifica che (a) i contributi dei quattro colori di capelli alla dimensione 1 sommino a 1; (b) l'inerzia principale della dimensione 1 sia uguale alla somma, pesata con le masse, delle coordinate principali al quadrato delle righe.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+sum(ca_he$rowmass * ca_he$rowcoord[, 1]^2)              # 1
+row_pc <- ca_he$rowcoord[, 1] * ca_he$sv[1]
+c(sum(ca_he$rowmass * row_pc^2), ca_he$sv[1]^2)         # uguali, circa 0.209
+```
+Le coordinate standard sono normalizzate in modo che la loro somma pesata dei quadrati sia 1 su ogni dimensione; moltiplicare per il valore singolare la riscala sull'inerzia della dimensione.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — interpreta.** Nel summary della CA capelli–occhi, `Hazel` ha la qualità più bassa sulla mappa 2-D, con parte della sua inerzia (circa il 12%) sulla dimensione 3. Che cosa implica per affermazioni come "gli occhi nocciola stanno a metà strada tra gli occhi marroni e quelli verdi"?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Parte di ciò che distingue il profilo nocciola non è visibile nel piano delle dimensioni 1–2. La sua posizione sulla mappa è comunque informativa (la sua qualità è abbastanza alta, circa 0.88), ma affermazioni precise sulla sua esatta posizione rispetto ad altri punti vanno fatte con cautela. Controlla `qlt` prima di interpretare un punto e, se serve, guarda la dimensione 3 (`plot(ca_he, dim = c(1, 3))`).
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi.** I dati `smoke` nel pacchetto **ca** classificano 193 dipendenti di un'azienda fittizia per gruppo professionale (dirigenti senior e junior, impiegati senior e junior, segretarie) e intensità del fumo. (a) Esegui un test chi-quadrato. (b) Esegui la CA e riporta la percentuale di inerzia delle prime due dimensioni. (c) Disegna la mappa simmetrica e descrivi lo schema principale. (d) Che cosa suggerisce il risultato del test chi-quadrato su quanto fidarsi di quello schema?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+data(smoke, package = "ca")
+chisq.test(smoke)           # avviso: alcune frequenze attese sono piccole
+ca_smoke <- ca(smoke)
+round(100 * ca_smoke$sv^2 / sum(ca_smoke$sv^2), 1)
+plot(ca_smoke)
+summary(ca_smoke)
+```
+Il test dà $\chi^2 \approx 16.4$ con 12 gdl, p ≈ 0.17: **nessuna associazione significativa**, e R avvisa che alcune frequenze attese sono piccole. La CA funziona comunque: la dimensione 1 spiega circa l'88% dell'inerzia e contrappone i non fumatori (con i dipendenti senior, SE, e le segretarie, SC) ai fumatori (con i gruppi junior, JM e JE). Ma con così poca evidenza di associazione complessiva, questo schema è una **descrizione di questo campione** che potrebbe non replicarsi. La CA è descrittiva; non sostituisce il test.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| `margin.table(x, c(1, 2))` | aggrega una tabella a più vie su due variabili |
+| `prop.table(tab, 1)` | profili di riga |
+| $\chi^2 / n$ | inerzia totale: quanto i profili sono lontani dall'indipendenza |
+| `ca(tab)` | analisi delle corrispondenze (`sv`, `rowcoord`, `colcoord`, masse, distanze) |
+| `ca_obj$sv^2` | inerzie principali (autovalori) |
+| standard × `sv` | coordinate principali |
+| `plot(ca_obj)` | mappa simmetrica (entrambi gli insiemi in coordinate principali) |
+| `summary(ca_obj)` | massa, qualità, inerzia, coordinate, cos², contributi (×1000) |
+| `FactoMineR::MCA()` | CA multipla per più variabili categoriali |
+
+- La CA scompone l'**inerzia** $\chi^2/n$ di una tabella in poche dimensioni.
+- Una mappa simmetrica corretta usa le **coordinate principali** per righe e colonne, con assi alla stessa scala.
+- Interpreta le distanze **tra righe** e **tra colonne**; leggi l'associazione riga–colonna attraverso le **direzioni dall'origine**.
+- Usa i **contributi** per dare un nome alle dimensioni e la **qualità (cos²)** per decidere quali punti si possono interpretare.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Greenacre, M., *Correspondence Analysis in Practice* (3a ed.), CRC Press — la tradizionale introduzione pratica.
+- Nenadić, O. & Greenacre, M. (2007), "Correspondence Analysis in R, with Two- and Three-dimensional Graphics: The ca Package", *Journal of Statistical Software* 20(3), <https://www.jstatsoft.org/v20/i03/>
+:::

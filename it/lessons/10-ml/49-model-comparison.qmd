@@ -1,0 +1,516 @@
+---
+title: "Confrontare e scegliere i modelli"
+subtitle: "Cinque modelli, gli stessi ricampionamenti, un solo test finale onesto"
+description: "Confronta regressione logistica, albero decisionale, foresta casuale, alberi potenziati e SVM sugli stessi fold di convalida incrociata con workflowsets; scegli un modello in base a prestazioni, semplicità, interpretabilità e calibrazione; valuta il vincitore una sola volta sull'insieme di test; spiegalo con l'importanza per permutazione; e rifletti sull'uso responsabile."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~90 min]{} [Prerequisiti: [Il flusso di lavoro del machine learning](44-ml-workflow.qmd), [Foreste casuali (random forest)](46-random-forests.qmd), [Gradient boosting](47-gradient-boosting.qmd), [Macchine a vettori di supporto (SVM)](48-svm.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- confrontare più modelli in modo **equo**, sugli stessi ricampionamenti e con le stesse metriche, usando `workflow_set()` e `workflow_map()`;
+- leggere l'output di `autoplot()` e `rank_results()` e giudicare se le differenze superano la loro incertezza;
+- scegliere un modello in base a **prestazioni, semplicità, interpretabilità e calibrazione**, e costruire un **grafico di calibrazione**;
+- finalizzare il workflow scelto e valutarlo **esattamente una volta** sull'insieme di test con `last_fit()`;
+- calcolare l'**importanza per permutazione** per qualsiasi modello, ed elencare le principali domande sull'uso responsabile.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(tidymodels)   # include workflowsets
+library(rpart)        # motore: albero decisionale
+library(ranger)       # motore: foresta casuale
+library(xgboost)      # motore: alberi potenziati
+library(kernlab)      # motore: SVM
+```
+
+## 1. Perché confrontare i modelli in modo sistematico?
+
+Nelle ultime cinque lezioni abbiamo adattato cinque tipi di modello ai dati del Titanic. Quale dovremmo usare? È allettante rileggere i numeri stampati in ciascuna lezione e scegliere il più grande. Sarebbe un errore, per tre motivi:
+
+- **Condizioni diverse.** Se due modelli sono stati valutati con fold diversi, metriche diverse o preprocessing diverso, i loro numeri non sono confrontabili.
+- **Rumore.** Le stime in convalida incrociata hanno un errore standard. Una differenza di 0.005 nell'AUC può essere puro caso.
+- **L'insieme di test.** Ogni lezione ha chiamato `last_fit()` una volta — va bene per insegnare, ma se ora scegliessimo il modello con il miglior punteggio *sul test*, l'insieme di test diventerebbe parte della selezione, e il suo punteggio sarebbe ottimistico.
+
+Non esiste nemmeno un metodo migliore in assoluto (a volte lo si chiama principio del *no free lunch*): quale modello funzioni meglio dipende dai dati. La procedura onesta è:
+
+1. valutare **tutti i candidati sugli stessi ricampionamenti dell'insieme di addestramento**, con le stesse metriche;
+2. sceglierne uno, usando le prestazioni *e* altri criteri;
+3. solo allora, valutare il modello scelto **una sola volta** sull'insieme di test.
+
+## 2. Dati, suddivisione, fold e metriche
+
+Esattamente come nella [lezione sul flusso di lavoro del machine learning](44-ml-workflow.qmd):
+
+```{r}
+#| label: titanic-data
+titanic <- readr::read_csv(data_path("titanic_data.csv"),
+                           na = c("", "NA", "?"), show_col_types = FALSE) |>
+  select(survived, pclass, sex, age, sibsp, parch, fare, embarked) |>
+  mutate(
+    survived = factor(survived, levels = c(1, 0), labels = c("yes", "no")),
+    pclass   = factor(pclass, levels = 1:3, labels = c("1st", "2nd", "3rd")),
+    sex      = factor(sex),
+    embarked = factor(embarked)
+  )
+
+set.seed(2026)
+titanic_split <- initial_split(titanic, prop = 0.75, strata = survived)
+titanic_train <- training(titanic_split)
+titanic_test  <- testing(titanic_split)
+set.seed(2026)
+titanic_folds <- vfold_cv(titanic_train, v = 5, strata = survived)
+titanic_metrics <- metric_set(roc_auc, accuracy, sensitivity, specificity,
+                              brier_class, mn_log_loss)
+```
+
+### Due recipe
+
+I modelli differiscono per il preprocessing di cui hanno bisogno. La regressione logistica, le SVM e XGBoost richiedono predittori numerici (variabili dummy); le SVM richiedono anche la normalizzazione. Alberi e foreste lavorano direttamente con i fattori.
+
+```{r}
+#| label: recipes
+dummy_rec <- recipe(survived ~ ., data = titanic_train) |>
+  step_impute_median(all_numeric_predictors()) |>
+  step_impute_mode(all_nominal_predictors()) |>
+  step_log(fare, offset = 1) |>
+  step_dummy(all_nominal_predictors()) |>
+  step_normalize(all_numeric_predictors())
+
+basic_rec <- recipe(survived ~ ., data = titanic_train) |>
+  step_impute_median(all_numeric_predictors()) |>
+  step_impute_mode(all_nominal_predictors())
+```
+
+`dummy_rec` è la recipe della lezione 44; `basic_rec` quella usata per alberi e foreste nelle lezioni 45 e 46. La normalizzazione è innocua per gli alberi potenziati, quindi possono condividere `dummy_rec`.
+
+### Cinque specifiche di modello
+
+```{r}
+#| label: specs
+lr_spec <- logistic_reg() |>
+  set_engine("glm")
+
+tree_spec <- decision_tree(cost_complexity = tune(), tree_depth = tune(),
+                           min_n = 10) |>
+  set_engine("rpart")
+
+rf_spec <- rand_forest(mtry = tune(), min_n = tune(), trees = 500) |>
+  set_engine("ranger")
+
+xgb_spec <- boost_tree(trees = tune(), tree_depth = tune(),
+                       learn_rate = tune()) |>
+  set_engine("xgboost")
+
+svm_spec <- svm_rbf(cost = tune(), rbf_sigma = tune()) |>
+  set_engine("kernlab")
+
+all_specs <- list(lr_spec, tree_spec, rf_spec, xgb_spec, svm_spec)
+all_specs <- lapply(all_specs, \(s) set_mode(s, "classification"))
+names(all_specs) <- c("logistic", "tree", "forest", "boost", "svm")
+```
+
+Le specifiche sono quelle delle lezioni precedenti, leggermente semplificate (500 alberi per la foresta; per il boosting ottimizziamo direttamente il numero di alberi invece di usare l'arresto anticipato).
+
+## 3. Un workflow set
+
+Un **workflow set** contiene molti workflow — combinazioni di un preprocessore e di un modello — in un'unica tabella. `workflow_set(preproc, models)` incrocia ogni preprocessore con ogni modello; poiché le nostre due recipe vanno con modelli diversi, costruiamo due insiemi e li impiliamo:
+
+```{r}
+#| label: workflow-set
+dummy_set <- workflow_set(
+  preproc = list(dummy = dummy_rec),
+  models = all_specs[c("logistic", "boost", "svm")]
+)
+basic_set <- workflow_set(
+  preproc = list(basic = basic_rec),
+  models = all_specs[c("tree", "forest")]
+)
+all_wf <- bind_rows(dummy_set, basic_set)
+all_wf
+```
+
+Ogni riga ha un identificatore `wflow_id` formato dai nomi del preprocessore e del modello (`dummy_logistic`, `basic_forest`, …). La colonna `result` è ancora vuota.
+
+### Ottimizzare tutto sugli stessi fold
+
+`workflow_map()` applica una funzione di ottimizzazione a ogni workflow dell'insieme:
+
+```{r}
+#| label: workflow-map
+all_res <- all_wf |>
+  workflow_map(
+    "tune_grid",
+    resamples = titanic_folds,
+    grid = 10,
+    metrics = titanic_metrics,
+    seed = 123,
+    control = control_grid(save_pred = TRUE, save_workflow = TRUE),
+    verbose = TRUE
+  )
+all_res
+```
+
+- `grid = 10` chiede a `tune_grid()` di costruire per ogni modello una griglia space-filling di 10 combinazioni candidate. `mtry`, il cui intervallo dipende dal numero di predittori, viene finalizzato automaticamente a partire dai dati.
+- La regressione logistica non ha parametri da ottimizzare; `workflow_map()` esegue allora semplicemente `fit_resamples()` per essa.
+- `seed = 123` imposta lo stesso seme prima di ciascun workflow, così i risultati sono riproducibili.
+- `save_pred = TRUE` conserva le previsioni out-of-fold (necessarie per il grafico di calibrazione); `save_workflow = TRUE` conserva il workflow dentro i risultati.
+
+In totale vengono addestrati circa 4 × 10 × 5 + 5 = 205 modelli; su un portatile ci vogliono alcuni minuti, soprattutto per le foreste e le SVM.
+
+## 4. Leggere il confronto
+
+```{r}
+#| label: fig-autoplot
+#| fig-cap: "ROC AUC in convalida incrociata della migliore configurazione di ciascun modello, con barre di errore. I modelli sono ordinati dal migliore (a sinistra) al peggiore."
+autoplot(all_res, rank_metric = "roc_auc", metric = "roc_auc",
+         select_best = TRUE) +
+  geom_text(aes(y = mean - 0.02, label = wflow_id), angle = 90, hjust = 1) +
+  expand_limits(y = 0.65) +
+  theme(legend.position = "none")
+```
+
+```{r}
+#| label: rank-results
+ranked <- rank_results(all_res, rank_metric = "roc_auc",
+                       select_best = TRUE) |>
+  filter(.metric %in% c("roc_auc", "brier_class")) |>
+  select(wflow_id, .metric, mean, std_err, rank) |>
+  tidyr::pivot_wider(names_from = .metric,
+                     values_from = c(mean, std_err)) |>
+  arrange(rank)
+ranked
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `select_best = TRUE` conserva, per ogni workflow, solo la sua **migliore** configurazione di ottimizzazione; `rank` ordina i workflow per ROC AUC media.
+- Le barre di errore nel grafico (e `std_err` nella tabella) mostrano l'incertezza di ciascuna stima. Tipicamente, su questi dati i modelli flessibili e la regressione logistica sono **entro uno o due errori standard** l'uno dall'altro; il singolo albero è spesso un po' indietro.
+- Guarda anche il Brier score: un modello può ordinare bene i passeggeri (AUC alta) ma dare probabilità meno accurate (Brier più alto).
+- Il workflow migliore qui è `r ranked$wflow_id[1]` con una AUC media di `r round(ranked$mean_roc_auc[1], 3)` (errore standard `r round(ranked$std_err_roc_auc[1], 3)`).
+:::
+
+### Le differenze sono reali?
+
+Poiché tutti i modelli hanno usato **gli stessi fold**, possiamo confrontarli fold per fold: se un modello batte un altro su ogni fold, è più convincente di una differenza di medie.
+
+```{r}
+#| label: fold-auc
+fold_auc <- function(wflow) {
+  res <- extract_workflow_set_result(all_res, wflow)
+  best <- select_best(res, metric = "roc_auc")
+  collect_metrics(res, summarize = FALSE) |>
+    filter(.metric == "roc_auc", .config == best$.config) |>
+    transmute(fold = id, wflow_id = wflow, auc = .estimate)
+}
+per_fold <- purrr::map(all_res$wflow_id, fold_auc) |>
+  purrr::list_rbind() |>
+  tidyr::pivot_wider(names_from = wflow_id, values_from = auc)
+per_fold
+```
+
+Ogni riga è un fold, ogni colonna un modello. Se le colonne salgono e scendono **insieme**, i fold differiscono per difficoltà e i modelli si seguono a vicenda; ciò che conta sono le differenze tra colonne all'interno di una riga. (È possibile un'analisi formale di tali risultati appaiati, ad es. con il pacchetto `tidyposterior`; qui ci limitiamo al confronto visivo.)
+
+## 5. Scegliere un modello
+
+La prestazione è solo un criterio. Altri contano altrettanto nella pratica:
+
+| Criterio | Domanda | Sul Titanic |
+|---|---|---|
+| **Prestazioni** | È chiaramente migliore delle alternative, oltre il rumore? | Spesso differenze di circa un errore standard |
+| **Semplicità** | Meno parti in movimento, più facile da mantenere e riprodurre? | Logistica < albero < foresta < SVM ≈ boosting |
+| **Interpretabilità** | Possiamo spiegare le previsioni alle persone coinvolte? | La regressione logistica e un piccolo albero si leggono direttamente |
+| **Calibrazione** | Le probabilità previste corrispondono alle frequenze osservate? | Si controlla con un grafico di calibrazione (sotto) |
+| **Costo** | Tempo di addestramento e di previsione, memoria, dipendenze software | SVM e foresta sono le più lente qui |
+
+Una regola sensata, analoga alla regola dell'1-ES della [lezione sugli alberi decisionali](45-decision-trees.qmd): **tra i modelli la cui AUC è entro un errore standard dalla migliore, scegli il più semplice.**
+
+```{r}
+#| label: choose
+simplicity <- c(dummy_logistic = 1, basic_tree = 2, basic_forest = 3,
+                dummy_svm = 4, dummy_boost = 5)
+best <- ranked |> slice_min(rank, n = 1)
+
+candidates <- ranked |>
+  filter(mean_roc_auc >= best$mean_roc_auc - best$std_err_roc_auc) |>
+  mutate(simplicity = unname(simplicity[wflow_id])) |>
+  arrange(simplicity)
+candidates
+chosen_id <- candidates$wflow_id[1]
+chosen_id
+```
+
+Con questa regola il workflow scelto è **`r chosen_id`**. La graduatoria di "semplicità" è una valutazione discrezionale, e puoi non essere d'accordo con la nostra; l'importante è **decidere la regola prima di guardare l'insieme di test**.
+
+### Calibrazione
+
+Un modello è **ben calibrato** se, tra i passeggeri a cui assegna una probabilità di sopravvivenza di circa 0.7, circa il 70% è davvero sopravvissuto. Lo verifichiamo con le previsioni out-of-fold salvate durante l'ottimizzazione: raggruppiamo le previsioni in classi (bin), e confrontiamo la probabilità prevista media con la proporzione osservata di sopravvissuti in ciascuna classe.
+
+```{r}
+#| label: calibration-data
+cv_preds <- collect_predictions(all_res, select_best = TRUE,
+                                metric = "roc_auc")
+
+calib <- cv_preds |>
+  mutate(bin = cut(.pred_yes, breaks = seq(0, 1, by = 0.1),
+                   include.lowest = TRUE)) |>
+  summarise(predicted = mean(.pred_yes),
+            observed = mean(survived == "yes"),
+            n = n(),
+            .by = c(wflow_id, bin))
+```
+
+```{r}
+#| label: fig-calibration
+#| fig-cap: "Calibrazione dei cinque modelli (previsioni out-of-fold, migliore configurazione di ciascuno). I punti sulla diagonale indicano che le probabilità previste corrispondono alle frequenze osservate; la dimensione del punto è il numero di passeggeri nella classe."
+#| fig-width: 9
+#| fig-height: 6
+ggplot(calib, aes(predicted, observed)) +
+  geom_abline(linetype = "dashed", colour = "grey50") +
+  geom_line(colour = "#0072B2") +
+  geom_point(aes(size = n), colour = "#0072B2") +
+  facet_wrap(~ wflow_id) +
+  coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+  labs(x = "P(sopravvivenza) prevista media nella classe",
+       y = "Proporzione osservata di sopravvissuti", size = "Passeggeri")
+```
+
+```{r}
+#| label: cv-brier
+cv_preds |>
+  group_by(wflow_id) |>
+  brier_class(truth = survived, .pred_yes) |>
+  arrange(.estimate)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- I punti **sotto** la diagonale indicano che il modello è **troppo sicuro** della sopravvivenza (prevede, ad esempio, 0.8 dove è sopravvissuto solo il 65%); i punti **sopra** indicano che è troppo pessimista.
+- Le classi con pochi passeggeri (punti piccoli) sono rumorose; non interpretarle troppo.
+- La regressione logistica, che stima le probabilità per massima verosimiglianza, tende a essere ragionevolmente calibrata. Le probabilità delle SVM derivano dal Platt scaling ([lezione 48](48-svm.qmd)) e quelle degli alberi assumono solo pochi valori distinti (uno per foglia), il che appare come pochi punti grandi.
+- Il Brier score riassume insieme calibrazione e discriminazione; più basso è meglio.
+:::
+
+Se un modello ordina bene ma è mal calibrato, le sue probabilità si possono ricalibrare (il pacchetto `probably` offre strumenti per questo), ma la ricalibrazione deve essere a sua volta stimata solo sui dati di addestramento.
+
+## 6. Il test finale — esattamente una volta
+
+Ora finalizziamo il workflow scelto con i suoi migliori parametri di ottimizzazione, lo addestriamo sull'intero insieme di addestramento e lo valutiamo sull'insieme di test:
+
+```{r}
+#| label: final-fit
+chosen_params <- all_res |>
+  extract_workflow_set_result(chosen_id) |>
+  select_best(metric = "roc_auc")
+
+final_wf <- all_res |>
+  extract_workflow(chosen_id) |>
+  finalize_workflow(chosen_params)
+
+final_fit <- last_fit(final_wf, split = titanic_split,
+                      metrics = titanic_metrics)
+collect_metrics(final_fit)
+```
+
+```{r}
+#| label: cv-vs-test
+cv_auc <- ranked$mean_roc_auc[ranked$wflow_id == chosen_id]
+test_auc <- collect_metrics(final_fit) |>
+  filter(.metric == "roc_auc") |>
+  pull(.estimate)
+c(cv = cv_auc, test = test_auc)
+```
+
+L'AUC in convalida incrociata del modello scelto era `r round(cv_auc, 3)`; sull'insieme di test è `r round(test_auc, 3)`. I due valori dovrebbero essere vicini (l'insieme di test ha solo `r nrow(titanic_test)` passeggeri, quindi una differenza di qualche centesimo rientra nel rumore). Questo valore sul test è quello che riportiamo. Se fosse molto peggiore, avremmo imparato qualcosa di importante — ma **non** dobbiamo ora tornare indietro, scegliere un altro modello e testare di nuovo: l'insieme di test non sarebbe più indipendente dalle nostre scelte.
+
+```{r}
+#| label: fig-final-roc
+#| fig-cap: "Curva ROC del modello scelto sull'insieme di test."
+collect_predictions(final_fit) |>
+  roc_curve(truth = survived, .pred_yes) |>
+  autoplot()
+```
+
+## 7. Spiegare il modello scelto: l'importanza per permutazione
+
+L'**importanza per permutazione** funziona per *qualsiasi* modello, perché ha bisogno solo delle previsioni: rimescola un predittore in un insieme di dati, prevedi di nuovo, e misura quanto calano le prestazioni. La calcoliamo sull'insieme di test, per le sette variabili originali (non per le colonne dummy), usando il workflow addestrato così che la recipe sia applicata automaticamente.
+
+```{r}
+#| label: fig-perm-importance
+#| fig-cap: "Importanza per permutazione del modello scelto sull'insieme di test: diminuzione della ROC AUC quando ciascuna variabile viene rimescolata (20 ripetizioni)."
+final_model <- extract_workflow(final_fit)
+
+set.seed(2026)
+perm_imp <- permutation_importance(
+  final_model, data = titanic_test, outcome = "survived",
+  prob_col = ".pred_yes", event_level = "first", nsim = 20
+)
+
+ggplot(perm_imp, aes(x = importance,
+                     y = reorder(variable, importance, FUN = median))) +
+  geom_vline(xintercept = 0, colour = "grey60") +
+  geom_boxplot() +
+  labs(x = "Diminuzione della ROC AUC quando la variabile viene rimescolata", y = NULL)
+```
+
+`permutation_importance()` è una breve funzione di supporto definita nel file del corso `_common.R` (aprilo: sono 20 righe di semplice R). Per ogni variabile rimescola la colonna, prevede di nuovo con l'intero workflow e registra quanto cala l'AUC.
+
+- `prob_col = ".pred_yes"` è la probabilità prevista di sopravvivenza, e `event_level = "first"` le corrisponde: `"yes"` è il primo livello di `survived`, quindi l'AUC è calcolata con la sopravvivenza come evento. Una discordanza darebbe valori di importanza con il segno sbagliato.
+- `nsim = 20` ripete ogni rimescolamento 20 volte; i box mostrano quanto varia l'importanza da una permutazione casuale all'altra.
+- Il pacchetto `vip`, spesso usato per questo scopo, è stato archiviato da CRAN a dicembre 2025; la logica sopra è esattamente ciò che calcola.
+
+Tipicamente `sex` domina, seguita da `pclass` e `age`. Come nella [lezione 46](46-random-forests.qmd), ricorda che l'importanza per permutazione descrive **ciò che il modello usa**, non effetti causali, e che predittori correlati (qui `pclass` e `fare`) possono condividere o mascherare l'importanza l'uno dell'altro.
+
+## 8. Una nota sul machine learning responsabile
+
+Un modello che prevede bene non è automaticamente un modello che dovrebbe essere usato. Prima di mettere in uso un classificatore, chiediti:
+
+- **A che cosa serve, e chi ne è toccato?** Prevedere la sopravvivenza sul Titanic è un esercizio storico. Lo stesso workflow applicato a prestiti, assunzioni o triage medico prende decisioni sulle persone.
+- **Quali variabili usa?** Il nostro modello si basa molto su `sex`. Ciò riflette una regola storica ("prima le donne e i bambini"), ma in un'applicazione moderna usare una caratteristica protetta, o un suo indicatore indiretto (*proxy*), può essere ingiusto o illegale.
+- **Funziona ugualmente bene per gruppi diversi?** Calcola le metriche separatamente per i gruppi rilevanti (ad es. `group_by(sex)` prima di `roc_auc()`); una buona AUC complessiva può nascondere prestazioni scarse per una minoranza.
+- **Il futuro assomiglierà ai dati di addestramento?** I modelli peggiorano quando la popolazione cambia (*data drift*). Monitora le prestazioni dopo la messa in uso.
+- **Le probabilità sono affidabili, e l'incertezza è comunicata?** Riporta la calibrazione e la fiducia nelle stime, non solo un singolo valore di accuratezza.
+- **Si può riprodurre e sottoporre a verifica?** Conserva il codice, i semi, le versioni dei pacchetti e una breve descrizione scritta di dati, uso previsto e limiti (a volte chiamata *model card*).
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Confrontare modelli valutati su ricampionamenti o metriche diversi.** Usa un solo insieme di fold e un solo `metric_set()` per tutti i candidati.
+2. **Scegliere il modello con il miglior punteggio sul test.** L'insieme di test serve solo per il rapporto finale; scegli sui risultati della convalida incrociata.
+3. **Trattare il primo posto di `rank_results()` come un vincitore netto.** Controlla gli errori standard; differenze di circa un errore standard non sono convincenti.
+4. **Ignorare la calibrazione.** Una AUC alta non dice nulla sull'accuratezza delle probabilità; usa il Brier score e un grafico di calibrazione.
+5. **Livello dell'evento sbagliato nell'importanza per permutazione o nelle metriche.** La probabilità `pred_wrapper` e `event_level` devono riferirsi alla stessa classe.
+6. **Leggere l'importanza come causalità**, o mettere in uso un modello senza chiedersi chi ne è toccato e in che modo.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. Perché tutti i modelli devono essere valutati sugli stessi fold?
+
+Perché le differenze nei loro punteggi siano dovute ai modelli, non alla fortuna di suddivisioni diverse. Gli stessi fold consentono inoltre confronti appaiati, fold per fold, che sono più sensibili.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. Il modello A ha AUC in convalida incrociata 0.862 (ES 0.012), il modello B 0.855 (ES 0.011). A è un modello potenziato, B una regressione logistica. Quale sceglieresti, e perché?
+
+La differenza (0.007) è minore di un errore standard, quindi i dati non favoriscono chiaramente A. B è più semplice, più veloce, più facile da spiegare e di solito ben calibrato, quindi B è una scelta ragionevole — a meno che la calibrazione o altri criteri non favoriscano A.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. In un grafico di calibrazione, i punti per le probabilità previste alte stanno sotto la diagonale. Che cosa significa?
+
+Il modello è **troppo sicuro** per quei passeggeri: prevede probabilità di sopravvivenza alte, ma la proporzione osservata di sopravvissuti in quelle classi è più bassa.
+:::
+
+## 10. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — una metrica diversa.** Riordina i workflow usando il Brier score invece della ROC AUC (`rank_results(all_res, rank_metric = "brier_class", select_best = TRUE)`). La graduatoria cambia? Perché può cambiare?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+rank_results(all_res, rank_metric = "brier_class", select_best = TRUE) |>
+  filter(.metric == "brier_class") |>
+  select(wflow_id, mean, std_err, rank)
+```
+Per il Brier score più piccolo è meglio, e `rank_results()` ne tiene conto. La graduatoria può cambiare perché l'AUC misura solo quanto bene il modello **ordina** i passeggeri, mentre il Brier score premia anche le **probabilità accurate**: un modello che ordina bene ma è mal calibrato (ad es. la SVM, o un albero con poche probabilità distinte) può scendere di posizione.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — aggiungi un sesto modello.** Aggiungi all'insieme, con `dummy_rec`, una regressione logistica penalizzata, `logistic_reg(penalty = tune(), mixture = 1) |> set_engine("glmnet")` (vedi la [lezione 43](../09-regression/43-penalized-regression.qmd)), e ripeti il confronto. Il lasso migliora rispetto alla regressione logistica ordinaria?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+lasso_spec <- logistic_reg(penalty = tune(), mixture = 1) |>
+  set_engine("glmnet")
+lasso_set <- workflow_set(preproc = list(dummy = dummy_rec),
+                          models = list(lasso = lasso_spec))
+lasso_res <- lasso_set |>
+  workflow_map("tune_grid", resamples = titanic_folds, grid = 10,
+               metrics = titanic_metrics, seed = 123)
+bind_rows(all_res, lasso_res) |>
+  rank_results(rank_metric = "roc_auc", select_best = TRUE) |>
+  filter(.metric == "roc_auc") |>
+  select(wflow_id, mean, std_err, rank)
+```
+Con solo una decina di predittori codificati con dummy e circa mille passeggeri di addestramento, c'è poco da guadagnare dalla contrazione: il lasso è di solito entro una piccola frazione di errore standard dalla regressione logistica ordinaria. La penalizzazione aiuta di più quando i predittori sono molti rispetto al numero di osservazioni. (`glmnet` deve essere installato.)
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — interpreta una tabella di calibrazione.** Per un modello, le classi di calibrazione danno: previsto 0.15 / osservato 0.10; previsto 0.45 / osservato 0.47; previsto 0.85 / osservato 0.70 (60 passeggeri nell'ultima classe). Descrivi la calibrazione del modello in due frasi. Che cosa controlleresti prima di trarre conclusioni?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Il modello è ben calibrato nella fascia centrale, sovrastima leggermente la sopravvivenza alle probabilità basse (prevede il 15% dove è sopravvissuto il 10%), ed è troppo sicuro in alto: i passeggeri a cui è stata assegnata circa l'85% di sopravvivenza sono sopravvissuti solo il 70% delle volte. Prima di concludere, controlla il numero di passeggeri in ogni classe e l'incertezza: con 60 passeggeri la proporzione osservata 0.70 ha un errore standard di circa $\sqrt{0.7 \cdot 0.3 / 60} \approx 0.06$, quindi il divario di 0.15 è di circa 2.5 errori standard — indicativo, non conclusivo.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — correggi la procedura.** Un collega ottimizza i cinque modelli con la convalida incrociata, poi esegue `last_fit()` su tutti e cinque, e riporta il modello con la AUC sul test più alta, insieme a quella AUC, come "la prestazione attesa sui nuovi passeggeri". Che cosa non va, e che cosa dovrebbe fare invece?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+L'insieme di test è stato usato per **selezionare** il modello, quindi l'AUC riportata è il massimo di cinque stime rumorose ed è ottimistica (effetto "maledizione del vincitore", *winner's curse*). Dovrebbe scegliere il modello sui risultati in convalida incrociata dell'insieme di addestramento (prestazioni più gli altri criteri), poi eseguire `last_fit()` **solo per il modello scelto** e riportare quell'unico punteggio sul test.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — prestazioni per gruppo.** Usando `collect_predictions(final_fit)`, calcola la ROC AUC, la sensibilità e la specificità del modello finale separatamente per uomini e donne (suggerimento: le previsioni non contengono `sex`; uniscile all'insieme di test per riga usando `.row`, oppure usa `augment(final_fit)`). Che cosa trovi, e perché è importante?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+test_pred <- augment(final_fit)          # insieme di test + previsioni
+group_metrics <- metric_set(roc_auc, sensitivity, specificity)
+test_pred |>
+  group_by(sex) |>
+  group_metrics(truth = survived, estimate = .pred_class, .pred_yes)
+```
+All'interno di ciascun sesso l'AUC è più bassa che nel complesso, perché gran parte della discriminazione complessiva deriva dal separare le donne dagli uomini; all'interno di un gruppo il modello deve basarsi su classe ed età. Sensibilità e specificità tipicamente differiscono molto tra i gruppi: il modello prevede la sopravvivenza per la maggior parte delle donne e la morte per la maggior parte degli uomini, quindi la sensibilità è alta per le donne e molto bassa per gli uomini. In un'applicazione reale, queste differenze nei tassi di errore tra gruppi andrebbero riportate e discusse.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| `workflow_set(preproc, models)` | Tutte le combinazioni di preprocessori e modelli; per impilare gli insiemi usa `bind_rows()` |
+| `workflow_map("tune_grid", resamples, grid, metrics, seed)` | Ottimizza ogni workflow sugli stessi ricampionamenti |
+| `autoplot(res, rank_metric, metric, select_best = TRUE)` | Confronta la migliore configurazione di ciascun modello |
+| `rank_results(res, rank_metric, select_best = TRUE)` | Tabella ordinata con medie ed errori standard |
+| `collect_predictions(res, select_best = TRUE, metric)` | Previsioni out-of-fold, ad es. per la calibrazione |
+| `extract_workflow_set_result()`, `extract_workflow()` | Recupera i risultati / il workflow di un singolo workflow |
+| `select_best()`, `finalize_workflow()`, `last_fit()` | Fissa i parametri, riaddestra sul training, testa una volta |
+| `permutation_importance(wf, data, outcome, prob_col)` (funzione di supporto del corso) | Importanza per permutazione valida per qualsiasi modello |
+
+- Confronta i modelli sugli **stessi ricampionamenti** con le **stesse metriche**; guarda gli errori standard prima di proclamare un vincitore.
+- Scegli in base a **prestazioni, semplicità, interpretabilità, calibrazione e costo** — e fissa la regola prima di guardare l'insieme di test.
+- Usa l'insieme di test **una sola volta**, solo per il modello scelto.
+- Spiega il modello (importanza per permutazione) e chiediti chi ne è toccato prima di usarlo.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Kuhn & Silge, *Tidy Modeling with R*, capitolo 15 ("Screening many models") e capitolo 11 ("Comparing models with resampling"), <https://www.tmwr.org>
+- Documentazione di `workflowsets`, <https://workflowsets.tidymodels.org>
+- Molnar, *Interpretable Machine Learning*, <https://christophm.github.io/interpretable-ml-book/>
+- Barocas, Hardt & Narayanan, *Fairness and Machine Learning*, <https://fairmlbook.org>
+:::

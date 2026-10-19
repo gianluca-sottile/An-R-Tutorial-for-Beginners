@@ -1,0 +1,666 @@
+---
+title: "Macchine a vettori di supporto (SVM)"
+subtitle: "Separare le classi con la strada più larga possibile — e curvare la strada con i kernel"
+description: "L'idea del margine massimo, i margini morbidi e il parametro di costo, la hinge loss, i kernel lineare, polinomiale e RBF mostrati su dati simulati bidimensionali, perché i predittori vanno normalizzati, l'ottimizzazione di una SVM con kernel RBF con tidymodels e kernlab, una corretta suddivisione di validazione e le cautele sulle probabilità delle SVM (Platt scaling)."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~100 min]{} [Prerequisiti: [Il flusso di lavoro del machine learning](44-ml-workflow.qmd), [Regressione logistica](../09-regression/41-logistic-regression.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare l'idea del **margine massimo** e individuare i **vettori di supporto** in un grafico;
+- descrivere il **margine morbido** (*soft margin*) e il ruolo del parametro di **costo** $C$, e scrivere la **hinge loss**;
+- spiegare che cosa fa un **kernel** e come `cost` e `rbf_sigma` cambiano la frontiera di decisione di una SVM con kernel RBF;
+- spiegare perché i predittori vanno **normalizzati**, e costruire una corretta suddivisione in insiemi di **addestramento / validazione / test**;
+- ottimizzare una SVM con kernel RBF con `svm_rbf()` e `kernlab` in tidymodels, e interpretare con cautela le sue stime di probabilità.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(tidymodels)
+library(kernlab)   # motore per le macchine a vettori di supporto
+
+# tidymodels carica modeldata, il cui `penguins` (con nomi di colonna
+# diversi) maschererebbe quello di R base: usiamo la versione integrata in R.
+penguins <- datasets::penguins
+```
+
+## 1. Perché le macchine a vettori di supporto?
+
+Immagina due gruppi di punti su una mappa — diciamo le case di due villaggi — e di dover tracciare una sola strada rettilinea tra di essi. Molte strade separerebbero i villaggi. Qual è la migliore? Una risposta naturale: la strada che resta **il più lontano possibile dalla casa più vicina su entrambi i lati**. Una strada larga lascia spazio all'errore: una nuova casa costruita un po' fuori dallo schema abituale starà comunque dal lato giusto.
+
+Una **macchina a vettori di supporto** (SVM, *support vector machine*) trasforma questa idea in un classificatore. Cerca la frontiera con il **margine** più ampio (la "strada" più larga) tra le classi. Poi estende l'idea in due direzioni:
+
+- un **margine morbido** consente ad alcuni punti di stare dentro la strada o dal lato sbagliato, perché le classi reali si sovrappongono;
+- i **kernel** consentono di curvare la strada, lavorando implicitamente in uno spazio di variabili più ricco.
+
+Le SVM sono state tra i classificatori più popolari della fine degli anni '90 e degli anni 2000. Oggi gli alberi potenziati sono più spesso la prima scelta per i dati tabellari, ma le SVM restano utili, soprattutto con molte variabili numeriche e numerosità campionarie moderate, e le idee di margine e di kernel ricompaiono in tutto il machine learning.
+
+## 2. Il classificatore a margine massimo
+
+Simuliamo due classi ben separate in due dimensioni. Per le SVM è comodo codificare le classi come $y = -1$ e $y = +1$.
+
+```{r}
+#| label: toy-data
+set.seed(48)
+n <- 40
+toy <- data.frame(
+  x1 = c(rnorm(n / 2, -1.2, 0.6), rnorm(n / 2, 1.2, 0.6)),
+  x2 = c(rnorm(n / 2, -1.2, 0.6), rnorm(n / 2, 1.2, 0.6)),
+  y  = rep(c(-1, 1), each = n / 2)
+)
+X <- as.matrix(toy[, c("x1", "x2")])
+```
+
+Un classificatore lineare usa il **valore di decisione** $f(x) = w_1 x_1 + w_2 x_2 + b$ e prevede $+1$ se $f(x) > 0$, $-1$ altrimenti. La frontiera è la retta $f(x) = 0$. Un punto è classificato correttamente quando $y\,f(x) > 0$; più grande è $y\,f(x)$, più comodamente il punto sta dal lato giusto.
+
+La SVM sceglie $w$ e $b$ minimizzando
+
+$$
+\underbrace{\tfrac12 \lVert w \rVert^2}_{\text{piccolo } w \;=\; \text{margine ampio}} \;+\; C \sum_{i=1}^n \underbrace{\max\big(0,\; 1 - y_i f(x_i)\big)}_{\text{hinge loss}} .
+$$
+
+Analizzeremo questa formula nella sezione 3. Per ora possiamo minimizzarla direttamente con l'ottimizzatore generico di R base, `optim()`:
+
+```{r}
+#| label: linear-svm
+svm_objective <- function(par, X, y, C) {
+  w <- par[1:2]
+  b <- par[3]
+  f <- drop(X %*% w) + b                           # valori di decisione
+  0.5 * sum(w^2) + C * sum(pmax(0, 1 - y * f))     # margine + hinge loss
+}
+fit_linear_svm <- function(X, y, C) {
+  start <- c(coef(lm(y ~ X))[-1], 0)
+  opt <- optim(start, svm_objective, X = X, y = y, C = C,
+               control = list(maxit = 20000, reltol = 1e-12))
+  opt <- optim(opt$par, svm_objective, X = X, y = y, C = C,   # riavvio
+               control = list(maxit = 20000, reltol = 1e-12))
+  list(w = unname(opt$par[1:2]), b = unname(opt$par[3]))
+}
+```
+
+(`optim()` non è il modo in cui funzionano i veri software per SVM — essi risolvono in modo molto efficiente un problema quadratico equivalente — ma per 40 punti e 3 parametri è abbastanza accurato, e ci permette di vedere la funzione obiettivo in R semplice.)
+
+Con un $C$ molto grande, le violazioni del margine costano così tanto che nessuna è ammessa: questo è il classificatore a **margine rigido** (*hard margin*).
+
+```{r}
+#| label: hard-margin
+svm_hard <- fit_linear_svm(X, toy$y, C = 1000)
+f_hard <- drop(X %*% svm_hard$w) + svm_hard$b
+toy$margin_value <- toy$y * f_hard
+round(sort(toy$margin_value)[1:5], 3)
+half_width <- 1 / sqrt(sum(svm_hard$w^2))
+half_width
+```
+
+Ogni punto ha $y_i f(x_i) \ge 1$, ed esattamente `r sum(toy$margin_value < 1 + 1e-3)` punti si trovano sul bordo della strada ($y_i f(x_i) = 1$). Questi sono i **vettori di supporto**: la frontiera è determinata soltanto da loro. Spostare qualsiasi altro punto (senza attraversare la strada) non cambierebbe la soluzione. La distanza dalla frontiera al bordo della strada è $1/\lVert w \rVert$ = `r round(half_width, 2)`.
+
+```{r}
+#| label: fig-max-margin
+#| fig-cap: "Due classi separabili. Linee grigie: altre due rette che separano comunque le classi. Linea continua: la frontiera a margine massimo; linee tratteggiate: i bordi del margine. I punti cerchiati sono i vettori di supporto."
+other_lines <- data.frame(intercept = c(0, 0), slope = c(-5, -0.2))
+w <- svm_hard$w
+b <- svm_hard$b
+ggplot(toy, aes(x1, x2)) +
+  geom_abline(data = other_lines, aes(intercept = intercept, slope = slope),
+              colour = "grey70", linewidth = 0.8) +
+  geom_abline(intercept = -b / w[2], slope = -w[1] / w[2], linewidth = 1) +
+  geom_abline(intercept = (c(-1, 1) - b) / w[2], slope = -w[1] / w[2],
+              linetype = "dashed") +
+  geom_point(aes(colour = factor(y)), size = 2) +
+  geom_point(data = subset(toy, margin_value < 1 + 1e-3),
+             shape = 21, size = 5, stroke = 1) +
+  coord_equal() +
+  labs(x = expression(x[1]), y = expression(x[2]), colour = "Classe")
+```
+
+Anche le due rette grigie separano perfettamente i dati di addestramento, ma ciascuna passa più vicino ai punti più prossimi di quanto faccia la retta a margine massimo. La retta a margine massimo è la più "prudente": mantiene la massima distanza possibile da entrambe le classi.
+
+## 3. Margini morbidi, costo $C$ e hinge loss
+
+Le classi reali si sovrappongono, e nessuna retta le separa. La SVM a **margine morbido** ammette le violazioni, ma fa pagare un prezzo per ciascuna. Guarda di nuovo la funzione obiettivo:
+
+- $\tfrac12 \lVert w \rVert^2$ è piccolo quando $w$ è piccolo, cioè quando la strada (di larghezza $2/\lVert w \rVert$) è **larga**;
+- la **hinge loss** $\max(0, 1 - y_i f(x_i))$ è **zero** per un punto dal lato giusto e fuori dalla strada ($y_i f(x_i) \ge 1$), e cresce linearmente per i punti dentro la strada o dal lato sbagliato;
+- il **costo** $C$ fissa il tasso di cambio tra le due.
+
+```{r}
+#| label: fig-hinge
+#| fig-cap: "Tre funzioni di perdita in funzione del valore di margine y·f(x). La perdita 0–1 conta gli errori; la hinge loss (SVM) è zero oltre 1 e lineare sotto; la perdita logistica (regressione logistica, riscalata per valere 1 in 0) è liscia e non è mai esattamente zero."
+losses <- data.frame(m = seq(-2, 3, length.out = 501))
+losses <- rbind(
+  data.frame(m = losses$m, loss = as.numeric(losses$m < 0), type = "0-1"),
+  data.frame(m = losses$m, loss = pmax(0, 1 - losses$m), type = "hinge"),
+  data.frame(m = losses$m, loss = log2(1 + exp(-losses$m)),
+             type = "logistica")
+)
+ggplot(losses, aes(m, loss, colour = type)) +
+  geom_line(linewidth = 1) +
+  geom_vline(xintercept = c(0, 1), linetype = "dotted") +
+  labs(x = "Valore di margine  y · f(x)", y = "Perdita", colour = NULL)
+```
+
+La hinge loss è zero per ogni punto oltre il margine: quei punti **non hanno alcuna influenza** sulla soluzione. Contano solo i punti sul margine o al suo interno (i vettori di supporto). La perdita logistica, invece, dà a ogni punto una qualche influenza. Per il resto le due sono sorprendentemente simili, ed è per questo che le SVM lineari e la regressione logistica spesso danno frontiere simili.
+
+Vediamo ora che cosa fa $C$ su dati sovrapposti:
+
+```{r}
+#| label: soft-margin
+set.seed(480)
+toy2 <- data.frame(
+  x1 = c(rnorm(n / 2, -0.7, 0.8), rnorm(n / 2, 0.7, 0.8)),
+  x2 = c(rnorm(n / 2, -0.7, 0.8), rnorm(n / 2, 0.7, 0.8)),
+  y  = rep(c(-1, 1), each = n / 2)
+)
+X2 <- as.matrix(toy2[, c("x1", "x2")])
+c_values <- c(0.01, 0.1, 1, 100)
+soft <- do.call(rbind, lapply(c_values, \(C) {
+  fit <- fit_linear_svm(X2, toy2$y, C)
+  m <- toy2$y * (drop(X2 %*% fit$w) + fit$b)
+  data.frame(C = C, half_width = 1 / sqrt(sum(fit$w^2)),
+             support_vectors = sum(m < 1 + 1e-3),
+             training_errors = sum(m < 0),
+             w1 = fit$w[1], w2 = fit$w[2], b = fit$b)
+}))
+soft[, 1:4]
+```
+
+```{r}
+#| label: fig-soft-margin
+#| fig-cap: "SVM lineari a margine morbido su dati sovrapposti per quattro valori del costo C. C piccolo: margine ampio, molti vettori di supporto. C grande: margine stretto, poche violazioni ammesse."
+#| fig-width: 9
+#| fig-height: 5
+ggplot(toy2, aes(x1, x2)) +
+  geom_point(aes(colour = factor(y)), size = 1.8) +
+  geom_abline(data = soft, aes(intercept = -b / w2, slope = -w1 / w2),
+              linewidth = 1) +
+  geom_abline(data = soft, aes(intercept = (1 - b) / w2, slope = -w1 / w2),
+              linetype = "dashed") +
+  geom_abline(data = soft, aes(intercept = (-1 - b) / w2, slope = -w1 / w2),
+              linetype = "dashed") +
+  facet_wrap(~ C, labeller = label_both) +
+  coord_equal(xlim = c(-3, 3), ylim = c(-3, 3)) +
+  labs(x = expression(x[1]), y = expression(x[2]), colour = "Classe")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Con **$C$ piccolo** (`r min(c_values)`), le violazioni costano poco: la strada è larga (semi-larghezza `r round(soft$half_width[1], 2)`) e `r soft$support_vectors[1]` dei `r n` punti sono vettori di supporto. La frontiera è determinata da molti punti: **varianza bassa, distorsione forse più alta**.
+- Con **$C$ grande** (`r max(c_values)`), le violazioni costano molto: la strada si restringe (semi-larghezza `r round(soft$half_width[4], 2)`) e la frontiera si piega per classificare correttamente i punti di addestramento (`r soft$training_errors[4]` errori di addestramento contro `r soft$training_errors[1]` per $C$ piccolo). Pochi punti decidono tutto: **distorsione bassa, varianza alta** — rischio di sovradattamento.
+- $C$ è quindi un parametro di **regolarizzazione**, come $\lambda$ nella [regressione penalizzata](../09-regression/43-penalized-regression.qmd), ma in direzione opposta: un $C$ grande significa regolarizzazione *debole*.
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: primale, duale e vettori di supporto
+
+La SVM a margine morbido risolve
+$$
+\min_{w, b, \xi}\; \tfrac12\lVert w\rVert^2 + C\sum_i \xi_i
+\quad \text{s.t.} \quad y_i(w^\top x_i + b) \ge 1 - \xi_i,\;\; \xi_i \ge 0,
+$$
+dove la **variabile di scarto** (*slack*) $\xi_i = \max(0, 1 - y_i f(x_i))$ è esattamente la hinge loss. Dividendo per $Cn$ si vede che si tratta di una *minimizzazione del rischio empirico regolarizzato*: hinge loss media più una penalità di tipo ridge $\lambda \lVert w \rVert^2$ con $\lambda = 1/(2Cn)$.
+
+Il suo **duale** di Lagrange è
+$$
+\max_{\alpha}\; \sum_i \alpha_i - \tfrac12 \sum_{i,j} \alpha_i\alpha_j y_i y_j\, x_i^\top x_j
+\quad \text{s.t.} \quad 0 \le \alpha_i \le C,\;\; \sum_i \alpha_i y_i = 0,
+$$
+con $w = \sum_i \alpha_i y_i x_i$. La soluzione ha $\alpha_i = 0$ per i punti oltre il margine; i punti con $\alpha_i > 0$ sono i vettori di supporto. Fatto cruciale, i dati entrano nel duale **solo attraverso i prodotti scalari** $x_i^\top x_j$ — la porta da cui entrano i kernel.
+:::
+
+## 4. Kernel: frontiere curve
+
+Alcuni problemi non sono affatto lineari. Qui una classe sta dentro un anello formato dall'altra:
+
+```{r}
+#| label: ring-data
+set.seed(4848)
+ring <- data.frame(x1 = runif(200, -2, 2), x2 = runif(200, -2, 2))
+ring$class <- factor(ifelse(ring$x1^2 + ring$x2^2 + rnorm(200, sd = 0.4) < 2,
+                            "inner", "outer"))
+table(ring$class)
+```
+
+Nessuna retta separa le classi. Ma se aggiungessimo la variabile $z = x_1^2 + x_2^2$, una semplice soglia su $z$ lo farebbe. Un **kernel** ottiene questo tipo di ampliamento dello spazio delle variabili in modo **implicito**: una SVM ha bisogno solo dei prodotti scalari tra osservazioni (vedi Per approfondire sopra), e una funzione kernel $K(x, x')$ sostituisce il prodotto scalare $x^\top x'$ con una similarità calcolata in uno spazio più ricco — senza mai costruire quello spazio.
+
+| Kernel | $K(x, x')$ | parsnip | Parametri da ottimizzare |
+|---|---|---|---|
+| Lineare | $x^\top x'$ | `svm_linear()` | `cost` |
+| Polinomiale | $(\text{scale}\cdot x^\top x' + \text{offset})^{d}$ | `svm_poly()` | `cost`, `degree`, `scale_factor` |
+| Funzione a base radiale (RBF, gaussiano) | $\exp(-\sigma \lVert x - x'\rVert^2)$ | `svm_rbf()` | `cost`, `rbf_sigma` |
+
+Il kernel RBF misura quanto due punti sono vicini: 1 per punti identici, con decadimento verso 0 all'aumentare della distanza. $\sigma$ controlla **quanto velocemente** decade:
+
+```{r}
+#| label: rbf-kernel
+rbf <- function(d, sigma) exp(-sigma * d^2)
+distances <- c(0, 0.5, 1, 2, 3)
+round(outer(distances, c(sigma_0.1 = 0.1, sigma_1 = 1, sigma_10 = 10), rbf),
+      3)
+```
+
+Con $\sigma = 10$ due punti a distanza 1 sono già quasi "non correlati" (similarità `r signif(rbf(1, 10), 2)`): ogni punto di addestramento influenza solo il suo immediato intorno, e la frontiera può essere molto ondulata. Con $\sigma = 0.1$ anche punti lontani sono simili, e la frontiera è liscia, quasi lineare. (Alcuni software, ad es. `e1071`, chiamano questo parametro `gamma`; kernlab e parsnip lo chiamano `sigma` / `rbf_sigma`.)
+
+Per *vedere* una frontiera di decisione, prevediamo la classe su una fitta griglia di punti che copre il piano e coloriamo la griglia:
+
+```{r}
+#| label: grid-helper
+grid_2d <- tidyr::expand_grid(x1 = seq(-2, 2, length.out = 120),
+                              x2 = seq(-2, 2, length.out = 120))
+boundary <- function(spec, label) {
+  fitted <- fit(spec, class ~ x1 + x2, data = ring)
+  grid_2d |>
+    mutate(.pred_class = predict(fitted, new_data = grid_2d)$.pred_class,
+           model = label)
+}
+```
+
+```{r}
+#| label: fig-kernels
+#| fig-cap: "Regioni di decisione di tre SVM con cost = 1 sui dati ad anello: lineare, polinomiale di grado 2 e RBF (sigma = 1)."
+#| fig-width: 9
+#| fig-height: 3.8
+kernel_fits <- bind_rows(
+  boundary(svm_linear(cost = 1) |> set_engine("kernlab") |>
+             set_mode("classification"), "lineare"),
+  boundary(svm_poly(cost = 1, degree = 2) |> set_engine("kernlab") |>
+             set_mode("classification"), "polinomiale (grado 2)"),
+  boundary(svm_rbf(cost = 1, rbf_sigma = 1) |> set_engine("kernlab") |>
+             set_mode("classification"), "RBF (sigma = 1)")
+)
+ggplot(kernel_fits, aes(x1, x2)) +
+  geom_raster(aes(fill = .pred_class), alpha = 0.35) +
+  geom_point(data = ring, aes(colour = class), size = 1) +
+  facet_wrap(~ model) +
+  coord_equal() +
+  labs(x = expression(x[1]), y = expression(x[2]), fill = "Prevista",
+       colour = "Osservata")
+```
+
+La SVM lineare può tracciare solo una frontiera rettilinea, che non può racchiudere la classe interna: qualunque retta scelga, molti punti finiscono dal lato sbagliato. Un polinomio di grado 2 può rappresentare ellissi, il che si adatta a questo problema; il kernel RBF può rappresentare quasi qualsiasi forma.
+
+### Che cosa fanno `cost` e `rbf_sigma`
+
+```{r}
+#| label: fig-cost-sigma
+#| fig-cap: "SVM con kernel RBF sui dati ad anello per tre valori di cost (colonne) e di rbf_sigma (righe). Sigma grande e costo grande danno frontiere ondulate e sovradattate; valori piccoli danno frontiere lisce."
+#| fig-width: 9
+#| fig-height: 8.5
+settings <- tidyr::expand_grid(cost = c(0.1, 10, 1000),
+                               rbf_sigma = c(0.1, 1, 20))
+rbf_fits <- purrr::pmap(settings, \(cost, rbf_sigma) {
+  spec <- svm_rbf(cost = cost, rbf_sigma = rbf_sigma) |>
+    set_engine("kernlab") |>
+    set_mode("classification")
+  boundary(spec, "rbf") |> mutate(cost = cost, rbf_sigma = rbf_sigma)
+}) |>
+  bind_rows()
+
+ggplot(rbf_fits, aes(x1, x2)) +
+  geom_raster(aes(fill = .pred_class), alpha = 0.35) +
+  geom_point(data = ring, aes(colour = class), size = 0.7) +
+  facet_grid(rbf_sigma ~ cost, labeller = label_both) +
+  coord_equal() +
+  labs(x = expression(x[1]), y = expression(x[2]), fill = "Prevista",
+       colour = "Osservata")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **`rbf_sigma`** (righe) fissa la **portata** di ogni punto di addestramento. $\sigma$ piccolo (riga in alto): ogni punto influenza una regione ampia, la frontiera è liscia — con $\sigma = 0.1$ e costo piccolo può essere troppo liscia per catturare l'anello. $\sigma$ grande (riga in basso): ogni punto ha una minuscola regione di influenza, e la frontiera forma isole attorno ai singoli punti — sovradattamento classico.
+- **`cost`** (colonne) fissa quanto la SVM si sforza di classificare correttamente ogni punto di addestramento. Costo grande con $\sigma$ grande (in basso a destra) è la combinazione più flessibile e più sovradattata.
+- I due parametri interagiscono, ed è per questo che si **ottimizzano insieme** su una griglia.
+:::
+
+## 5. Normalizza i predittori
+
+Il kernel RBF dipende dalla **distanza euclidea** tra le osservazioni, e così fa il margine di una SVM lineare. Se un predittore è misurato su una scala molto più grande degli altri, domina le distanze. Prendi tre pinguini, con lunghezza del becco in mm e massa corporea in grammi:
+
+```{r}
+#| label: scaling
+peng <- penguins[complete.cases(penguins[, c("bill_len", "body_mass")]),
+                 c("species", "bill_len", "body_mass")]
+peng[1:3, ]
+dist(peng[1:3, c("bill_len", "body_mass")])
+dist(scale(peng[, c("bill_len", "body_mass")])[1:3, ])
+```
+
+Sulla scala grezza, le distanze sono essenzialmente differenze di massa corporea: una differenza di 50 g conta quanto una differenza di 50 mm nella lunghezza del becco, che sarebbe enorme. Dopo aver standardizzato ciascuna variabile (media 0, DS 1), entrambe contribuiscono su basi confrontabili. Per le SVM (e per k-NN, la regressione penalizzata, le reti neurali) la **normalizzazione fa parte del modello** e — come sempre — va appresa sui dati di addestramento all'interno della recipe, con `step_normalize()`. (kernlab standardizza internamente per impostazione predefinita, ma altri motori no; tieni il passaggio nella recipe così il workflow non dipende da un'impostazione predefinita del motore.)
+
+## 6. Una corretta suddivisione di validazione
+
+La vecchia versione di questa lezione creava a mano una suddivisione in addestramento / validazione / test così:
+
+```{r}
+#| label: split-bug
+set.seed(123)
+n_rows <- 100
+idx_train <- sample(n_rows, 80)
+n_rows[-idx_train]                       # NON sono i numeri di riga rimanenti!
+idx_valid_bug <- sample(n_rows[-idx_train], 10)
+sum(idx_valid_bug %in% idx_train)        # righe di validazione anche nell'addestramento
+```
+
+`n_rows` è un singolo numero, un vettore di lunghezza 1. L'indicizzazione negativa rimuove *posizioni*, quindi `n_rows[-idx_train]` è di nuovo semplicemente `n_rows` (le posizioni 2–100 non esistono), e `sample(100, 10)` estrae da **tutte** le 100 righe. (Se la posizione 1 si trova per caso tra gli indici di addestramento, il risultato è invece un vettore vuoto e `sample()` fallisce con un errore — il codice "funziona" solo per fortuna.) Qui `r sum(idx_valid_bug %in% idx_train)` delle 10 righe di "validazione" erano anche righe di addestramento: il punteggio di validazione sarebbe ottimistico. La correzione è estrarre dalle righe *non ancora usate*:
+
+```{r}
+#| label: split-fix
+idx_valid <- sample(setdiff(seq_len(n_rows), idx_train), 10)
+sum(idx_valid %in% idx_train)
+```
+
+In tidymodels, `initial_validation_split()` fa per noi la suddivisione in tre parti, stratificata, senza alcuna possibilità di sovrapposizione. Usiamo la stessa preparazione dei dati del Titanic della [lezione sul flusso di lavoro del machine learning](44-ml-workflow.qmd):
+
+```{r}
+#| label: titanic-data
+titanic <- readr::read_csv(data_path("titanic_data.csv"),
+                           na = c("", "NA", "?"), show_col_types = FALSE) |>
+  select(survived, pclass, sex, age, sibsp, parch, fare, embarked) |>
+  mutate(
+    survived = factor(survived, levels = c(1, 0), labels = c("yes", "no")),
+    pclass   = factor(pclass, levels = 1:3, labels = c("1st", "2nd", "3rd")),
+    sex      = factor(sex),
+    embarked = factor(embarked)
+  )
+```
+
+```{r}
+#| label: validation-split
+set.seed(2026)
+titanic_val_split <- initial_validation_split(titanic, prop = c(0.6, 0.2),
+                                              strata = survived)
+c(train = nrow(training(titanic_val_split)),
+  validation = nrow(validation(titanic_val_split)),
+  test = nrow(testing(titanic_val_split)),
+  total = nrow(titanic))
+titanic_val <- validation_set(titanic_val_split)
+```
+
+`validation_set()` trasforma la suddivisione in un oggetto di ricampionamento con un solo "fold" (addestramento sulla parte di training, valutazione sulla parte di validazione) che si può passare a `tune_grid()` esattamente come i fold di convalida incrociata. Un singolo insieme di validazione è veloce e semplice, ma rumoroso con poche centinaia di righe. Per l'analisi principale manteniamo, come nelle lezioni precedenti, la **suddivisione 75/25 addestramento–test con convalida incrociata a 5 fold** sull'insieme di addestramento, così che i risultati siano confrontabili con gli altri modelli; l'Esercizio 5 usa l'insieme di validazione.
+
+```{r}
+#| label: titanic-split
+set.seed(2026)
+titanic_split <- initial_split(titanic, prop = 0.75, strata = survived)
+titanic_train <- training(titanic_split)
+titanic_test  <- testing(titanic_split)
+set.seed(2026)
+titanic_folds <- vfold_cv(titanic_train, v = 5, strata = survived)
+titanic_metrics <- metric_set(roc_auc, accuracy, sensitivity, specificity,
+                              brier_class, mn_log_loss)
+```
+
+## 7. Ottimizzare una SVM con kernel RBF sul Titanic
+
+La recipe della lezione 44 fa già ciò di cui una SVM ha bisogno: imputa, applica il logaritmo a `fare`, crea variabili dummy e **normalizza**.
+
+```{r}
+#| label: svm-recipe
+titanic_rec <- recipe(survived ~ ., data = titanic_train) |>
+  step_impute_median(all_numeric_predictors()) |>
+  step_impute_mode(all_nominal_predictors()) |>
+  step_log(fare, offset = 1) |>
+  step_dummy(all_nominal_predictors()) |>
+  step_normalize(all_numeric_predictors())
+```
+
+```{r}
+#| label: svm-spec
+svm_spec <- svm_rbf(cost = tune(), rbf_sigma = tune()) |>
+  set_engine("kernlab") |>
+  set_mode("classification")
+
+svm_wf <- workflow() |>
+  add_recipe(titanic_rec) |>
+  add_model(svm_spec)
+
+svm_grid <- grid_regular(cost(range = c(-2, 8)),
+                         rbf_sigma(range = c(-3, 0)),
+                         levels = 4)
+svm_grid
+```
+
+L'intervallo di `cost()` è dato sulla scala **log2** (da $2^{-2}$ a $2^{8}$) e quello di `rbf_sigma()` sulla scala **log10** (da $10^{-3}$ a $1$): `grid_regular()` distanzia i valori in modo uniforme su quelle scale, che è ciò che vogliamo per parametri che agiscono in modo moltiplicativo.
+
+```{r}
+#| label: svm-tune
+set.seed(2026)
+svm_res <- tune_grid(svm_wf, resamples = titanic_folds, grid = svm_grid,
+                     metrics = titanic_metrics)
+```
+
+```{r}
+#| label: fig-svm-tune
+#| fig-cap: "ROC AUC in convalida incrociata delle SVM con kernel RBF per cost e rbf_sigma."
+autoplot(svm_res, metric = "roc_auc")
+```
+
+```{r}
+#| label: svm-best
+show_best(svm_res, metric = "roc_auc", n = 5)
+best_svm <- select_best(svm_res, metric = "roc_auc")
+best_svm
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Ogni linea corrisponde a un valore di `rbf_sigma`; l'asse x è `cost` (scala logaritmica). Un $\sigma$ molto grande combinato con un costo grande dà tipicamente l'AUC **peggiore**: la frontiera si avvolge attorno ai singoli passeggeri (sezione 4).
+- La combinazione selezionata è cost = `r signif(best_svm$cost, 3)` e rbf_sigma = `r signif(best_svm$rbf_sigma, 3)`. Come al solito, controlla in `show_best()` se altre combinazioni sono entro un errore standard.
+:::
+
+```{r}
+#| label: svm-final
+svm_final <- svm_wf |>
+  finalize_workflow(best_svm) |>
+  last_fit(titanic_split, metrics = titanic_metrics)
+collect_metrics(svm_final)
+```
+
+## 8. Probabilità da una SVM: il Platt scaling
+
+Una SVM produce un **valore di decisione** $f(x)$, non una probabilità. Per riportare una probabilità (e calcolare la ROC AUC, il Brier score o la log-loss), kernlab — chiamato da parsnip con `prob.model = TRUE` in modalità di classificazione — usa il **Platt scaling**: adatta una regressione logistica della classe sui valori di decisione,
+$$
+\hat P(y = 1 \mid x) = \frac{1}{1 + \exp(A\, f(x) + B)},
+$$
+con $A$ e $B$ stimati su valori di decisione ottenuti da una convalida incrociata interna ai dati di addestramento.
+
+Questo ha conseguenze pratiche:
+
+1. **Costo aggiuntivo e casualità.** La convalida incrociata interna addestra la SVM altre volte e usa numeri casuali che, come avverte la documentazione di parsnip per il motore kernlab, non sono controllati da `set.seed()` di R: le probabilità possono differire leggermente da un'esecuzione all'altra.
+2. **Classe e probabilità possono non concordare.** La classe prevista deriva dal segno di $f(x)$, la probabilità dalla sigmoide; per i punti vicini alla frontiera, `.pred_class` può essere "yes" mentre `.pred_yes` è sotto 0.5. Contiamo tali casi sull'insieme di test:
+
+```{r}
+#| label: platt-agree
+collect_predictions(svm_final) |>
+  mutate(agree = (.pred_yes > 0.5) == (.pred_class == "yes")) |>
+  count(agree)
+```
+
+3. **La calibrazione è valida quanto la sigmoide.** Con insiemi di dati piccoli, o quando una sigmoide non descrive la relazione tra $f(x)$ e le probabilità vere, le probabilità possono essere mal calibrate. Se ti servono probabilità ben calibrate, controlla un grafico di calibrazione ([lezione 49](49-model-comparison.qmd)) oppure preferisci un modello che stimi direttamente le probabilità.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: il Platt scaling a mano
+
+Sui dati giocattolo sovrapposti della sezione 3, l'idea è semplicemente una regressione logistica sui valori di decisione (il metodo di Platt usa inoltre valori di decisione non usati nell'addestramento e target 0/1 leggermente smussati):
+
+```{r}
+#| label: platt-by-hand
+fit_c1 <- fit_linear_svm(X2, toy2$y, C = 1)
+decision <- drop(X2 %*% fit_c1$w) + fit_c1$b
+platt <- glm(I(toy2$y == 1) ~ decision, family = binomial)
+coef(platt)
+```
+
+Poiché qui i valori di decisione sono calcolati sugli stessi dati (la SVM è stata addestrata sugli stessi punti), la sigmoide tende a essere troppo ripida e le probabilità troppo estreme — ed è per questo che nella pratica si usano valori di decisione ottenuti su dati non usati per l'addestramento.
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Dimenticare di normalizzare.** Le distanze, e quindi le SVM, sono dominate dai predittori con la scala più grande. Metti `step_normalize()` nella recipe.
+2. **Costruire a mano un insieme di validazione con errori di indice.** `n[-idx]` su uno scalare `n` non restituisce le righe rimanenti. Usa `initial_validation_split()` (oppure `setdiff(seq_len(n), idx)`).
+3. **Ottimizzare `cost` e `rbf_sigma` su scale lineari.** Entrambi agiscono in modo moltiplicativo; usa griglie su scala logaritmica (come fanno per impostazione predefinita `cost()` e `rbf_sigma()`).
+4. **Leggere le probabilità delle SVM come calibrate.** Derivano dal Platt scaling; controlla la calibrazione, e ricorda che classe e probabilità possono non concordare.
+5. **Aspettarsi che le SVM scalino a $n$ molto grandi.** Le SVM con kernel richiedono in qualche forma la matrice kernel $n \times n$; il tempo di addestramento cresce all'incirca tra $n^2$ e $n^3$. Per centinaia di migliaia di righe, usa SVM lineari (ad es. il motore `"LiblineaR"`) o altri modelli.
+6. **Chiamare "curva di apprendimento" un punteggio di convalida incrociata stampato.** Una curva di apprendimento mette in grafico l'errore rispetto alla dimensione dell'insieme di addestramento (o alle iterazioni di addestramento); una singola AUC in convalida incrociata non lo è.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. Che cosa sono i vettori di supporto, e perché si chiamano così?
+
+I punti di addestramento sul bordo del margine o al suo interno (inclusi i punti classificati erroneamente), cioè quelli con $y_i f(x_i) \le 1$. Solo loro determinano (*supportano*) la frontiera: rimuovere qualsiasi altro punto non cambierebbe la soluzione.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. Aumenti `cost` da 1 a 1000. Che cosa succede al margine, al numero di vettori di supporto e al rischio di sovradattamento?
+
+Il margine diventa più stretto, di solito ci sono meno vettori di supporto, e la frontiera segue più da vicino i dati di addestramento: il rischio di sovradattamento aumenta (regolarizzazione più debole).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. In un kernel RBF, che cosa fa un `rbf_sigma` molto grande?
+
+La similarità $\exp(-\sigma \lVert x - x' \rVert^2)$ scende quasi a zero anche per punti vicini, quindi ogni punto di addestramento influenza solo una regione minuscola. La frontiera diventa un insieme di isole attorno ai singoli punti: memorizza quasi i dati di addestramento e generalizza male.
+:::
+
+## 10. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — hinge loss a mano.** Cinque punti hanno valori di margine $y_i f(x_i) = -1, 0, 0.5, 1, 2$. Calcola le loro hinge loss. Quali punti sono vettori di supporto? Quali sono classificati erroneamente? Verifica con `pmax()`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+m <- c(-1, 0, 0.5, 1, 2)
+pmax(0, 1 - m)   # 2 1 0.5 0 0
+```
+I primi quattro punti ($y f \le 1$) sono vettori di supporto; l'ultimo, oltre il margine, ha perdita zero e nessuna influenza. Il punto con $y f = -1$ è classificato erroneamente; quello con $y f = 0$ sta esattamente sulla frontiera; quello con $0.5$ è classificato correttamente ma dentro la strada; quello con $1$ sta sul suo bordo.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — prevedi, poi verifica.** Nella sezione 3, prima di guardare la tabella, prevedi come cambia il numero di vettori di supporto quando $C$ passa da 0.01 a 100. Poi aggiungi $C = 1000$ a `c_values` e riesegui. La semi-larghezza continua a ridursi?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Il numero di vettori di supporto **diminuisce** al crescere di $C$ (da 38 punti su 40 con $C = 0.01$ a 3 con $C = 100$): con violazioni a basso costo, molti punti stanno dentro la strada larga.
+```r
+c_values <- c(0.01, 0.1, 1, 100, 1000)
+# ... riesegui il codice `soft` qui sopra
+```
+Con $C = 100$ questi dati sono già separati senza errori, quindi la soluzione è (essenzialmente) quella a margine rigido, e aumentare ancora $C$ non cambia quasi nulla: la semi-larghezza smette di ridursi al valore del margine massimo. (Su dati non separabili continuerebbe a ridursi.)
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi l'errore.** Uno studente scrive questa suddivisione per un insieme di dati con `n` righe:
+
+```r
+idx_train <- sample(n, floor(0.8 * n))
+idx_valid <- sample(n[-idx_train], floor(0.1 * n))
+idx_test  <- setdiff(seq_len(n), c(idx_train, idx_valid))
+```
+
+Che cosa va storto, e quanto sarà grande l'insieme di test? Correggilo in due modi.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+`n` è un singolo numero, quindi `n[-idx_train]` è o `n` stesso (se 1 non è tra gli indici di addestramento) o un vettore vuoto (se lo è — allora `sample()` si ferma con un errore, cosa che accade circa l'80% delle volte). Nel primo caso `idx_valid` è estratto da **tutte** le righe e circa l'80% si sovrappone a `idx_train`, quindi il punteggio di validazione è ottimistico; l'insieme di test (tutto ciò che non è in nessuno dei due insiemi) finisce per avere circa $n - 0.8n - 0.02n \approx 18\%$ delle righe invece del 10%. Correzioni:
+```r
+idx_valid <- sample(setdiff(seq_len(n), idx_train), floor(0.1 * n))
+```
+oppure, con rsample (stratificato, e senza indici da sbagliare):
+```r
+split3 <- initial_validation_split(df, prop = c(0.8, 0.1), strata = outcome)
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — scalatura e distanze.** Usando `penguins`, calcola la matrice delle distanze tra le prime tre righe complete usando `bill_len`, `bill_dep`, `flipper_len` e `body_mass`, prima sulla scala grezza e poi dopo `scale()`. Quale variabile domina le distanze grezze, e perché questo conta per una SVM con kernel RBF?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+vars <- c("bill_len", "bill_dep", "flipper_len", "body_mass")
+pp <- penguins[complete.cases(penguins[, vars]), vars]
+dist(pp[1:3, ])
+dist(scale(pp)[1:3, ])
+sapply(pp, sd)
+```
+`body_mass` (DS circa 800 g, contro valori a una o poche cifre per le altre) domina le distanze grezze. Un kernel RBF sui dati grezzi misurerebbe di fatto la similarità solo in base alla massa corporea, ignorando le misure di becco e pinna. La standardizzazione dà a ogni variabile un peso confrontabile.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — lineare contro RBF, e l'insieme di validazione.** (a) Usando `fit_resamples()` con `titanic_folds`, confronta una SVM lineare (`svm_linear(cost = 1)`, motore `kernlab`) con la SVM RBF ottimizzata (`finalize_workflow(svm_wf, best_svm)`). Il kernel non lineare vale la pena? (b) Ottimizza la SVM RBF sul singolo insieme di validazione `titanic_val` invece che sui fold. Ottieni gli stessi parametri migliori?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+lin_spec <- svm_linear(cost = 1) |>
+  set_engine("kernlab") |>
+  set_mode("classification")
+set.seed(2026)
+lin_res <- fit_resamples(workflow(titanic_rec, lin_spec),
+                         resamples = titanic_folds,
+                         metrics = metric_set(roc_auc, brier_class))
+set.seed(2026)
+rbf_res <- fit_resamples(finalize_workflow(svm_wf, best_svm),
+                         resamples = titanic_folds,
+                         metrics = metric_set(roc_auc, brier_class))
+bind_rows(linear = collect_metrics(lin_res),
+          rbf = collect_metrics(rbf_res), .id = "kernel")
+
+set.seed(2026)
+svm_val_res <- tune_grid(svm_wf, resamples = titanic_val, grid = svm_grid,
+                         metrics = metric_set(roc_auc))
+select_best(svm_val_res, metric = "roc_auc")
+```
+(a) Confronta la differenza nell'AUC media con gli errori standard: se il guadagno dell'RBF è circa un errore standard o meno, la SVM lineare più semplice è una scelta ragionevole. (b) I parametri migliori spesso differiscono: un solo insieme di validazione di circa 260 passeggeri dà un'AUC rumorosa per ogni candidato, e il "vincitore" può cambiare con la suddivisione. Con pochi dati, la convalida incrociata dà scelte più stabili. (Nota che `titanic_val_split` è una suddivisione casuale diversa da `titanic_split`, quindi il suo insieme di test non va mescolato a questa analisi.)
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| Margine, vettori di supporto | La strada più larga tra le classi; contano solo i punti su di essa o al suo interno |
+| Hinge loss $\max(0, 1 - y f(x))$ | Zero oltre il margine, lineare all'interno |
+| `cost` ($C$) | Prezzo delle violazioni del margine; grande = regolarizzazione più debole |
+| Kernel $K(x, x')$ | Similarità che sostituisce $x^\top x'$; frontiere curve |
+| `rbf_sigma` ($\sigma$) | Portata di ogni punto nel kernel RBF; grande = ondulato |
+| `svm_linear()`, `svm_poly()`, `svm_rbf()` + `set_engine("kernlab")` | Specifiche SVM di tidymodels |
+| `step_normalize()` | Preprocessing essenziale per le SVM |
+| `initial_validation_split()`, `validation_set()` | Corretta suddivisione in tre parti |
+| Platt scaling | Sigmoide che trasforma i valori di decisione in probabilità |
+
+- Una SVM massimizza il margine, bilanciando larghezza e violazioni tramite `cost`.
+- I kernel danno frontiere flessibili; `cost` e `rbf_sigma` vanno ottimizzati **insieme**, su scale logaritmiche.
+- **Normalizza** i predittori, e costruisci gli insiemi di validazione con strumenti che non possano sovrapporsi.
+- Le probabilità delle SVM sono un passaggio di post-elaborazione (Platt scaling): controlla la loro calibrazione.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2e), capitolo 9, <https://www.statlearning.com>
+- Kuhn & Silge, *Tidy Modeling with R*, <https://www.tmwr.org>
+- Karatzoglou, Smola, Hornik & Zeileis, "kernlab – An S4 Package for Kernel Methods in R", *Journal of Statistical Software* 11(9), 2004, <https://www.jstatsoft.org/v11/i09/>
+:::

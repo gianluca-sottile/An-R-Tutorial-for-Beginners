@@ -77,6 +77,55 @@ Usare **sempre** questi termini, in modo coerente in tutte le lezioni. Registro:
 | warning / error / message | avviso (warning) / errore / messaggio |
 | seed | seme (seed) |
 
+## Modelli e machine learning (livello 4)
+| EN | IT |
+|---|---|
+| response / outcome; predictor / explanatory variable | variabile risposta (dipendente); predittore / variabile esplicativa |
+| simple / multiple linear regression | regressione lineare semplice / multipla |
+| least squares (OLS); fitted values | minimi quadrati (OLS); valori stimati (fitted) |
+| slope; intercept; coefficient | pendenza (coefficiente angolare); intercetta; coefficiente |
+| residual standard error; R-squared (adjusted) | errore standard dei residui; R² (corretto) |
+| prediction interval | intervallo di previsione |
+| leverage; influential point; Cook's distance | leva (leverage); punto influente; distanza di Cook |
+| multicollinearity; VIF | multicollinearità; VIF |
+| heteroscedasticity; robust standard errors | eteroschedasticità; errori standard robusti |
+| dummy variable; reference level | variabile dummy (indicatrice); livello di riferimento |
+| model selection; nested models; stepwise | selezione del modello; modelli annidati; selezione stepwise |
+| overfitting / underfitting | sovradattamento (overfitting) / sottoadattamento (underfitting) |
+| generalised linear model (GLM); link function | modello lineare generalizzato (GLM); funzione di legame |
+| logistic regression; log-odds | regressione logistica; logit (log-odds) |
+| deviance; likelihood-ratio test | devianza; test del rapporto di verosimiglianza |
+| Poisson regression; rate ratio; offset; overdispersion | regressione di Poisson; rapporto tra tassi (rate ratio); offset; sovradispersione |
+| penalised (regularised) regression; ridge; lasso; elastic net; shrinkage | regressione penalizzata (regolarizzata); ridge; lasso; elastic net; contrazione (shrinkage) |
+| tuning parameter / hyperparameter; tuning | parametro di regolazione / iperparametro; ottimizzazione (tuning) |
+| training / validation / test set | insieme di addestramento (training) / di validazione / di test |
+| cross-validation (k-fold) | convalida incrociata (cross-validation, k-fold) |
+| bias–variance trade-off | compromesso distorsione–varianza |
+| data leakage | fuga di informazione (data leakage) |
+| accuracy; sensitivity; specificity; precision; recall | accuratezza; sensibilità; specificità; precisione; richiamo (recall) |
+| confusion matrix; threshold | matrice di confusione; soglia |
+| ROC curve; AUC; calibration | curva ROC; AUC; calibrazione |
+| class imbalance | sbilanciamento delle classi |
+| decision tree; split; node; leaf; pruning; impurity (Gini, entropy) | albero decisionale; suddivisione (split); nodo; foglia; potatura (pruning); impurità (Gini, entropia) |
+| random forest; bagging; out-of-bag (OOB) | foresta casuale (random forest); bagging; out-of-bag (OOB) |
+| gradient boosting; learning rate; early stopping | gradient boosting; tasso di apprendimento (learning rate); arresto anticipato (early stopping) |
+| support vector machine; margin; kernel | macchina a vettori di supporto (SVM); margine; kernel |
+| variable importance; permutation importance; partial dependence | importanza delle variabili; importanza per permutazione; dipendenza parziale |
+| feature; feature engineering | variabile (feature); ingegneria delle variabili (feature engineering) |
+| workflow; recipe (tidymodels) | workflow; recipe (in tidymodels: lasciare i nomi in inglese) |
+| principal component analysis (PCA); loadings; scores; scree plot; explained variance | analisi delle componenti principali (ACP/PCA); pesi (loadings); punteggi (scores); scree plot; varianza spiegata |
+| factor analysis; latent factor; communality; uniqueness; rotation | analisi fattoriale; fattore latente; comunalità; unicità; rotazione |
+| correspondence analysis; inertia; profiles; masses | analisi delle corrispondenze; inerzia; profili; masse |
+| multidimensional scaling (MDS); stress | scaling multidimensionale (MDS); stress |
+| embedding; neighbourhood | rappresentazione (embedding); intorno (vicinato) |
+| clustering; cluster; centroid; linkage; dendrogram | clustering (analisi dei gruppi); gruppo (cluster); centroide; legame (linkage); dendrogramma |
+| within-cluster sum of squares; silhouette; gap statistic | devianza entro i gruppi; silhouette; statistica gap |
+| density-based clustering; core / border / noise point | clustering basato sulla densità; punto centrale (core) / di confine / rumore |
+| Gaussian mixture model; EM algorithm; soft assignment | modello a misture gaussiane; algoritmo EM; assegnazione probabilistica (soft) |
+| spectral clustering; similarity graph; Laplacian | clustering spettrale; grafo di similarità; laplaciano |
+| Adjusted Rand Index (ARI) | indice di Rand corretto (ARI) |
+| Level 4 · Models & learning | Livello 4 · Modelli e apprendimento |
+
 ## Elementi fissi delle lezioni
 | EN | IT |
 |---|---|

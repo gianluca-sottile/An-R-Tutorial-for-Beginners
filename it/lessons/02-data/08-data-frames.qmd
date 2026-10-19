@@ -18,7 +18,7 @@ library(tibble)
 ```
 
 ::: {.lesson-meta}
-[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Vettori](../01-foundations/04-vectors.qmd), [Fattori](../01-foundations/06-factors.qmd), [Liste](../01-foundations/07-lists.qmd)]{}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Vettori](../01-foundations/04-vectors.qmd), [Fattori e tipi di variabili](../01-foundations/06-factors.qmd), [Liste](../01-foundations/07-lists.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}

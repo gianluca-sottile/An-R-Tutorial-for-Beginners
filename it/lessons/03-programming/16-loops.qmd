@@ -7,7 +7,7 @@ description: "Scrivi cicli for con seq_along() e risultati preallocati, itera su
 {{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
 
 ::: {.lesson-meta}
-[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Vettori](../01-foundations/04-vectors.qmd), [Liste](../01-foundations/07-lists.qmd), [Istruzioni condizionali](15-conditionals.qmd)]{}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Vettori](../01-foundations/04-vectors.qmd), [Liste](../01-foundations/07-lists.qmd), [Istruzioni condizionali: if, else e dintorni](15-conditionals.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}
@@ -290,7 +290,7 @@ Ogni volta che cambi il seme ottieni un percorso diverso e un numero di giorni d
 
 ::: {.callout-note .deeper collapse="true"}
 ## Per approfondire: perché un numero massimo di iterazioni?
-Questa passeggiata dei prezzi parte a metà dell'intervallo (45, 70) e si muove fino a 10 al giorno, quindi in pratica esce sempre rapidamente dall'intervallo. Ma la regola di arresto di un ciclo non dovrebbe dipendere dalla fortuna o da parametri che qualcuno potrebbe modificare in seguito (per esempio un passo pari a 0 o limiti irraggiungibili). Un tetto come `day < max_days`, più un controllo dopo il ciclo (`if (day == max_days) warning(...)`), garantisce che il codice termini e ti avvisa quando si è fermato per il motivo "sbagliato". Gli algoritmi iterativi in statistica (per esempio quelli che stimano la [regressione logistica](../../../lessons/09-regression/41-logistic-regression.qmd)) usano esattamente questo schema: iterare fino a convergenza *oppure* fino a un numero massimo di iterazioni.
+Questa passeggiata dei prezzi parte a metà dell'intervallo (45, 70) e si muove fino a 10 al giorno, quindi in pratica esce sempre rapidamente dall'intervallo. Ma la regola di arresto di un ciclo non dovrebbe dipendere dalla fortuna o da parametri che qualcuno potrebbe modificare in seguito (per esempio un passo pari a 0 o limiti irraggiungibili). Un tetto come `day < max_days`, più un controllo dopo il ciclo (`if (day == max_days) warning(...)`), garantisce che il codice termini e ti avvisa quando si è fermato per il motivo "sbagliato". Gli algoritmi iterativi in statistica (per esempio quelli che stimano la [regressione logistica](../09-regression/41-logistic-regression.qmd)) usano esattamente questo schema: iterare fino a convergenza *oppure* fino a un numero massimo di iterazioni.
 :::
 
 ## 6. `repeat`, `break` e `next`

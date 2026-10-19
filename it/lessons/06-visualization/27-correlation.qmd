@@ -150,7 +150,7 @@ r = \frac{\operatorname{cov}(x, y)}{s_x\, s_y}
   = \frac{1}{n-1}\sum_{i=1}^n z_{x,i}\, z_{y,i}.
 $$
 
-Per la disuguaglianza di Cauchy–Schwarz $|r| \le 1$, con uguaglianza solo se $y_i = a + b x_i$ esattamente. $r^2$ è la proporzione della varianza di $y$ spiegata dalla retta dei minimi quadrati (vedi [Regressione lineare semplice](../../../lessons/09-regression/38-simple-regression.qmd)). La quantità della popolazione stimata da $r$ si indica di solito con $\rho$ ("rho").
+Per la disuguaglianza di Cauchy–Schwarz $|r| \le 1$, con uguaglianza solo se $y_i = a + b x_i$ esattamente. $r^2$ è la proporzione della varianza di $y$ spiegata dalla retta dei minimi quadrati (vedi [Regressione lineare semplice](../09-regression/38-simple-regression.qmd)). La quantità della popolazione stimata da $r$ si indica di solito con $\rho$ ("rho").
 
 La simulazione qui sopra sfrutta il fatto che, se $x$ ed $e$ sono normali standard indipendenti, anche $y = \rho x + \sqrt{1 - \rho^2}\, e$ è normale standard e $\operatorname{cor}(x, y) = \rho$.
 :::
@@ -272,7 +272,7 @@ ggplot(summer, aes(ice_cream, drownings, colour = temperature)) +
        colour = "Temperatura (°C)")
 ```
 
-La correlazione è `r round(cor(summer$ice_cream, summer$drownings), 2)`, eppure vietare i gelati non salverebbe nessuno. La temperatura è una **variabile confondente**: è legata a entrambe le variabili. Se togliamo da ciascuna la parte spiegata dalla temperatura (i residui di un adattamento lineare, vedi [Regressione lineare semplice](../../../lessons/09-regression/38-simple-regression.qmd)) e correliamo ciò che resta, l'associazione svanisce:
+La correlazione è `r round(cor(summer$ice_cream, summer$drownings), 2)`, eppure vietare i gelati non salverebbe nessuno. La temperatura è una **variabile confondente**: è legata a entrambe le variabili. Se togliamo da ciascuna la parte spiegata dalla temperatura (i residui di un adattamento lineare, vedi [Regressione lineare semplice](../09-regression/38-simple-regression.qmd)) e correliamo ciò che resta, l'associazione svanisce:
 
 ```{r}
 #| label: partial
@@ -308,7 +308,7 @@ ggplot(penguins, aes(bill_len, bill_dep)) +
   labs(x = "Lunghezza del becco (mm)", y = "Profondità del becco (mm)", colour = "Specie")
 ```
 
-All'interno di ogni specie la correlazione è positiva, ma i pinguini Gentoo hanno becchi lunghi *e* poco profondi, il che inclina verso il basso la nuvola complessiva. La specie è la variabile confondente. Lo strumento generale per "tenere fisse le altre variabili" è la [Regressione lineare multipla](../../../lessons/09-regression/39-multiple-regression.qmd); per stabilire la causalità serve un buon disegno dello studio, idealmente un esperimento randomizzato.
+All'interno di ogni specie la correlazione è positiva, ma i pinguini Gentoo hanno becchi lunghi *e* poco profondi, il che inclina verso il basso la nuvola complessiva. La specie è la variabile confondente. Lo strumento generale per "tenere fisse le altre variabili" è la [Regressione lineare multipla](../09-regression/39-multiple-regression.qmd); per stabilire la causalità serve un buon disegno dello studio, idealmente un esperimento randomizzato.
 
 ## 6. Campo di variazione ristretto e valori anomali
 
@@ -538,7 +538,7 @@ Per Spearman o Kendall imposta `method`. In presenza di valori ripetuti R non pu
 cor.test(mtcars$hp, mtcars$mpg, method = "spearman", exact = FALSE)
 ```
 
-Due avvertenze. Primo: una correlazione significativa non è necessariamente **grande**: con 10 000 osservazioni anche $r = 0.03$ dà un p-value piccolo. Secondo: il test eredita tutti i problemi delle Sezioni 4–6: non può rilevare una curva, una variabile confondente o un valore anomalo. In [Regressione lineare semplice](../../../lessons/09-regression/38-simple-regression.qmd) vedrai che verificare $\rho = 0$ equivale a verificare se la pendenza della retta di regressione sia zero.
+Due avvertenze. Primo: una correlazione significativa non è necessariamente **grande**: con 10 000 osservazioni anche $r = 0.03$ dà un p-value piccolo. Secondo: il test eredita tutti i problemi delle Sezioni 4–6: non può rilevare una curva, una variabile confondente o un valore anomalo. In [Regressione lineare semplice](../09-regression/38-simple-regression.qmd) vedrai che verificare $\rho = 0$ equivale a verificare se la pendenza della retta di regressione sia zero.
 
 ::: {.callout-note .deeper collapse="true"}
 ## Per approfondire: intervalli di confidenza e molte correlazioni

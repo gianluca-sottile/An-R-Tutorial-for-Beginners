@@ -7,7 +7,7 @@ description: "Usa sample(), set.seed() e replicate() per simulare esperimenti ca
 {{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
 
 ::: {.lesson-meta}
-[Livello 3 · Inferenza]{.level-3} [⏱ ~75 min]{} [Prerequisiti: [Statistiche descrittive di sintesi](../05-descriptive/22-summary-statistics.qmd)]{}
+[Livello 3 · Inferenza]{.level-3} [⏱ ~75 min]{} [Prerequisiti: [Indici di sintesi](../05-descriptive/22-summary-statistics.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}
@@ -370,7 +370,7 @@ mean(ill[positive])     # P(malato | positivo)
 - Quindi $P(\text{malato} \mid \text{positivo})$ è solo del `r round(100 * mean(ill[positive]))`% circa, anche se $P(\text{positivo} \mid \text{malato})$ è del 90%. Queste due probabilità condizionate **non** sono la stessa cosa.
 :::
 
-Ignorare quanto sia rara la malattia (il **tasso di base**) è la cosiddetta **fallacia del tasso di base** (*base-rate fallacy*). Le stesse quantità — sensibilità, specificità e probabilità che un "positivo" sia davvero positivo (il *valore predittivo positivo*, o *precisione*) — torneranno quando valuteremo i modelli di classificazione in [Regressione logistica](../../../lessons/09-regression/41-logistic-regression.qmd) e [Il flusso di lavoro del machine learning](../../../lessons/10-ml/44-ml-workflow.qmd).
+Ignorare quanto sia rara la malattia (il **tasso di base**) è la cosiddetta **fallacia del tasso di base** (*base-rate fallacy*). Le stesse quantità — sensibilità, specificità e probabilità che un "positivo" sia davvero positivo (il *valore predittivo positivo*, o *precisione*) — torneranno quando valuteremo i modelli di classificazione in [Regressione logistica](../09-regression/41-logistic-regression.qmd) e [Il flusso di lavoro del machine learning](../10-ml/44-ml-workflow.qmd).
 
 ::: {.callout-note .deeper collapse="true"}
 ## Per approfondire: il teorema di Bayes

@@ -17,7 +17,7 @@ library(dplyr)
 ```
 
 ::: {.lesson-meta}
-[Livello 2 · Descrivere ed esplorare]{.level-2} [⏱ ~75 min]{} [Prerequisiti: [Tabelle di frequenza](21-frequency-tables.qmd), [Riepiloghi per gruppi](../02-data/10-grouped-summaries.qmd)]{}
+[Livello 2 · Descrivere ed esplorare]{.level-2} [⏱ ~75 min]{} [Prerequisiti: [Tabelle di frequenza](21-frequency-tables.qmd), [Sintesi per gruppi](../02-data/10-grouped-summaries.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}

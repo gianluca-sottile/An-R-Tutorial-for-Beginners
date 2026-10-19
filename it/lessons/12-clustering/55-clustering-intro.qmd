@@ -1,0 +1,541 @@
+---
+title: "Clustering: il quadro generale"
+subtitle: "Distanze, scalatura e validazione — le scelte che decidono ogni risultato di clustering"
+description: "Che cosa il clustering può e non può fare, come distanze e scalatura plasmano i gruppi che trovi, e come giudicare un clustering con la silhouette, la stabilità e (quando disponibili) etichette esterne."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~70 min]{} [Prerequisiti: [Indici di sintesi](../05-descriptive/22-summary-statistics.qmd), [Il bootstrap](../07-probability/31-bootstrap.qmd), [Analisi delle componenti principali](../11-dimred/50-pca.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare che cos'è il clustering, che cosa **non** è, e perché non esiste un'unica risposta "corretta";
+- calcolare in R le distanze euclidea, di Manhattan, basata sulla correlazione e di Gower, e scegliere tra di esse;
+- mostrare con un esempio perché **scalatura** e **trasformazioni** possono cambiare completamente i cluster;
+- valutare un clustering con la **devianza entro i gruppi**, la **silhouette** (a mano e con `cluster::silhouette()`), la **stabilità con il bootstrap** e, quando esistono etichette, l'**indice di Rand corretto**;
+- scegliere una **famiglia** ragionevole di metodi di clustering per un dato problema.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+#| message: false
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+library(cluster)   # daisy(), silhouette()
+library(mclust)    # adjustedRandIndex()
+```
+
+## 1. Perché fare clustering?
+
+Un distributore all'ingrosso ha 440 clienti e sa quanto ciascuno spende in prodotti freschi, latte, alimentari e così via. Nessuno ha etichettato i clienti come "ristoranti" o "negozi di quartiere". Eppure il team di marketing vorrebbe sapere: *esistono gruppi di clienti che si comportano in modo simile?*
+
+Un biologo misura becchi e pinne di alcuni pinguini e si chiede se le sole misure, **senza conoscere la specie**, si dispongano in gruppi naturali.
+
+Entrambi sono problemi di **clustering**: cerchiamo gruppi (cluster) di osservazioni simili tra loro e diverse dalle altre, *senza* una variabile risposta che ci dica la risposta giusta. Si parla di **apprendimento non supervisionato**, in contrasto con i metodi supervisionati del [modulo 10](../10-ml/44-ml-workflow.qmd), dove ogni osservazione di addestramento ha un'etichetta.
+
+## 2. Che cos'è il clustering — e che cosa non è
+
+Il clustering è uno **strumento di esplorazione e semplificazione**. Riassume molte osservazioni con pochi "profili tipici".
+
+**Non** è:
+
+- **un test.** Un algoritmo di clustering restituisce *sempre* dei gruppi, anche quando i dati sono un'unica nuvola informe. Trovare dei cluster non dimostra che i gruppi esistano.
+- **classificazione.** Non c'è una verità di riferimento con cui misurare l'accuratezza. Due analisti possono ottenere clustering diversi, ugualmente difendibili, degli stessi dati.
+- **automatico.** Il risultato dipende da una catena di scelte umane:
+
+| Scelta | Esempio | Sezione della lezione |
+|---|---|---|
+| Quali variabili? | solo la spesa, o anche la regione? | 2 |
+| Quale trasformazione? | euro grezzi o `log1p(euro)`? | 5 |
+| Quale scalatura? | unità originali o punteggi z? | 4 |
+| Quale distanza? | euclidea, di Manhattan, di Gower… | 3 |
+| Quale algoritmo e quanti cluster? | k-means con $k = 3$, DBSCAN… | 8 e lezioni successive |
+
+L'atteggiamento onesto è: *fai ogni scelta in modo deliberato, annotala, e verifica quanto cambiano le conclusioni quando la modifichi.*
+
+## 3. Distanze: che cosa significa "simile"?
+
+Quasi ogni metodo di clustering parte da una **distanza** (o **dissimilarità**): un numero che vale 0 quando due osservazioni sono identiche e cresce al crescere delle differenze.
+
+Lavoriamo con quattro misure numeriche dei pinguini. Scartiamo i due animali con misure mancanti e teniamo da parte `species` — *non* la useremo per costruire i cluster, solo per controllarli in seguito.
+
+```{r}
+#| label: penguins-data
+peng <- penguins |>
+  select(species, bill_len, bill_dep, flipper_len, body_mass) |>
+  na.omit()
+
+peng_x <- peng |> select(-species)
+peng_z <- scale(peng_x)          # punteggi z: media 0, DS 1 per ogni colonna
+nrow(peng)
+```
+
+Confrontiamo tre animali: due pinguini di Adelia (righe 1 e 2) e un Gentoo (riga 200).
+
+```{r}
+#| label: three-distances
+three <- peng_z[c(1, 2, 200), ]
+rownames(three) <- c("Adelie 1", "Adelie 2", "Gentoo")
+
+dist(three, method = "euclidean")
+dist(three, method = "manhattan")
+as.dist(1 - cor(t(three)))      # distanza basata sulla correlazione
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `dist()` restituisce il triangolo inferiore di una matrice di distanze: ogni numero è la distanza tra un animale di riga e uno di colonna.
+- La distanza **euclidea** è la distanza in linea retta ("a volo d'uccello"). I due pinguini di Adelia distano `r round(dist(three)[1], 2)`; Adelie 1 e il Gentoo distano `r round(dist(three)[2], 2)`.
+- La distanza di **Manhattan** somma le differenze assolute variabile per variabile ("camminando lungo gli isolati di una città"). È sempre almeno pari a quella euclidea ed è meno dominata da una singola grande differenza.
+- La distanza **basata sulla correlazione** $1 - r$ confronta la *forma* di due profili, non il loro livello: due animali le cui misure salgono e scendono insieme ottengono una distanza piccola anche se uno è complessivamente più grande. È diffusa per profili di espressione genica o serie temporali; per misure corporee raramente è ciò che vogliamo.
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: le formule
+
+Per osservazioni $x = (x_1, \dots, x_p)$ e $y = (y_1, \dots, y_p)$:
+
+$$
+d_{\text{Euc}}(x, y) = \sqrt{\sum_{j=1}^p (x_j - y_j)^2}, \qquad
+d_{\text{Man}}(x, y) = \sum_{j=1}^p |x_j - y_j|, \qquad
+d_{\text{cor}}(x, y) = 1 - r(x, y),
+$$
+
+dove $r(x, y)$ è la correlazione di Pearson tra i due vettori di $p$ valori. Le distanze euclidea e di Manhattan sono casi particolari della distanza di Minkowski $\big(\sum_j |x_j - y_j|^q\big)^{1/q}$ con $q = 2$ e $q = 1$.
+:::
+
+### Dati misti: la distanza di Gower
+
+I dataset reali mescolano numeri e categorie (isola, sesso). La distanza euclidea non ha senso per un fattore. La **distanza di Gower** gestisce entrambi:
+
+- per una variabile **numerica**, la differenza è $|x_j - y_j|$ divisa per il **campo di variazione** di quella variabile (quindi sta tra 0 e 1);
+- per una variabile **categoriale**, la differenza è 0 se le due categorie coincidono e 1 altrimenti;
+- la distanza di Gower è la **media** di queste differenze per variabile (le variabili mancanti in una delle due osservazioni vengono saltate).
+
+La calcola `cluster::daisy()`. I fattori sono riconosciuti automaticamente.
+
+```{r}
+#| label: gower
+peng_mixed <- penguins |>
+  select(island, sex, bill_len, flipper_len, body_mass)
+
+gower <- daisy(peng_mixed, metric = "gower")
+round(as.matrix(gower)[c(1, 2, 200), c(1, 2, 200)], 3)
+```
+
+Verifichiamo a mano la distanza tra gli animali 1 e 200, con le stesse regole per variabile. I campi di variazione vanno calcolati sull'**intero** dataset, come fa `daisy()`.
+
+```{r}
+#| label: gower-by-hand
+b1 <- peng_mixed[1, ]
+b2 <- peng_mixed[200, ]
+num_vars <- c("bill_len", "flipper_len", "body_mass")
+
+num_part <- sapply(num_vars, \(v) {
+  abs(b1[[v]] - b2[[v]]) / diff(range(peng_mixed[[v]], na.rm = TRUE))
+})
+cat_part <- c(island = b1$island != b2$island, sex = b1$sex != b2$sex)
+
+parts <- c(num_part, cat_part)
+round(parts, 3)
+mean(parts)
+```
+
+La media calcolata a mano, `r round(mean(parts), 3)`, coincide con il valore di `daisy()`. Poiché i campi di variazione dipendono dall'intero dataset, aggiungere o togliere osservazioni cambia un poco tutte le distanze di Gower.
+
+## 4. Perché la scalatura cambia tutto
+
+Le distanze sommano le differenze tra le variabili. Se una variabile è misurata in migliaia e un'altra in unità, la prima decide tutto. Vediamolo con dati simulati di cui **conosciamo** i veri gruppi.
+
+Simuliamo 200 clienti. Metà sono *occasionali* (circa 2 visite al mese), metà *frequenti* (circa 6). Il loro reddito annuo (in euro) non ha nulla a che fare con i gruppi.
+
+```{r}
+#| label: sim-shoppers
+set.seed(42)
+n <- 200
+shoppers <- tibble(
+  group  = rep(c("occasional", "frequent"), each = n / 2),
+  visits = c(rnorm(n / 2, mean = 2, sd = 0.7),
+             rnorm(n / 2, mean = 6, sd = 0.7)),
+  income = rnorm(n, mean = 30000, sd = 8000)
+)
+
+set.seed(1)
+km_raw <- kmeans(shoppers[, c("visits", "income")], centers = 2, nstart = 25)
+set.seed(1)
+km_std <- kmeans(scale(shoppers[, c("visits", "income")]), centers = 2,
+                 nstart = 25)
+```
+
+```{r}
+#| label: fig-scaling-demo
+#| fig-cap: "Lo stesso algoritmo k-means sugli stessi dati. A sinistra: unità originali, i cluster dividono il reddito e ignorano i veri gruppi. A destra: dopo la standardizzazione, i cluster recuperano i due tipi di cliente."
+demo <- bind_rows(
+  shoppers |> mutate(cluster = factor(km_raw$cluster), version = "Unità originali"),
+  shoppers |> mutate(cluster = factor(km_std$cluster), version = "Standardizzate")
+)
+
+ggplot(demo, aes(visits, income, colour = cluster, shape = group)) +
+  geom_point(alpha = 0.7) +
+  facet_wrap(~ version) +
+  labs(x = "Visite al mese", y = "Reddito annuo (EUR)",
+       colour = "Cluster", shape = "Gruppo reale")
+```
+
+Nelle unità originali, una differenza di 4 visite conta quanto una differenza di 4 euro — nulla, rispetto a differenze di reddito di migliaia di euro. Quindi k-means taglia l'asse del reddito. La concordanza con i veri gruppi, misurata con l'indice di Rand corretto (sezione 7), è `r round(adjustedRandIndex(km_raw$cluster, shoppers$group), 2)` per i dati originali (non meglio del caso) e `r round(adjustedRandIndex(km_std$cluster, shoppers$group), 2)` dopo la scalatura.
+
+La stessa cosa accade con dati reali. In `penguins`, la massa corporea è in grammi e ha una deviazione standard molto più grande delle misure del becco in millimetri:
+
+```{r}
+#| label: penguin-sd
+round(sapply(peng_x, sd), 1)
+```
+
+```{r}
+#| label: penguin-scaling
+set.seed(1)
+km_peng_raw <- kmeans(peng_x, centers = 3, nstart = 25)
+set.seed(1)
+km_peng_z   <- kmeans(peng_z, centers = 3, nstart = 25)
+
+table(cluster = km_peng_raw$cluster, species = peng$species)
+table(cluster = km_peng_z$cluster,   species = peng$species)
+```
+
+Senza scalatura, i cluster sono in sostanza animali "leggeri", "medi" e "pesanti". Dopo la scalatura, tutte e quattro le misure contribuiscono e i cluster si allineano molto meglio alle specie (ARI `r round(adjustedRandIndex(km_peng_raw$cluster, peng$species), 2)` contro `r round(adjustedRandIndex(km_peng_z$cluster, peng$species), 2)`).
+
+::: {.callout-important}
+## La scalatura è una scelta, non un rito
+
+Standardizzare dà a ogni variabile lo **stesso peso**. Di solito è l'impostazione giusta quando le variabili hanno unità diverse. Ma se le variabili sono già nella stessa unità e la loro dispersione è significativa (ad esempio quote di budget che sommano a 1), standardizzare può *amplificare* le variabili di solo rumore. Decidi, e spiega perché.
+:::
+
+## 5. Trasformazioni per dati asimmetrici
+
+Spesa, reddito, conteggi e concentrazioni sono spesso **asimmetrici a destra**: la maggior parte dei valori è piccola e pochi sono enormi. Con la distanza euclidea quei pochi valori enormi dominano, e i cluster diventano "i giganti" contro "tutti gli altri".
+
+```{r}
+#| label: wholesale-read
+wholesale <- read_csv(data_path("wholesale_customers.csv"),
+                      show_col_types = FALSE)
+spend_vars <- c("Fresh", "Milk", "Grocery", "Frozen",
+                "Detergents_Paper", "Delicassen")
+```
+
+```{r}
+#| label: fig-log1p
+#| fig-cap: "Spesa annua in prodotti freschi: in euro originali (a sinistra) è fortemente asimmetrica a destra; sulla scala log1p (a destra) la distribuzione è molto più simmetrica."
+wholesale |>
+  transmute(raw = Fresh, log1p = log1p(Fresh)) |>
+  pivot_longer(everything(), names_to = "scale", values_to = "value") |>
+  mutate(scale = factor(scale, levels = c("raw", "log1p"))) |>
+  ggplot(aes(value)) +
+  geom_histogram(bins = 30, fill = "#56B4E9", colour = "white") +
+  facet_wrap(~ scale, scales = "free_x") +
+  labs(x = "Spesa annua in prodotti freschi", y = "Numero di clienti")
+```
+
+Usiamo `log1p(x)` $= \log(1 + x)$ anziché `log(x)` perché è definita in zero. Sulla scala logaritmica, *le differenze sono rapporti*: un cliente che spende 2.000 e uno che spende 4.000 sono distanti quanto uno che spende 20.000 e uno che spende 40.000. Spesso è più vicino a ciò che intendiamo per "comportamento simile". Dopo la trasformazione standardizziamo comunque, così che tutte e sei le categorie pesino allo stesso modo:
+
+```{r}
+#| label: wholesale-prep
+wholesale_z <- wholesale |>
+  select(all_of(spend_vars)) |>
+  mutate(across(everything(), log1p)) |>
+  scale()
+round(colMeans(wholesale_z), 3)
+```
+
+Riutilizzeremo esattamente questo preprocessing nelle prossime lezioni.
+
+## 6. Validazione interna: quanto è buono un clustering?
+
+Senza etichette possiamo comunque chiederci se i cluster sono **compatti** (punti vicini al proprio gruppo) e **separati** (lontani dagli altri gruppi).
+
+### Devianza entro i gruppi
+
+k-means riporta la **devianza entro i gruppi** (*within-cluster sum of squares*, WCSS): la somma delle distanze al quadrato di ogni punto dal centro del proprio cluster. Più è piccola, più i cluster sono compatti.
+
+```{r}
+#| label: wcss
+km_peng_z$tot.withinss       # WCSS della soluzione a 3 cluster
+km_peng_z$totss              # devianza totale (un unico grande cluster)
+```
+
+I tre cluster eliminano il `r round(100 * km_peng_z$betweenss / km_peng_z$totss)`% della devianza totale. Ma attenzione: la WCSS **diminuisce sempre** quando aggiungiamo cluster (con $n$ cluster vale 0), quindi da sola non può scegliere il numero di cluster.
+
+### La silhouette, a mano per un pinguino
+
+La **silhouette** dell'osservazione $i$ confronta due numeri:
+
+- $a(i)$ — la distanza media di $i$ dagli **altri membri del proprio cluster** (coesione);
+- $b(i)$ — la distanza media di $i$ dai membri del **cluster più vicino tra gli altri** (separazione).
+
+$$
+s(i) = \frac{b(i) - a(i)}{\max\{a(i),\, b(i)\}} \quad \in [-1, 1].
+$$
+
+Valori vicini a 1: $i$ sta bene nel suo cluster. Vicini a 0: $i$ è al confine. Negativi: $i$ è in media più vicino a un altro cluster.
+
+Calcoliamola per il primo pinguino.
+
+```{r}
+#| label: silhouette-by-hand
+d_peng <- dist(peng_z)
+d_mat  <- as.matrix(d_peng)
+cl     <- km_peng_z$cluster
+i      <- 1
+
+# distanza media dal pinguino i a ciascun cluster (escluso i stesso)
+mean_to_cluster <- tapply(d_mat[i, -i], cl[-i], mean)
+mean_to_cluster
+
+a_i <- mean_to_cluster[as.character(cl[i])]
+b_i <- min(mean_to_cluster[names(mean_to_cluster) != cl[i]])
+s_i <- (b_i - a_i) / max(a_i, b_i)
+unname(s_i)
+```
+
+Il pinguino 1 appartiene al cluster `r cl[1]`. La sua distanza media dal proprio cluster è $a =$ `r round(a_i, 2)`; il cluster più vicino tra gli altri dista in media $b =$ `r round(b_i, 2)`; quindi $s =$ `r round(s_i, 2)`. Ora lasciamo che `cluster::silhouette()` lo faccia per ogni pinguino:
+
+```{r}
+#| label: silhouette-all
+sil <- silhouette(cl, d_peng)
+sil[i, ]                      # lo stesso valore per il pinguino 1
+summary(sil)$clus.avg.widths  # silhouette media in ciascun cluster
+mean(sil[, "sil_width"])      # silhouette media complessiva
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Ogni riga di un oggetto `silhouette` riporta il cluster, il **neighbor** (il cluster più vicino tra gli altri) e l'ampiezza della silhouette.
+- L'**ampiezza media della silhouette**, qui `r round(mean(sil[, "sil_width"]), 2)`, riassume l'intero clustering. Indicazione di massima (Kaufman & Rousseeuw): sopra 0.7 struttura forte, 0.5–0.7 ragionevole, 0.25–0.5 debole, sotto 0.25 nessuna struttura sostanziale. Considerali un vocabolario, non soglie rigide.
+- Le medie per cluster mostrano quali cluster sono ben definiti e quali sfumati.
+:::
+
+La silhouette ha una preferenza incorporata: premia gruppi **compatti, rotondi e ben separati**. Un cluster ad anello o allungato può essere perfettamente reale e ottenere comunque una silhouette scarsa. Tienilo presente nelle lezioni su DBSCAN e sul clustering spettrale.
+
+## 7. Stabilità: troveremmo di nuovo gli stessi cluster?
+
+Un buon clustering non dovrebbe cambiare drasticamente se avessimo raccolto un campione leggermente diverso. Possiamo imitare "un campione diverso" con il [bootstrap](../07-probability/31-bootstrap.qmd): ricampioniamo le righe con reinserimento, rifacciamo il clustering e confrontiamo.
+
+Per confrontare due partizioni usiamo l'**indice di Rand corretto (ARI)**. Considera ogni coppia di osservazioni e chiede se le due partizioni concordano nel metterle insieme o separate, con una correzione tale che un'etichettatura casuale dia circa 0. ARI = 1 significa partizioni identiche (i numeri dei cluster possono essere permutati — all'ARI i nomi non interessano).
+
+```{r}
+#| label: stability-helpers
+# assegna ogni riga di x al più vicino tra i centri dati
+assign_nearest <- function(x, centers) {
+  d2 <- sapply(seq_len(nrow(centers)),
+               \(j) colSums((t(x) - centers[j, ])^2))
+  max.col(-d2, ties.method = "first")
+}
+
+boot_stability <- function(x, k, B = 50, seed = 1) {
+  set.seed(seed)
+  ref <- kmeans(x, centers = k, nstart = 25)$cluster
+  vapply(seq_len(B), \(b) {
+    rows <- sample(nrow(x), replace = TRUE)
+    fit  <- kmeans(x[rows, ], centers = k, nstart = 10)
+    adjustedRandIndex(ref, assign_nearest(x, fit$centers))
+  }, numeric(1))
+}
+```
+
+Per ogni campione bootstrap adattiamo k-means, poi assegniamo **tutti i pinguini originali** al centro bootstrap più vicino e confrontiamo con la partizione di riferimento.
+
+```{r}
+#| label: stability-penguins
+stab_3 <- boot_stability(peng_z, k = 3)
+summary(stab_3)
+```
+
+L'ARI mediano su `r length(stab_3)` campioni bootstrap è `r round(median(stab_3), 2)`: la soluzione a tre cluster è `r if (median(stab_3) > 0.85) "molto riproducibile" else "solo moderatamente riproducibile"`. La stabilità non dimostra che i cluster siano "reali" (un artefatto stabile resta un artefatto), ma i cluster **instabili** non vanno mai interpretati.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: l'indice di Rand corretto
+
+Per due partizioni di $n$ oggetti, costruisci la tabella di contingenza $n_{ij}$ (oggetti nel cluster $i$ della prima e nel cluster $j$ della seconda), con somme di riga $a_i$ e somme di colonna $b_j$. Allora
+
+$$
+\text{ARI} = \frac{\sum_{ij}\binom{n_{ij}}{2} - \Big[\sum_i \binom{a_i}{2}\sum_j\binom{b_j}{2}\Big] \Big/ \binom{n}{2}}
+{\tfrac12\Big[\sum_i \binom{a_i}{2} + \sum_j \binom{b_j}{2}\Big] - \Big[\sum_i \binom{a_i}{2}\sum_j\binom{b_j}{2}\Big] \Big/ \binom{n}{2}} .
+$$
+
+Il numeratore è "coppie messe insieme da entrambe le partizioni" meno quanto ci aspetteremmo per caso; il denominatore riscala in modo che il massimo sia 1. L'ARI può essere leggermente negativo. (Hubert & Arabie, 1985.)
+:::
+
+## 8. Validazione esterna: quando esistono etichette
+
+A volte *abbiamo* etichette che non sono state usate per il clustering — qui, le specie. Allora possiamo misurare la concordanza con l'ARI:
+
+```{r}
+#| label: external
+adjustedRandIndex(km_peng_z$cluster, peng$species)
+```
+
+Questo è utile per **la didattica e per testare i metodi** (sappiamo quale dovrebbe essere la risposta). Nelle applicazioni reali, però:
+
+- di solito **non ci sono etichette** — altrimenti useremmo l'apprendimento supervisionato;
+- quando le etichette esistono, sono un possibile raggruppamento fra molti. I pinguini potrebbero raggrupparsi anche per sesso o per isola. Un clustering in disaccordo con la specie non è necessariamente "sbagliato"; potrebbe trovare una struttura diversa.
+
+## 9. Una mappa delle famiglie di clustering
+
+| Famiglia | Idea di base | Trova | Serve $k$? | Valori anomali | Lezione |
+|---|---|---|---|---|---|
+| **Basata sui centroidi** (k-means, k-medoidi) | ogni cluster è riassunto da un centro; si minimizzano le distanze dai centri | gruppi compatti, più o meno rotondi, di dimensioni simili | sì | attratti nei cluster (k-means è sensibile) | [k-means](56-kmeans.qmd) |
+| **Gerarchica** (agglomerativa) | si fondono passo passo i gruppi più vicini; un albero di partizioni annidate | dipende dal legame; qualsiasi $k$ da un solo albero | no (si taglia dopo) | il legame singolo li isola; gli altri li assorbono | [Gerarchico](57-hierarchical.qmd) |
+| **Basata sulla densità** (DBSCAN, HDBSCAN) | i cluster sono regioni dense separate da regioni rade | forme arbitrarie | no | etichettati esplicitamente come **rumore** | [DBSCAN](58-dbscan.qmd) |
+| **Basata su modelli** (misture gaussiane) | i dati sono una mistura di distribuzioni di probabilità | gruppi ellittici, appartenenze probabilistiche | scelto con il BIC | può aggiungere una componente di rumore | [Basato su modelli](59-model-based.qmd) |
+| **Basata su grafi** (spettrale) | si costruisce un grafo di similarità; lo si taglia in pezzi debolmente connessi | forme non convesse, connesse | sì | sensibile alla scala della similarità | [Spettrale](60-spectral.qmd) |
+
+Una regola pratica: **parti dal semplice** (k-means e clustering gerarchico di Ward su dati ben preparati), osserva il risultato, e cambia famiglia solo quando hai un motivo — forme allungate o non convesse, molti valori anomali, necessità di probabilità, tipi di dati misti.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Fare clustering su dati non scalati con unità miste.** La variabile con i numeri più grandi decide in silenzio i cluster (sezione 4).
+2. **Credere che i cluster esistano perché l'algoritmo li ha trovati.** Ogni algoritmo restituisce dei gruppi. Controlla silhouette, stabilità e se i profili hanno senso.
+3. **Usare la distanza euclidea su codici categoriali.** Codificare le isole come 1, 2, 3 e calcolare la distanza euclidea finge che Dream sia "tra" Biscoe e Torgersen. Usa Gower (o un'altra distanza pensata per le categorie).
+4. **Scegliere il numero di cluster solo con la WCSS.** La WCSS diminuisce sempre al crescere di $k$.
+5. **Dare significato ai numeri dei cluster.** Il "cluster 1" di un'esecuzione può essere il "cluster 3" della successiva. Confronta le partizioni con l'ARI o con tabelle incrociate, mai per etichetta.
+6. **Interpretare troppo la concordanza con etichette note.** Un ARI alto con la specie è rassicurante in un esempio didattico; nella pratica, il raggruppamento "giusto" dipende dalla domanda.
+:::
+
+## 10. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Fai clustering dei clienti su età (anni) e spesa annua (euro) senza scalare. Quale variabile dominerà, e perché?
+
+La spesa. Le sue differenze sono nell'ordine di centinaia o migliaia, mentre le differenze di età sono nell'ordine delle decine. La distanza euclidea somma le differenze al quadrato, quindi la spesa determina quasi tutte le distanze. Standardizza prima (oppure decidi esplicitamente quanto peso dare a ciascuna variabile).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Un'osservazione ha $a(i) = 2$ e $b(i) = 1.5$. Qual è la sua silhouette e che cosa significa?
+
+$s(i) = (1.5 - 2)/\max(2, 1.5) = -0.25$. È negativa: in media l'osservazione è più vicina al cluster confinante che al proprio — probabilmente è assegnata male o sta tra due gruppi.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Due esecuzioni dello stesso algoritmo danno le etichette `c(1, 1, 2, 2, 3)` e `c(3, 3, 1, 1, 2)`. Quanto vale l'ARI?
+
+1. Le partizioni sono identiche; cambiano solo i nomi dei cluster. L'ARI ignora i nomi.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. I tuoi dati contengono misure numeriche e due fattori. Quale distanza e quale funzione R useresti?
+
+La distanza di Gower, calcolata con `cluster::daisy(x, metric = "gower")`. Il risultato può essere passato a metodi che accettano una dissimilarità, come il clustering gerarchico (`hclust()`) o i k-medoidi (`cluster::pam()`), ma non a `kmeans()`, che richiede coordinate numeriche.
+:::
+
+## 11. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — distanze a mano.** Per i punti $P = (1, 2)$ e $Q = (4, 6)$, calcola a mano le distanze euclidea e di Manhattan, poi verifica con `dist()`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Euclidea: $\sqrt{3^2 + 4^2} = 5$. Manhattan: $3 + 4 = 7$.
+```r
+pq <- rbind(P = c(1, 2), Q = c(4, 6))
+dist(pq)                        # 5
+dist(pq, method = "manhattan")  # 7
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — prevedi, poi verifica.** Usando `peng_x` (unità originali), calcola la distanza euclidea tra i pinguini 1 e 2 con tutte e quattro le variabili, e di nuovo usando **solo** `body_mass`. Prima di eseguire: quanto ti aspetti che differiscano i due numeri? Che cosa ti dice questo?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+dist(peng_x[1:2, ])
+dist(peng_x[1:2, "body_mass", drop = FALSE])
+```
+Le due distanze sono quasi identiche (circa 50.3 e 50): la differenza di 50 g nella massa corporea sommerge le differenze di pochi millimetri nelle altre variabili. Nelle unità originali, la distanza è sostanzialmente una distanza di massa corporea.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi l'errore.** Uno studente vuole fare clustering su `mtcars` e scrive il codice qui sotto. I cluster sono determinati quasi interamente da una sola variabile. Quale, e come lo correggi?
+
+```r
+set.seed(1)
+km <- kmeans(mtcars, centers = 3, nstart = 25)
+aggregate(mtcars[, c("disp", "hp", "mpg")], list(km$cluster), mean)
+```
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+`disp` (cilindrata, con valori nell'ordine delle centinaia e la deviazione standard più grande) e, in misura minore, `hp` dominano le distanze; variabili come `am` o `vs` (0/1) non hanno alcun ruolo. Standardizza prima:
+```r
+round(sapply(mtcars, sd), 1)          # osserva il problema di scala
+set.seed(1)
+km_z <- kmeans(scale(mtcars), centers = 3, nstart = 25)
+```
+Confronta le due partizioni con `adjustedRandIndex(km$cluster, km_z$cluster)`: differiscono in modo evidente.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — interpreta le silhouette.** Un clustering ha silhouette medie per cluster di 0.62, 0.55 e 0.08. Scrivi due frasi per un collega.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+I primi due cluster sono ragionevolmente ben definiti: i loro membri sono chiaramente più vicini al proprio gruppo che agli altri. Il terzo cluster ha una silhouette media vicina a 0, quindi la maggior parte dei suoi membri sta al confine con altri cluster; potrebbe essere un artefatto (ad esempio un gruppo "residuo") e va esaminato — o fuso con altri — prima di essere interpretato.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi: stabilità al variare di k.** Usando `boot_stability()` della sezione 7 su `peng_z`, calcola l'ARI bootstrap mediano per $k = 2, 3, 4, 5$. Quali valori di $k$ danno partizioni riproducibili? Il $k$ più stabile corrisponde al numero di specie?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+stab <- sapply(2:5, \(k) median(boot_stability(peng_z, k = k, B = 30)))
+names(stab) <- 2:5
+round(stab, 2)
+```
+Dovresti trovare che $k = 2$ è perfettamente stabile (ARI mediano 1: Gentoo contro gli altri è una divisione facile), $k = 3$ è quasi altrettanto stabile (circa 0.97), e $k = 4$ e $5$ sono un po' meno stabili (intorno a 0.9). Quindi il $k$ più stabile **non** è il numero di specie: la stabilità è un elemento di evidenza, non una macchina che trova il $k$ "vero". Combinala con la silhouette e con l'interpretabilità.
+:::
+:::
+
+## Riepilogo
+
+| Idea | R | Da ricordare |
+|---|---|---|
+| Distanza euclidea / di Manhattan | `dist(x)`, `dist(x, method = "manhattan")` | dati numerici, scala prima |
+| Distanza di correlazione | `as.dist(1 - cor(t(x)))` | confronta la forma dei profili, non i livelli |
+| Distanza di Gower (dati misti) | `cluster::daisy(x, metric = "gower")` | i campi di variazione dipendono da tutti i dati |
+| Standardizzare | `scale(x)` | dà a ogni variabile lo stesso peso |
+| Dati positivi asimmetrici | `log1p(x)` | le differenze diventano rapporti |
+| Compattezza | `kmeans(...)$tot.withinss` | diminuisce sempre al crescere di $k$ |
+| Silhouette | `cluster::silhouette(cl, d)` | favorisce cluster compatti e rotondi |
+| Concordanza tra partizioni | `mclust::adjustedRandIndex(a, b)` | 1 = identiche, circa 0 = caso |
+
+- Il clustering è **esplorazione**: non c'è una verità di riferimento, e il risultato dipende da variabili, trasformazione, scalatura, distanza e algoritmo.
+- **Scalatura e trasformazioni** possono cambiare completamente i cluster; decidile con consapevolezza.
+- Giudica un clustering per **compattezza/separazione** (silhouette), **stabilità** (ARI bootstrap) e **interpretabilità** — e con etichette esterne solo quando esistono e sono pertinenti.
+- Scegli la **famiglia** in base alle forme che ti aspetti e alle domande che poni.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2a ed.), capitolo 12, <https://www.statlearning.com>
+- Documentazione del pacchetto `cluster` (`?daisy`, `?silhouette`), <https://cran.r-project.org/package=cluster>
+- Hennig, C. *et al.* (a cura di), *Handbook of Cluster Analysis*, CRC Press (2015) — per i molti significati di "un buon clustering".
+:::

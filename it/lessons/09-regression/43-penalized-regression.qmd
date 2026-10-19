@@ -1,0 +1,719 @@
+---
+title: "Regressione penalizzata: ridge, lasso ed elastic net"
+subtitle: "Scambiare un po' di distorsione con molta stabilità — e lasciare che siano i dati a scegliere quanta"
+description: "Perché i minimi quadrati diventano instabili con molti predittori o predittori correlati, come ridge, lasso ed elastic net contraggono i coefficienti, come scegliere la penalità con la convalida incrociata (lambda.min contro lambda.1se), come il lasso seleziona le variabili quando p > n e come ottimizzare lo stesso modello con tidymodels."
+---
+
+::: {.lesson-meta}
+[Livello 4 · Modelli e apprendimento]{.level-4} [⏱ ~120 min]{} [Prerequisiti: [Regressione multipla](39-multiple-regression.qmd), [Selezione e validazione del modello](40-model-selection.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare perché i minimi quadrati diventano **instabili** con molti predittori o predittori correlati, e come una **penalità** scambia distorsione con varianza;
+- descrivere **ridge**, **lasso** ed **elastic net** e il ruolo dei due parametri di regolazione $\lambda$ e $\alpha$;
+- preparare correttamente una matrice di disegno e stimare modelli penalizzati con **glmnet**, leggendo i **percorsi dei coefficienti** e le **curve di convalida incrociata**;
+- scegliere $\lambda$ con `cv.glmnet()` e spiegare perché **`lambda.1se`** dà un modello più semplice e più stabile di `lambda.min`;
+- confrontare i modelli penalizzati con gli OLS tramite **convalida incrociata ripetuta** e ottimizzare un elastic net con **tidymodels**.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(glmnet)
+library(tidymodels)   # rsample, recipes, parsnip, workflows, tune,
+                      # yardstick, dials + dplyr, ggplot2, tidyr, tibble
+```
+
+## 1. Perché penalizzare?
+
+In [Selezione del modello](40-model-selection.qmd) abbiamo visto che aggiungere predittori migliora sempre l'adattamento ai dati a disposizione, ma può peggiorare le previsioni per nuovi dati, e che scegliere i predittori con `step()` è instabile. Guardiamo il problema da un'altra angolazione.
+
+`mtcars` contiene 32 automobili e 10 predittori candidati del consumo di carburante (`mpg`). Trattiamo `cyl`, `vs` e `am` come categoriali:
+
+```{r}
+#| label: cars-data
+cars <- mtcars |>
+  mutate(cyl = factor(cyl),
+         vs = factor(vs),
+         am = factor(am, labels = c("auto", "manual")))
+
+m_ols <- lm(mpg ~ ., data = cars)
+summary(m_ols)$r.squared
+summary(m_ols)$coefficients |> round(3)
+```
+
+Il modello spiega il `r round(100 * summary(m_ols)$r.squared)`% della varianza di `mpg`, eppure **nemmeno un coefficiente** è significativo al livello del 5%. Il motivo è che i predittori sono fortemente correlati:
+
+```{r}
+#| label: cars-cor
+cor(mtcars[, c("cyl", "disp", "hp", "wt")]) |> round(2)
+```
+
+Motori grandi (`disp`), molti cilindri, alta potenza e auto pesanti vanno insieme. Con una sovrapposizione così forte, i dati non riescono a dire quale di essi conti "davvero", quindi i singoli coefficienti sono molto incerti. Possiamo vedere questa incertezza stimando di nuovo il modello su campioni **bootstrap** (vedi [Il bootstrap](../07-probability/31-bootstrap.qmd)):
+
+```{r}
+#| label: boot-ols
+set.seed(1)
+boot_coef <- t(replicate(500, {
+  rows <- sample(nrow(cars), replace = TRUE)
+  coef(lm(mpg ~ ., data = cars[rows, ]))[c("wt", "disp", "hp")]
+}))
+colMeans(boot_coef > 0)   # quota di stime bootstrap con segno positivo
+```
+
+Il coefficiente della cilindrata è positivo nel `r round(100 * mean(boot_coef[, "disp"] > 0))`% delle stime bootstrap e negativo nelle altre; perfino la potenza cambia segno nel `r round(100 * mean(boot_coef[, "hp"] > 0))`% dei casi. I minimi quadrati sono **non distorti** ma hanno **varianza elevata**: piccole variazioni nei dati producono grandi variazioni nelle stime, e nelle previsioni che ne dipendono.
+
+La **regressione penalizzata** accetta una piccola **distorsione** — spinge ("contrae") i coefficienti verso zero — in cambio di una forte riduzione della **varianza**. Quando i predittori sono molti o correlati, questo scambio di solito migliora le previsioni su nuovi dati.
+
+## 2. Il compromesso distorsione–varianza, per simulazione
+
+Per vedere lo scambio all'opera, simuliamo molti dataset con due predittori molto correlati (correlazione 0.95) e coefficienti veri $\beta_1 = \beta_2 = 1$. Per ogni dataset stimiamo $\beta_1$ con i minimi quadrati e con la **regressione ridge**, che aggiunge una penalità $\lambda$ sulla dimensione dei coefficienti. La ridge ha una soluzione in forma chiusa che richiede poche righe di codice (dettagli nel riquadro "Per approfondire" del paragrafo 3):
+
+```{r}
+#| label: ridge-by-hand
+ridge_coef <- function(X, y, lambda) {
+  Xc <- scale(X, scale = FALSE)          # centra i predittori
+  yc <- y - mean(y)
+  n <- nrow(X)
+  drop(solve(crossprod(Xc) / n + lambda * diag(ncol(X)),
+             crossprod(Xc, yc) / n))
+}
+```
+
+```{r}
+#| label: bias-variance-sim
+set.seed(2026)
+sims <- replicate(2000, {
+  x1 <- rnorm(30)
+  x2 <- 0.95 * x1 + sqrt(1 - 0.95^2) * rnorm(30)   # cor(x1, x2) = 0.95
+  y <- 1 * x1 + 1 * x2 + rnorm(30, sd = 2)
+  X <- cbind(x1, x2)
+  c(OLS = ridge_coef(X, y, 0)[1], ridge = ridge_coef(X, y, 0.5)[1])
+})
+est <- tibble(method = rep(c("OLS", "ridge"), times = ncol(sims)),
+              beta1 = as.vector(sims))
+est |>
+  summarise(mean = mean(beta1), sd = sd(beta1),
+            mse = mean((beta1 - 1)^2), .by = method)
+```
+
+```{r}
+#| label: fig-bias-variance
+#| fig-cap: "Stime di un coefficiente il cui valore vero è 1 (linea tratteggiata) in 2000 dataset simulati. Gli OLS sono centrati sul valore vero ma molto dispersi; la ridge è leggermente distorta verso lo zero ma molto più precisa."
+ggplot(est, aes(beta1, fill = method)) +
+  geom_histogram(binwidth = 0.1, alpha = 0.7, position = "identity") +
+  geom_vline(xintercept = 1, linetype = 2) +
+  coord_cartesian(xlim = c(-3, 5)) +
+  labs(x = expression(hat(beta)[1]), y = "Numero di dataset", fill = NULL)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Gli **OLS** sono non distorti (media `r round(mean(sims[1, ]), 2)`, vicina a 1) ma le loro stime hanno una deviazione standard di `r round(sd(sims[1, ]), 2)`: in molti dataset sbagliano perfino il segno.
+- La **ridge** è distorta (media `r round(mean(sims[2, ]), 2)`), ma la sua deviazione standard è solo `r round(sd(sims[2, ]), 2)`.
+- L'**errore quadratico medio** (MSE = distorsione² + varianza) è ciò che conta per l'accuratezza: `r round(mean((sims[1, ] - 1)^2), 2)` per gli OLS contro `r round(mean((sims[2, ] - 1)^2), 2)` per la ridge. Un po' di distorsione ha prodotto un grande guadagno.
+:::
+
+Una penalità eccessiva, però, contrae tutto verso zero e la distorsione prevale (Esercizio 6). L'entità della penalità, $\lambda$, è un **parametro di regolazione** (*tuning parameter*) che sceglieremo con la convalida incrociata.
+
+## 3. Ridge, lasso ed elastic net
+
+Tutti e tre i metodi minimizzano la solita somma dei quadrati dei residui **più una penalità** sulla dimensione dei coefficienti. Il pacchetto **glmnet**, che useremo per tutta la lezione, risolve
+
+$$
+\min_{\beta_0,\,\beta}\;
+\underbrace{\frac{1}{2n}\sum_{i=1}^n \big(y_i - \beta_0 - x_i^\top\beta\big)^2}_{\text{adattamento}}
+\;+\;
+\underbrace{\lambda\left[\frac{1-\alpha}{2}\,\lVert\beta\rVert_2^2 + \alpha\,\lVert\beta\rVert_1\right]}_{\text{penalità}},
+$$
+
+dove $\lVert\beta\rVert_2^2 = \sum_j \beta_j^2$ (somma dei quadrati) e $\lVert\beta\rVert_1 = \sum_j |\beta_j|$ (somma dei valori assoluti). L'intercetta $\beta_0$ **non** è penalizzata.
+
+| Metodo | $\alpha$ | Penalità | Comportamento tipico |
+|---|---|---|---|
+| **Ridge** | 0 | $\frac{\lambda}{2}\sum_j \beta_j^2$ | contrae tutti i coefficienti in modo graduale; nessuno diventa esattamente 0; distribuisce il peso tra predittori correlati |
+| **Lasso** | 1 | $\lambda \sum_j \lvert\beta_j\rvert$ | contrae e porta alcuni coefficienti **esattamente a 0**: selezione delle variabili |
+| **Elastic net** | tra 0 e 1 | una miscela delle due | seleziona le variabili, ma tiene insieme i gruppi di predittori correlati più del lasso |
+
+I due parametri di regolazione:
+
+- $\lambda \ge 0$ fissa l'**intensità** della penalità. $\lambda = 0$ dà i minimi quadrati ordinari; al crescere di $\lambda$, i coefficienti si contraggono verso 0.
+- $\alpha \in [0, 1]$ fissa il **tipo** di penalità (ridge ↔ lasso).
+
+**Lasso** sta per *least absolute shrinkage and selection operator*.
+
+::: {.callout-important}
+## Standardizza i predittori
+
+La penalità tratta tutti i coefficienti allo stesso modo, ma la dimensione di un coefficiente dipende dalle **unità di misura** del suo predittore: il coefficiente del peso in tonnellate è 1000 volte quello del peso in chilogrammi. Senza standardizzazione, la penalità dipenderebbe da scelte arbitrarie delle unità. `glmnet()` perciò **standardizza internamente i predittori** (`standardize = TRUE`, il valore predefinito) e restituisce i coefficienti sulla **scala originale**. In tidymodels standardizziamo esplicitamente con `step_normalize()` in una recipe (paragrafo 10).
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la geometria di ridge e lasso
+
+Il problema penalizzato equivale a minimizzare la RSS **con un vincolo di budget** sui coefficienti: $\sum_j \beta_j^2 \le s$ (ridge) oppure $\sum_j |\beta_j| \le s$ (lasso), dove un budget $s$ più piccolo corrisponde a un $\lambda$ più grande. Con due coefficienti, il budget della ridge è un **disco** e quello del lasso un **rombo**:
+
+```{r}
+#| label: fig-geometry
+#| fig-cap: "Curve di livello della somma dei quadrati dei residui (ellissi, centrate sulla stima OLS) e regioni di vincolo della ridge (cerchio) e del lasso (rombo). La soluzione penalizzata si trova dove l'ellisse più piccola tocca la regione. Il rombo ha gli spigoli sugli assi, quindi la soluzione del lasso spesso cade su uno di essi, dove un coefficiente è esattamente zero."
+rss_grid <- tidyr::expand_grid(b1 = seq(-1.5, 3, length.out = 200),
+                               b2 = seq(-1.5, 3, length.out = 200)) |>
+  mutate(rss = (b1 - 2)^2 + 1.2 * (b1 - 2) * (b2 - 1.2) + (b2 - 1.2)^2)
+angle <- seq(0, 2 * pi, length.out = 200)
+circle <- tibble(b1 = cos(angle), b2 = sin(angle))
+diamond <- tibble(b1 = c(1, 0, -1, 0, 1), b2 = c(0, 1, 0, -1, 0))
+
+ggplot(rss_grid, aes(b1, b2)) +
+  geom_contour(aes(z = rss), bins = 12, colour = "grey60") +
+  geom_path(data = circle, colour = "#0072B2", linewidth = 1) +
+  geom_path(data = diamond, colour = "#D55E00", linewidth = 1) +
+  annotate("point", x = 2, y = 1.2, size = 2) +
+  annotate("text", x = 2.15, y = 1.35, label = "OLS") +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  coord_equal() +
+  labs(x = expression(beta[1]), y = expression(beta[2]))
+```
+
+Il disco non ha spigoli, quindi la soluzione della ridge non ha quasi mai una coordinata esattamente uguale a 0; si limita a spostarsi verso l'origine. Gli spigoli del rombo si trovano sugli assi; il primo contatto con un'ellisse avviene spesso in uno spigolo, che porta un coefficiente esattamente a zero. In molte dimensioni la sfera $\ell_1$ ha molti spigoli e lati, ed è per questo che il lasso produce soluzioni **sparse**.
+
+Altri due fatti:
+
+- La **ridge** ha la forma chiusa $\hat\beta_\lambda = (X^\top X/n + \lambda I)^{-1}X^\top y/n$ per dati centrati (la funzione `ridge_coef()` sopra). Aggiungere $\lambda I$ rende la matrice invertibile anche quando i predittori sono collineari o $p > n$.
+- Il **lasso** non ha forma chiusa; glmnet usa la **discesa per coordinate** (*coordinate descent*), aggiornando un coefficiente alla volta con un passo di "soft-thresholding" che porta a 0 i coefficienti piccoli. Calcola molto velocemente l'intero **percorso** di soluzioni per una sequenza decrescente di valori di $\lambda$, riutilizzando ogni soluzione come punto di partenza per la successiva.
+:::
+
+## 4. Preparare i dati per glmnet
+
+`glmnet()` non accetta una formula; richiede una **matrice** numerica `x` di predittori e un vettore `y`. `model.matrix()` converte un data frame con fattori in una matrice di questo tipo, creando **variabili dummy (indicatrici)** per ogni fattore:
+
+```{r}
+#| label: design-matrix
+X <- model.matrix(mpg ~ ., data = cars)[, -1]   # elimina la colonna dell'intercetta
+y <- cars$mpg
+dim(X)
+colnames(X)
+```
+
+Ogni fattore con $k$ livelli diventa $k - 1$ colonne dummy: `cyl` dà `cyl6` e `cyl8`, con 4 cilindri come livello di riferimento. Eliminiamo la colonna di uni (`[, -1]`) perché glmnet stima una propria intercetta (non penalizzata).
+
+::: {.callout-warning}
+## Un errore classico: una dummy di troppo
+
+Una ricetta comune è `model.matrix(mpg ~ . - 1, data = cars)`. Togliere l'intercetta *dentro la formula* fa sì che R codifichi il **primo** fattore con **tutti** i suoi livelli (`cyl4`, `cyl6`, `cyl8`). Se poi questa matrice viene usata in un modello *con* intercetta, le tre dummy sommano alla colonna dell'intercetta — collinearità perfetta — e `lm()` restituisce `NA` per un coefficiente:
+
+```{r}
+#| label: dummy-trap
+X_bad <- model.matrix(mpg ~ . - 1, data = cars)
+coef(lm(y ~ X_bad))[c("X_badcyl4", "X_badcyl6", "X_badcyl8")]
+```
+
+Usa `model.matrix(y ~ ., data)[, -1]` (un livello di riferimento per fattore). In glmnet la penalità nasconderebbe il problema, ma i coefficienti delle tre dummy di `cyl` non avrebbero più un significato chiaro.
+:::
+
+## 5. Regressione ridge con glmnet
+
+`glmnet()` stima il modello per un'intera sequenza di `r length(glmnet(X, y, alpha = 0)$lambda)` valori di $\lambda$ in un colpo solo. `alpha = 0` dà la ridge.
+
+```{r}
+#| label: fig-ridge-path
+#| fig-cap: "Percorsi dei coefficienti della ridge per il modello di mtcars. Ogni linea è un coefficiente. A destra (lambda grande) tutti i coefficienti sono schiacciati verso zero; spostandosi a sinistra la penalità si indebolisce e i coefficienti si avvicinano ai valori OLS. I numeri in alto sono il numero di coefficienti diversi da zero — sempre tutti, per la ridge."
+fit_ridge <- glmnet(X, y, alpha = 0)
+plot(fit_ridge, xvar = "lambda", label = TRUE)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere un percorso dei coefficienti
+
+- L'asse x è $\log(\lambda)$, crescente verso destra. La penalità **più forte** è a **destra**, dove tutti i coefficienti sono vicini a 0; la più debole è a sinistra, vicina agli OLS.
+- L'asse y mostra ciascun coefficiente (sulla scala originale del suo predittore); il numero all'estremità sinistra di ogni linea è la sua colonna in `X` (1 = `cyl6`, 2 = `cyl8`, e così via).
+- Con la ridge nessuna linea raggiunge esattamente 0 prima dell'estrema destra; i predittori correlati si muovono insieme.
+:::
+
+Quale $\lambda$ conviene usare? Quello che prevede meglio i nuovi dati — stimato con la convalida incrociata.
+
+## 6. Scegliere $\lambda$ con la convalida incrociata
+
+`cv.glmnet()` esegue una convalida incrociata a $k$ gruppi (10 per impostazione predefinita) su tutta la sequenza di $\lambda$ e registra, per ciascun $\lambda$, l'errore medio di CV e il suo errore standard.
+
+```{r}
+#| label: fig-cv-ridge
+#| fig-cap: "Errore quadratico medio della ridge in convalida incrociata in funzione di log(lambda), con barre ±1 errore standard. Le due linee tratteggiate indicano lambda.min (a sinistra) e lambda.1se (a destra)."
+set.seed(123)
+cv_ridge <- cv.glmnet(X, y, alpha = 0)
+plot(cv_ridge)
+c(lambda_min = cv_ridge$lambda.min, lambda_1se = cv_ridge$lambda.1se)
+```
+
+Vengono riportati due valori di $\lambda$:
+
+- **`lambda.min`**: il $\lambda$ con l'errore medio di CV **più basso**.
+- **`lambda.1se`**: il $\lambda$ **più grande** il cui errore di CV è entro **un errore standard** dal minimo.
+
+`lambda.1se` applica la **regola dell'errore standard** vista in [Selezione del modello](40-model-selection.qmd): differenze nell'errore di CV più piccole del loro errore standard sono per lo più rumore, quindi tra i modelli statisticamente indistinguibili dal migliore scegliamo il **più regolarizzato**. Ha un $\lambda$ più grande, quindi coefficienti più piccoli e — per il lasso — meno coefficienti diversi da zero. È la scelta **più parsimoniosa e più stabile**; `lambda.min` tende a conservare più rumore e cambia di più da una esecuzione di CV all'altra. `lambda.min` può essere preferibile quando conta più la pura accuratezza predittiva che la semplicità e il campione è grande.
+
+```{r}
+#| label: ridge-coefs
+cbind(min = coef(cv_ridge, s = "lambda.min")[, 1],
+      `1se` = coef(cv_ridge, s = "lambda.1se")[, 1],
+      ols = coef(m_ols)) |>
+  round(3)
+```
+
+Nel complesso i coefficienti a `lambda.1se` sono spinti verso lo zero più di quelli a `lambda.min`, ed entrambi gli insiemi sono più moderati degli OLS. Guarda `cyl8`: gli OLS stimano `r round(coef(m_ols)["cyl8"], 2)` — auto a otto cilindri più economiche di quelle a quattro cilindri a parità di peso e potenza, un artefatto della collinearità — mentre la ridge a `lambda.1se` dà `r round(coef(cv_ridge, s = "lambda.1se")["cyl8", 1], 2)`.
+
+Possiamo segnare il $\lambda$ scelto sul percorso dei coefficienti. Il percorso è disegnato rispetto a $\log(\lambda)$, quindi la linea verticale deve stare in **`log(lambda)`**:
+
+```{r}
+#| label: fig-ridge-path-line
+#| fig-cap: "Percorsi dei coefficienti della ridge con lambda.min (tratteggiata) e lambda.1se (punteggiata)."
+plot(fit_ridge, xvar = "lambda")
+abline(v = log(cv_ridge$lambda.min), lty = 2)
+abline(v = log(cv_ridge$lambda.1se), lty = 3)
+```
+
+## 7. Il lasso: contrazione e selezione
+
+`alpha = 1` dà il lasso:
+
+```{r}
+#| label: fig-lasso-path
+#| fig-cap: "Percorsi dei coefficienti del lasso. Spostandosi da destra (penalità forte) a sinistra, i predittori entrano nel modello uno alla volta; i numeri in alto contano i coefficienti diversi da zero."
+fit_lasso <- glmnet(X, y, alpha = 1)
+plot(fit_lasso, xvar = "lambda", label = TRUE)
+```
+
+```{r}
+#| label: fig-cv-lasso
+#| fig-cap: "MSE del lasso in convalida incrociata. I numeri in alto sono il numero di coefficienti diversi da zero per ciascun lambda."
+set.seed(123)
+cv_lasso <- cv.glmnet(X, y, alpha = 1)
+plot(cv_lasso)
+```
+
+```{r}
+#| label: lasso-coefs
+b_lasso <- cbind(min = coef(cv_lasso, s = "lambda.min")[, 1],
+                 `1se` = coef(cv_lasso, s = "lambda.1se")[, 1])
+round(b_lasso, 3)
+colSums(b_lasso[-1, ] != 0)    # coefficienti diversi da zero (intercetta esclusa)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- A `lambda.min` il lasso conserva `r sum(b_lasso[-1, "min"] != 0)` predittori; a `lambda.1se` solo `r sum(b_lasso[-1, "1se"] != 0)`: `r paste(rownames(b_lasso)[-1][b_lasso[-1, "1se"] != 0], collapse = ", ")`.
+- Un coefficiente esattamente uguale a 0 (stampato come `0`) significa che il predittore è stato **eliminato**.
+- I coefficienti che sopravvivono sono **contratti**: più piccoli in valore assoluto di quanto sarebbero in un adattamento OLS con soli quei predittori.
+- Con predittori fortemente correlati, *quale* di essi venga conservato dal lasso può essere in parte arbitrario: peso e cilindrata portano più o meno la stessa informazione. Non leggere la selezione come "le altre variabili non contano".
+:::
+
+Poiché la convalida incrociata divide i dati a caso, `lambda.1se` e l'insieme selezionato possono cambiare con il seme. Prova con qualche seme diverso (Esercizio 1): è un promemoria del fatto che la selezione su 32 osservazioni è fragile.
+
+## 8. Elastic net e un confronto onesto con gli OLS
+
+### Scegliere $\alpha$
+
+L'elastic net ha due parametri di regolazione. Un approccio semplice è eseguire `cv.glmnet()` per alcuni valori di $\alpha$ usando gli **stessi gruppi** (`foldid`), in modo che il confronto non sia distorto da suddivisioni casuali diverse:
+
+```{r}
+#| label: enet-alpha
+set.seed(2026)
+foldid <- sample(rep(1:10, length.out = nrow(X)))
+alphas <- c(0, 0.25, 0.5, 0.75, 1)
+cv_by_alpha <- lapply(alphas, \(a) cv.glmnet(X, y, alpha = a,
+                                             foldid = foldid))
+
+tibble(
+  alpha = alphas,
+  rmse_min = sapply(cv_by_alpha, \(cv) sqrt(min(cv$cvm))),
+  rmse_1se = sapply(cv_by_alpha,
+                    \(cv) sqrt(cv$cvm[cv$lambda == cv$lambda.1se])),
+  nonzero_1se = sapply(cv_by_alpha,
+                       \(cv) cv$nzero[cv$lambda == cv$lambda.1se])
+)
+```
+
+`cvm` è l'errore **quadratico** medio di CV, quindi ne prendiamo la radice quadrata per ottenere un RMSE in mpg. Con 32 auto, le differenze tra i valori di $\alpha$ sono piccole rispetto alla loro incertezza; ciò che cambia in modo evidente è il numero di predittori conservati.
+
+### La penalizzazione batte gli OLS in questo caso?
+
+Il modo tradizionale di rispondere — un'unica suddivisione training/test con 8 auto di test — dà una risposta che dipende soprattutto da *quali* 8 auto sono state estratte ([Selezione del modello](40-model-selection.qmd), paragrafo 6). Usiamo invece la **convalida incrociata a 5 gruppi ripetuta**. Poiché `cv.glmnet()` usa a sua volta la convalida incrociata per scegliere $\lambda$, deve essere eseguita **dentro** ogni gruppo di addestramento (CV annidata): il gruppo escluso non deve avere alcun ruolo nella scelta di $\lambda$.
+
+```{r}
+#| label: nested-cv
+rmse_vec <- function(y, y_hat) sqrt(mean((y - y_hat)^2))
+
+set.seed(2026)
+cv_compare <- replicate(10, {
+  folds <- sample(rep(1:5, length.out = nrow(X)))
+  sapply(1:5, \(i) {
+    train <- folds != i
+    ols <- lm(mpg ~ ., data = cars[train, ])
+    ridge <- cv.glmnet(X[train, ], y[train], alpha = 0, nfolds = 5)
+    lasso <- cv.glmnet(X[train, ], y[train], alpha = 1, nfolds = 5)
+    c(ols   = rmse_vec(y[!train], predict(ols, cars[!train, ])),
+      ridge = rmse_vec(y[!train], predict(ridge, newx = X[!train, ],
+                                          s = "lambda.1se")),
+      lasso = rmse_vec(y[!train], predict(lasso, newx = X[!train, ],
+                                          s = "lambda.1se")))
+  }) |>
+    rowMeans()
+})
+cv_rmse <- rowMeans(cv_compare)
+round(cv_rmse, 2)
+apply(cv_compare, 1, sd) |> round(2)    # variabilità tra le ripetizioni
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Ogni numero è l'RMSE (in mpg) per le auto **non usate** per stimare il modello né per scegliere $\lambda$, mediato su 5 gruppi × 10 ripetizioni.
+- OLS con tutti gli 11 coefficienti: `r round(cv_rmse["ols"], 2)`; ridge: `r round(cv_rmse["ridge"], 2)`; lasso: `r round(cv_rmse["lasso"], 2)` mpg.
+- La seconda riga mostra quanto ogni stima si muove tra le ripetizioni — un promemoria del fatto che differenze di pochi decimi di mpg rientrano nel rumore per un dataset così piccolo.
+:::
+
+La standardizzazione dei predittori viene ricalcolata da `glmnet()` dentro ogni gruppo di addestramento, e `model.matrix()` applica solo una codifica fissa, quindi nulla trapela dal gruppo escluso. Il vero punto di forza della penalizzazione emerge quando i predittori sono **molti** rispetto al numero di osservazioni — il paragrafo successivo.
+
+## 9. Quando $p > n$: il lasso come selettore di variabili
+
+Con più predittori che osservazioni, i minimi quadrati non hanno una soluzione unica. Simuliamo 50 osservazioni di 200 predittori, dei quali solo i primi 5 influenzano davvero $y$:
+
+```{r}
+#| label: pn-sim
+set.seed(1)
+n <- 50
+p <- 200
+X_sim <- matrix(rnorm(n * p), nrow = n,
+                dimnames = list(NULL, paste0("x", 1:p)))
+beta_true <- c(3, -2.5, 2, -1.5, 1, rep(0, p - 5))
+y_sim <- drop(X_sim %*% beta_true + rnorm(n))
+
+sum(is.na(coef(lm(y_sim ~ X_sim))))   # coefficienti che gli OLS non riescono a stimare
+```
+
+Gli OLS possono stimare al massimo 50 coefficienti; `r sum(is.na(coef(lm(y_sim ~ X_sim))))` vengono restituiti come `NA`, e i 50 che stima si adattano perfettamente ai dati (residui nulli) — inutili per la previsione. Il lasso non ha questo problema:
+
+```{r}
+#| label: pn-lasso
+set.seed(2)
+cv_sim <- cv.glmnet(X_sim, y_sim, alpha = 1)
+
+selected <- function(cv, s) {
+  b <- coef(cv, s = s)[-1, 1]
+  names(b)[b != 0]
+}
+sel_min <- selected(cv_sim, "lambda.min")
+sel_1se <- selected(cv_sim, "lambda.1se")
+true_vars <- paste0("x", 1:5)
+
+tibble(rule = c("lambda.min", "lambda.1se"),
+       selected = c(length(sel_min), length(sel_1se)),
+       true_found = c(sum(true_vars %in% sel_min),
+                      sum(true_vars %in% sel_1se)),
+       false_positives = c(sum(!sel_min %in% true_vars),
+                           sum(!sel_1se %in% true_vars)))
+```
+
+```{r}
+#| label: fig-pn-coefs
+#| fig-cap: "Stime del lasso a lambda.1se per i 200 predittori simulati (punti) e coefficienti veri (croci). Quasi tutti i predittori di rumore sono portati esattamente a zero; quelli veri vengono individuati ma contratti verso zero."
+tibble(j = 1:p,
+       estimate = coef(cv_sim, s = "lambda.1se")[-1, 1],
+       truth = beta_true) |>
+  ggplot(aes(j, estimate)) +
+  geom_hline(yintercept = 0, colour = "grey60") +
+  geom_point(aes(colour = j <= 5)) +
+  geom_point(aes(y = truth), shape = 4, size = 2.5) +
+  scale_colour_manual(values = c("grey40", "#D55E00"),
+                      labels = c("rumore", "segnale vero")) +
+  labs(x = "Indice del predittore", y = "Coefficiente", colour = NULL)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- A `lambda.1se` il lasso ha conservato `r length(sel_1se)` predittori su 200, tra cui `r sum(true_vars %in% sel_1se)` dei 5 veri e `r sum(!sel_1se %in% true_vars)` variabili di rumore.
+- A `lambda.min` ne ha conservati `r length(sel_min)`: i segnali veri più molte altre variabili di rumore. La penalità più piccola compra un errore di CV leggermente più basso al prezzo di un modello molto meno parsimonioso.
+- Le stime dei coefficienti veri sono **distorte verso zero** (le croci stanno più lontane da 0 dei punti). È il prezzo della penalità. Se servono stime pulite dei coefficienti, un approccio comune in due passi consiste nel stimare di nuovo gli OLS sulle variabili selezionate — ma allora i consueti p-value non sono più validi (vedi il riquadro qui sotto).
+:::
+
+::: {.callout-important}
+## La regressione penalizzata è uno strumento di previsione
+
+`glmnet` non riporta errori standard né p-value, e per una buona ragione: i coefficienti sono deliberatamente distorti e la selezione delle variabili è stata fatta con gli stessi dati. Eseguire `lm()` sulle variabili selezionate dal lasso e leggerne i p-value ha lo stesso problema della selezione stepwise ([Selezione del modello](40-model-selection.qmd), paragrafo 4). L'inferenza valida dopo la selezione richiede metodi speciali (ad esempio il pacchetto **selectiveInference**) ed esula da questo corso. Usa i modelli penalizzati quando l'obiettivo è la **previsione**, oppure come filtro esplorativo.
+:::
+
+## 10. Lo stesso con tidymodels
+
+Nelle lezioni di machine learning che seguono, i modelli si costruiscono con **tidymodels** ([Il flusso di lavoro del machine learning](../10-ml/44-ml-workflow.qmd)). Il modello glmnet è `linear_reg()` con due parametri di regolazione: `penalty` (= $\lambda$) e `mixture` (= $\alpha$).
+
+**Recipe** — il preprocessing, stimato sui dati di addestramento all'interno di ciascun ricampionamento:
+
+```{r}
+#| label: tm-recipe
+cars_rec <- recipe(mpg ~ ., data = cars) |>
+  step_dummy(all_nominal_predictors()) |>       # k - 1 dummy per fattore
+  step_normalize(all_numeric_predictors())      # media 0, DS 1
+```
+
+`step_dummy()` crea $k - 1$ colonne indicatrici per fattore (la stessa codifica di `model.matrix(...)[, -1]`), e `step_normalize()` standardizza ogni predittore, dummy comprese, in modo che la penalità li tratti su una scala comune.
+
+**Modello e workflow:**
+
+```{r}
+#| label: tm-model
+enet_spec <- linear_reg(penalty = tune(), mixture = tune()) |>
+  set_engine("glmnet")
+
+enet_wf <- workflow() |>
+  add_recipe(cars_rec) |>
+  add_model(enet_spec)
+```
+
+**Ricampionamenti e griglia.** Con sole 32 auto usiamo la CV a 5 gruppi ripetuta e rinunciamo a un insieme di test separato; con un dataset più grande ne metteresti prima uno da parte con `initial_split()` e valuteresti il modello finale su di esso una sola volta con `last_fit()`. (Stratificare i gruppi per una risposta numerica richiede più osservazioni di quelle che abbiamo, quindi qui non usiamo `strata`.)
+
+```{r}
+#| label: tm-tune
+set.seed(2026)
+cars_folds <- vfold_cv(cars, v = 5, repeats = 5)
+
+enet_grid <- tidyr::expand_grid(
+  penalty = 10^seq(-3, 1, length.out = 30),
+  mixture = c(0, 0.25, 0.5, 0.75, 1)
+)
+
+enet_res <- tune_grid(enet_wf, resamples = cars_folds, grid = enet_grid,
+                      metrics = metric_set(rmse))
+```
+
+```{r}
+#| label: fig-tm-tune
+#| fig-cap: "RMSE dell'elastic net in convalida incrociata per ogni combinazione di penalità (asse x, scala logaritmica) e mixture (colore)."
+autoplot(enet_res)
+```
+
+**Scegliere i parametri:**
+
+```{r}
+#| label: tm-select
+show_best(enet_res, metric = "rmse", n = 5)
+
+best_rmse <- select_best(enet_res, metric = "rmse")
+best_1se <- select_by_one_std_err(enet_res, desc(penalty), metric = "rmse")
+bind_rows(best = best_rmse, one_se = best_1se, .id = "rule")
+```
+
+`select_best()` è l'analogo di `lambda.min`. `select_by_one_std_err()` implementa la regola dell'errore standard: tra le combinazioni il cui RMSE medio è entro un errore standard dal migliore, restituisce la **più semplice**, dove definiamo "più semplice" ordinando per `desc(penalty)` — prima la penalità più grande. È l'analogo di `lambda.1se`.
+
+**Modello finale** — stimato di nuovo su tutti i dati con i parametri scelti:
+
+```{r}
+#| label: tm-final
+final_fit <- enet_wf |>
+  finalize_workflow(best_1se) |>
+  fit(data = cars)
+
+final_fit |>
+  extract_fit_parsnip() |>
+  tidy() |>
+  filter(estimate != 0)
+```
+
+Questi coefficienti sono sulla scala **standardizzata** (a causa di `step_normalize()`): ciascuno è la variazione di mpg per una variazione di una deviazione standard nel predittore, il che rende direttamente confrontabili le loro dimensioni. Il workflow stimato si può usare con `predict(final_fit, new_data = ...)`, e la recipe viene applicata automaticamente ai nuovi dati.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Chiamare `lambda.min` la scelta parsimoniosa.** È il contrario: `lambda.1se` ha la penalità *più grande*, i coefficienti più piccoli e (per il lasso) meno predittori.
+2. **Disegnare il $\lambda$ scelto nel posto sbagliato.** `plot(fit, xvar = "lambda")` usa $\log(\lambda)$ sull'asse x, quindi la linea è `abline(v = log(cv$lambda.1se))`, non `-log(...)`.
+3. **Includere tutti i livelli di un fattore più un'intercetta** (`model.matrix(y ~ . - 1)`). Usa `model.matrix(y ~ ., data)[, -1]` oppure `step_dummy()`.
+4. **Non standardizzare** quando stimi penalità fuori da glmnet (o disattivi `standardize`). La penalità dipenderebbe allora dalle unità di misura.
+5. **Valutare il modello su un unico insieme di test minuscolo** oppure scegliere $\lambda$ con i dati usati per valutarlo. Usa la convalida incrociata (ripetuta, annidata).
+6. **Leggere i p-value dopo la selezione del lasso**, oppure interpretare la scelta del lasso tra predittori correlati come prova che quelli scartati siano irrilevanti.
+:::
+
+## 11. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Che cosa succede ai coefficienti del lasso per $\lambda \to 0$? E quando $\lambda$ diventa molto grande?
+
+Per $\lambda \to 0$ la penalità svanisce e i coefficienti si avvicinano alle stime OLS (quando esistono). Al crescere di $\lambda$ si contraggono, uno a uno diventano esattamente 0 e, per $\lambda$ abbastanza grande, sono tutti 0: il modello prevede per tutti la media di $y$.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Perché `lambda.1se` è di solito più grande di `lambda.min`?
+
+Per definizione è il $\lambda$ **più grande** il cui errore di CV è entro un errore standard dal minimo. Spostandosi da `lambda.min` verso penalità più grandi, l'errore di CV cresce lentamente all'inizio; `lambda.1se` è il punto più lontano prima che l'aumento superi un errore standard.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Hai 10 predittori fortemente correlati che portano tutti informazione simile. Ridge o lasso?
+
+La ridge (o un elastic net con $\alpha$ piccolo) distribuisce il peso sul gruppo correlato ed è stabile. Il lasso tende a sceglierne uno o due in modo un po' arbitrario, e quali possono cambiare da campione a campione.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Perché i predittori vanno standardizzati prima di applicare la penalità?
+
+La penalità è una somma sui coefficienti, e la dimensione di un coefficiente dipende dalle unità del suo predittore. Senza standardizzazione, un predittore misurato in unità grandi (coefficiente piccolo) è appena penalizzato, e uno in unità piccole è penalizzato pesantemente — per ragioni che non hanno nulla a che fare con i dati.
+:::
+
+## 12. Esercizi
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — la scelta del lasso è fragile.** Esegui `cv.glmnet(X, y, alpha = 1)` sulla matrice di disegno di `mtcars` con cinque semi diversi. Per ogni esecuzione, registra `lambda.1se` e i nomi dei predittori con coefficiente diverso da zero a `lambda.1se`. Gli insiemi selezionati sono sempre gli stessi?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+for (s in 1:5) {
+  set.seed(s)
+  cv <- cv.glmnet(X, y, alpha = 1)
+  b <- coef(cv, s = "lambda.1se")[-1, 1]
+  cat("seme", s, ": lambda.1se =", round(cv$lambda.1se, 2), "->",
+      names(b)[b != 0], "\n")
+}
+```
+Con sole 32 auto, `lambda.1se` si sposta sensibilmente da un seme all'altro, e così può fare il numero di predittori conservati: alcuni predittori (il peso, per esempio) tendono a sopravvivere nella maggior parte delle esecuzioni, altri vanno e vengono. Una scelta più stabile si può ottenere mediando le curve di CV su più esecuzioni (o usando la CV ripetuta, come in tidymodels), ma la lezione è generale: la selezione di variabili da campioni piccoli va trattata con cautela.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — correggi l'errore.** Uno studente disegna il percorso del lasso e la penalità scelta con
+
+```r
+plot(fit_lasso, xvar = "lambda")
+abline(v = -log(cv_lasso$lambda.min), col = "red")
+```
+
+e scrive: *"Uso `lambda.min` perché dà il modello più parsimonioso."* Trova i due errori.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+1. L'asse x è $\log(\lambda)$, quindi la linea deve stare in `log(cv_lasso$lambda.min)`. Poiché qui $\lambda < 1$, $\log(\lambda)$ è negativo e $-\log(\lambda)$ è positivo: la linea rossa finisce dalla parte sbagliata del grafico, in corrispondenza di un valore di $\lambda$ che non è mai stato scelto.
+2. `lambda.min` è la **meno** regolarizzata delle due scelte standard. Quella parsimoniosa è `lambda.1se`.
+
+```r
+plot(fit_lasso, xvar = "lambda")
+abline(v = log(cv_lasso$lambda.1se), col = "red")
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — prevedi l'output.** Il peso `wt` è in migliaia di libbre. Supponi di creare `X_lb` moltiplicando per 1000 la colonna `wt` (peso in libbre) e di stimare di nuovo il lasso. Che cosa succede al coefficiente del peso (a) con il valore predefinito `standardize = TRUE`, (b) con `standardize = FALSE`? Verifica con `glmnet(..., lambda = cv_lasso$lambda.1se)`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+(a) Con la standardizzazione, l'adattamento è lo stesso modello: il coefficiente del peso viene semplicemente diviso per 1000 e tutti gli altri coefficienti restano invariati. (b) Senza di essa, il coefficiente del peso in libbre è minuscolo, quindi penalizzarlo costa quasi nulla: il lasso conserva il peso più facilmente e l'equilibrio con gli altri predittori cambia. Il risultato dipende da una scelta arbitraria delle unità — ecco perché glmnet standardizza per impostazione predefinita.
+
+```r
+X_lb <- X
+X_lb[, "wt"] <- X_lb[, "wt"] * 1000
+lam <- cv_lasso$lambda.1se
+cbind(original = coef(glmnet(X, y, alpha = 1, lambda = lam))[, 1],
+      std_true = coef(glmnet(X_lb, y, alpha = 1, lambda = lam))[, 1],
+      std_false = coef(glmnet(X_lb, y, alpha = 1, lambda = lam,
+                              standardize = FALSE))[, 1]) |>
+  round(4)
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — interpreta un output.** Un lasso stimato con `cv.glmnet()` riporta: `lambda.min` = 0.08 con 9 coefficienti diversi da zero e MSE di CV 7.1; `lambda.1se` = 0.90 con 3 coefficienti diversi da zero e MSE di CV 8.0; l'errore standard dell'errore di CV a `lambda.min` è 1.3. Quale modello riporteresti e perché? Che cosa ti farebbe cambiare idea?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+La differenza nell'MSE di CV (8.0 − 7.1 = 0.9) è inferiore a un errore standard (1.3): i dati non riescono davvero a distinguere i due modelli. Il modello con 3 predittori a `lambda.1se` è più semplice, più facile da spiegare e la sua selezione ha più probabilità di essere riproducibile, quindi è la scelta naturale. Se piccoli guadagni di accuratezza fossero preziosi (e confermati su un grande insieme di test), oppure se molte esecuzioni ripetute di CV favorissero costantemente il modello più grande, `lambda.min` potrebbe essere giustificato.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — mini-analisi: quanto è affidabile la selezione del lasso?** Ripeti venti volte la simulazione con $p > n$ del paragrafo 9 (nuovi `X_sim`, `y_sim` e gruppi di CV a ogni volta). Per ogni esecuzione, registra il numero di predittori veri trovati e il numero di falsi positivi a `lambda.min` e a `lambda.1se`. Riassumi le medie.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+set.seed(10)
+runs <- replicate(20, {
+  Xs <- matrix(rnorm(n * p), nrow = n,
+               dimnames = list(NULL, paste0("x", 1:p)))
+  ys <- drop(Xs %*% beta_true + rnorm(n))
+  cv <- cv.glmnet(Xs, ys, alpha = 1)
+  s_min <- selected(cv, "lambda.min")
+  s_1se <- selected(cv, "lambda.1se")
+  c(true_min = sum(true_vars %in% s_min),
+    false_min = sum(!s_min %in% true_vars),
+    true_1se = sum(true_vars %in% s_1se),
+    false_1se = sum(!s_1se %in% true_vars))
+})
+rowMeans(runs)
+```
+Di solito entrambe le regole trovano tutti o quasi tutti i 5 predittori veri (il più debole, con coefficiente 1, è quello mancato più spesso), ma `lambda.min` lascia entrare anche molte più variabili di rumore di `lambda.1se`. Per la **selezione delle variabili**, `lambda.1se` è chiaramente la regola migliore; nessuna delle due è perfetta, e i conteggi esatti variano da un'esecuzione all'altra.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 6 — distorsione e varianza al variare di $\lambda$.** Usando `ridge_coef()` e la simulazione del paragrafo 2 (1000 dataset per ciascun valore), calcola distorsione, varianza e MSE di $\hat\beta_1$ per $\lambda$ = 0, 0.05, 0.2, 0.5, 2 e 10. Descrivi l'andamento.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+set.seed(2026)
+lambdas <- c(0, 0.05, 0.2, 0.5, 2, 10)
+bv <- sapply(lambdas, \(l) {
+  b1 <- replicate(1000, {
+    x1 <- rnorm(30)
+    x2 <- 0.95 * x1 + sqrt(1 - 0.95^2) * rnorm(30)
+    y <- x1 + x2 + rnorm(30, sd = 2)
+    ridge_coef(cbind(x1, x2), y, l)[1]
+  })
+  c(lambda = l, bias = mean(b1) - 1, variance = var(b1),
+    mse = mean((b1 - 1)^2))
+})
+round(t(bv), 3)
+```
+Al crescere di $\lambda$ la **varianza** diminuisce con regolarità (da circa 1.5 a $\lambda = 0$ fino a quasi 0), mentre la **distorsione** cresce in valore assoluto (da circa 0 a circa −0.84 per $\lambda = 10$). L'**MSE** prima scende bruscamente, raggiunge il minimo intorno a $\lambda = 0.5$ (circa 0.08), poi risale quando prevale la distorsione (circa 0.7 per $\lambda = 10$). Questa forma a U è il compromesso distorsione–varianza; la convalida incrociata è un modo per trovare il fondo della U senza conoscere la verità.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| `model.matrix(y ~ ., data)[, -1]` | matrice di disegno numerica con $k-1$ dummy per fattore |
+| `glmnet(X, y, alpha = 0 / 1 / 0.5)` | percorso di ridge / lasso / elastic net su molti $\lambda$ |
+| `plot(fit, xvar = "lambda")`, `abline(v = log(lambda))` | percorsi dei coefficienti rispetto a $\log\lambda$ |
+| `cv.glmnet(X, y, alpha, foldid = )` | errore di CV lungo il percorso di $\lambda$ |
+| `lambda.min`, `lambda.1se` | miglior errore di CV; più regolarizzato entro 1 ES (più semplice, più stabile) |
+| `coef(cv, s = "lambda.1se")`, `predict(cv, newx, s = )` | coefficienti e previsioni a un $\lambda$ scelto |
+| `linear_reg(penalty = tune(), mixture = tune()) \|> set_engine("glmnet")` | lo stesso modello in tidymodels |
+| `step_dummy()`, `step_normalize()` | codifica dummy e standardizzazione in una recipe |
+| `tune_grid()`, `select_best()`, `select_by_one_std_err(..., desc(penalty))` | ottimizzazione (tuning) e regola dell'errore standard |
+
+- La penalizzazione **contrae** i coefficienti, scambiando un po' di distorsione con una forte riduzione della varianza.
+- La **ridge** conserva tutti i predittori; il **lasso** ne porta alcuni esattamente a zero; l'**elastic net** mescola le due.
+- **Standardizza** i predittori in modo che la penalità non dipenda dalle unità (glmnet lo fa per impostazione predefinita).
+- Scegli $\lambda$ con la convalida incrociata; **`lambda.1se`** è la scelta parsimoniosa e stabile.
+- Valuta con la CV **ripetuta e annidata** e tratta i modelli penalizzati come strumenti di **previsione**, non come fonti di p-value.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2a ed.), capitolo 6, <https://www.statlearning.com>
+- Hastie, Qian & Tay, *An Introduction to glmnet* (vignette del pacchetto), <https://glmnet.stanford.edu/articles/glmnet.html>
+- Kuhn & Silge, *Tidy Modeling with R*, capitoli 12–13 sull'ottimizzazione, <https://www.tmwr.org>
+- Hastie, Tibshirani & Wainwright, *Statistical Learning with Sparsity: The Lasso and Generalizations*, <https://hastie.su.domains/StatLearnSparsity/>
+:::

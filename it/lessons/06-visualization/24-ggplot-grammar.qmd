@@ -18,7 +18,7 @@ library(dplyr)
 ```
 
 ::: {.lesson-meta}
-[Livello 2 · Descrivere ed esplorare]{.level-2} [⏱ ~75 min]{} [Prerequisiti: [Data frame](../02-data/08-data-frames.qmd), [I verbi di dplyr](../02-data/09-dplyr-verbs.qmd)]{}
+[Livello 2 · Descrivere ed esplorare]{.level-2} [⏱ ~75 min]{} [Prerequisiti: [Data frame e tibble](../02-data/08-data-frames.qmd), [Manipolazione dei dati con dplyr](../02-data/09-dplyr-verbs.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}
@@ -155,7 +155,7 @@ Le estetiche indicate in `ggplot()` vengono ereditate da **tutti** i livelli; qu
 
 ## 4. Aggiungere una retta interpolante: `geom_smooth()`
 
-Un **lisciatore** (*smoother*) sintetizza l'andamento in un grafico a dispersione. Con `method = "lm"` disegna la retta dei minimi quadrati (argomento di [Regressione semplice](../../../lessons/09-regression/38-simple-regression.qmd)).
+Un **lisciatore** (*smoother*) sintetizza l'andamento in un grafico a dispersione. Con `method = "lm"` disegna la retta dei minimi quadrati (argomento di [Regressione semplice](../09-regression/38-simple-regression.qmd)).
 
 ```{r}
 #| label: fig-smooth-groups

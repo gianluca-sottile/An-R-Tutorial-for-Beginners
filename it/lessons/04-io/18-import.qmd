@@ -17,7 +17,7 @@ library(readr)
 ```
 
 ::: {.lesson-meta}
-[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Data frame](../02-data/08-data-frames.qmd), [Tipi di dati](../01-foundations/03-data-types.qmd)]{}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Data frame e tibble](../02-data/08-data-frames.qmd), [Tipi di dati e operatori](../01-foundations/03-data-types.qmd)]{}
 :::
 
 ::: {.callout-note .objectives}
