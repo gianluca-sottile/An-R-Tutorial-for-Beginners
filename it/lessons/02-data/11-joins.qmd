@@ -1,0 +1,478 @@
+---
+title: "Unire tabelle (join)"
+subtitle: "Combinare le informazioni di due data frame tramite una chiave comune"
+description: "Comprendere le chiavi e i join che aggiungono colonne left_join(), inner_join(), full_join(), right_join(), i join filtranti semi_join() e anti_join(), join_by() per chiavi con nomi diversi, le chiavi duplicate e l'avviso many-to-many, e merge() di R base."
+format:
+  live-html:
+    webr:
+      packages: ["dplyr", "tibble"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+library(tibble)
+```
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Manipolazione dei dati con dplyr](09-dplyr-verbs.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- individuare la **chiave** che collega due tabelle e verificare se è unica;
+- scegliere tra `left_join()`, `inner_join()`, `full_join()` e `right_join()`;
+- usare `semi_join()` e `anti_join()` per tenere o trovare le righe **con** o **senza** corrispondenza;
+- unire tabelle su colonne con nomi diversi usando `join_by(a == b)`;
+- prevedere e controllare il numero di righe dopo un join, e gestire le chiavi duplicate e l'avviso many-to-many;
+- tradurre ogni join in `merge()` di R base.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(tibble)
+```
+
+## 1. Perché unire tabelle?
+
+I dati reali raramente arrivano in un'unica tabella. Un ospedale tiene i pazienti in una tabella e le visite in un'altra; un negozio tiene i prodotti in una tabella e le vendite in un'altra. Le informazioni su una **unità statistica** sono distribuite su più tabelle, e ciascuna tabella può avere un'unità *diversa* (un paziente contro una visita).
+
+Per analizzarle dobbiamo fare un **join** (unione di tabelle): per ogni riga di una tabella, cerchiamo le righe corrispondenti dell'altra, usando una colonna presente in entrambe, la **chiave**.
+
+## 2. Esempio giocattolo: registi e film
+
+```{r}
+#| label: toy-data
+producers <- tibble(
+  surname     = c("Spielberg", "Scorsese", "Hitchcock", "Tarantino",
+                  "Polanski", "Lucas"),
+  nationality = c("US", "US", "UK", "US", "Poland", "US")
+)
+
+movies <- tibble(
+  surname = c("Spielberg", "Scorsese", "Hitchcock", "Hitchcock",
+              "Spielberg", "Tarantino", "Polanski", "Kubrick"),
+  title   = c("Super 8", "Taxi Driver", "Psycho", "North by Northwest",
+              "Catch Me If You Can", "Reservoir Dogs", "Chinatown",
+              "The Shining")
+)
+
+producers
+movies
+```
+
+La chiave è `surname`. Nota tre aspetti che rendono l'esempio realistico:
+
+- in `producers` ogni cognome compare **una sola volta** (la chiave è unica: una riga per regista);
+- in `movies` un cognome può comparire **più volte** (una riga per film);
+- "Lucas" non ha film in `movies`, e "Kubrick" non ha una riga in `producers`.
+
+### La chiave è unica?
+
+Controllalo sempre prima di fare un join. `count()` + `filter()` elenca le chiavi duplicate:
+
+```{r}
+#| label: check-key
+producers |> count(surname) |> filter(n > 1)
+movies    |> count(surname) |> filter(n > 1)
+```
+
+`producers` non ha duplicati; `movies` ha due registi con due film ciascuno. La relazione è **uno-a-molti** (*one-to-many*): un regista, molti film.
+
+## 3. Join che aggiungono colonne
+
+Un **mutating join** (join che aggiunge colonne) aggiunge le colonne di `y` a `x`, abbinando le righe tramite la chiave. I quattro tipi differiscono solo per ciò che accade alle righe **senza corrispondenza**.
+
+| Join | Righe di `x` senza corrispondenza | Righe di `y` senza corrispondenza |
+|---|---|---|
+| `inner_join(x, y)` | scartate | scartate |
+| `left_join(x, y)` | **tenute** (nuove colonne `NA`) | scartate |
+| `right_join(x, y)` | scartate | **tenute** (colonne di `x` `NA`) |
+| `full_join(x, y)` | **tenute** | **tenute** |
+
+### `inner_join()`: solo le corrispondenze
+
+```{r}
+#| label: inner
+inner <- producers |> inner_join(movies, by = join_by(surname))
+inner
+```
+
+Lucas (nessun film) e Kubrick (nessuna riga in producers) scompaiono. Ogni film di Hitchcock e di Spielberg ha la propria riga, con la nazionalità ripetuta.
+
+### `left_join()`: tieni tutto ciò che è in `x`
+
+```{r}
+#| label: left
+producers |> left_join(movies, by = join_by(surname))
+```
+
+Tutti i registi vengono tenuti; Lucas ha `NA` come `title`. `left_join()` è il join che userai di più: hai una tabella principale e vuoi **aggiungerle informazioni**, senza perdere nessuna delle sue righe.
+
+### `right_join()` e `full_join()`
+
+```{r}
+#| label: right-full
+producers |> right_join(movies, by = join_by(surname))
+producers |> full_join(movies, by = join_by(surname))
+```
+
+`right_join(x, y)` tiene tutte le righe di `y` (Kubrick compare con nazionalità `NA`); equivale a `left_join(y, x)` con le colonne in un ordine diverso. `full_join()` tiene tutti.
+
+::: {.callout-tip .read-output}
+## Come leggere questo output: conta le righe
+
+| Join | Righe | Perché |
+|---|---|---|
+| `inner_join` | `r nrow(inner_join(producers, movies, by = "surname"))` | i 7 film il cui regista è in `producers` |
+| `left_join` | `r nrow(left_join(producers, movies, by = "surname"))` | quei 7 + Lucas |
+| `right_join` | `r nrow(right_join(producers, movies, by = "surname"))` | tutti gli 8 film (Kubrick con `NA`) |
+| `full_join` | `r nrow(full_join(producers, movies, by = "surname"))` | 7 + Lucas + Kubrick |
+
+Confrontare `nrow()` prima e dopo un join è il controllo di coerenza più rapido che tu possa fare.
+:::
+
+## 4. Join filtranti: tenere righe, non colonne
+
+A volte non vuoi nuove colonne: vuoi sapere **quali righe hanno (o non hanno) una corrispondenza**.
+
+```{r}
+#| label: semi-anti
+# registi che hanno almeno un film
+producers |> semi_join(movies, by = join_by(surname))
+
+# registi senza film
+producers |> anti_join(movies, by = join_by(surname))
+
+# film il cui regista manca da producers
+movies |> anti_join(producers, by = join_by(surname))
+```
+
+`semi_join()` non duplica mai le righe (Spielberg compare una volta anche se ha due film) e non aggiunge colonne. `anti_join()` è un ottimo **strumento per la qualità dei dati**: prima di un join, ti mostra esattamente quali chiavi non troveranno corrispondenza, spesso a causa di refusi, maiuscole diverse o spazi finali (vedi [Stringhe e date](13-strings-dates.qmd)).
+
+## 5. Chiavi con nomi diversi: `join_by(a == b)`
+
+Spesso la stessa chiave ha nomi diversi nelle due tabelle.
+
+```{r}
+#| label: diff-names
+movies2 <- movies |> rename(director = surname)
+
+producers |> inner_join(movies2, by = join_by(surname == director))
+```
+
+Leggi `surname == director` come "abbina `surname` della tabella di sinistra con `director` della tabella di destra". Il risultato conserva il nome di sinistra. Puoi fare un join su **più chiavi** contemporaneamente, es. `join_by(id, year)` o `join_by(id == patient_id, year)`.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: `by` come vettore di caratteri
+
+Prima di dplyr 1.1 i join si scrivevano `by = "surname"` o `by = c("surname" = "director")`. Queste forme funzionano ancora e le incontrerai spesso. `join_by()` è la forma moderna, e consente anche join basati su disuguaglianze come `join_by(id, date >= start)` (rolling join e interval join), che vanno oltre questa lezione.
+:::
+
+## 6. Chiavi duplicate e l'avviso many-to-many
+
+Supponiamo che qualcuno aggiunga una seconda riga per Hitchcock, che in età avanzata divenne cittadino statunitense:
+
+```{r}
+#| label: dup-data
+producers_dup <- producers |>
+  add_row(surname = "Hitchcock", nationality = "US")
+
+producers_dup |> count(surname) |> filter(n > 1)
+```
+
+Ora Hitchcock compare due volte in **entrambe** le tabelle. Un join abbina **ogni** riga corrispondente a sinistra con **ogni** riga corrispondente a destra: 2 × 2 = 4 righe per Hitchcock.
+
+```{r}
+#| label: many-to-many
+#| warning: true
+producers_dup |> inner_join(movies, by = join_by(surname))
+```
+
+dplyr segnala una **relazione molti-a-molti inattesa** (*many-to-many*), perché di solito è un errore: le righe si moltiplicano e ogni statistica calcolata dopo (conteggi, medie, totali) risulta distorta. Che cosa fare:
+
+1. **Correggi i dati** se il duplicato è un errore (qui: decidi quale nazionalità tenere, oppure tienile entrambe in un'unica riga).
+2. Se vuoi davvero una relazione molti-a-molti, dichiaralo: `inner_join(..., relationship = "many-to-many")` silenzia l'avviso.
+3. Se ti *aspetti* una chiave unica da un lato, fai controllare a dplyr al posto tuo:
+
+```{r}
+#| label: relationship-check
+#| error: true
+producers_dup |>
+  inner_join(movies, by = join_by(surname), relationship = "one-to-many")
+```
+
+Con `relationship = "one-to-many"` dplyr genera un **errore** non appena una chiave di `x` è duplicata: è l'opzione più sicura negli script.
+
+## 7. Un esempio realistico: aggiungere informazioni sulle specie ai pinguini
+
+`penguins` memorizza la specie con il nome comune. Una piccola tabella di riferimento aggiunge il nome scientifico, un'etichetta che vogliamo usare nei grafici:
+
+```{r}
+#| label: lookup
+penguins <- as_tibble(penguins)   # stampa più compatta
+
+species_info <- tibble(
+  species    = c("Adelie", "Chinstrap", "Gentoo"),
+  scientific = c("Pygoscelis adeliae", "Pygoscelis antarcticus",
+                 "Pygoscelis papua")
+)
+
+penguins_plus <- penguins |>
+  left_join(species_info, by = join_by(species))
+
+nrow(penguins)
+nrow(penguins_plus)
+penguins_plus |> count(species, scientific)
+```
+
+Il numero di righe non cambia (`r nrow(penguins)`): ogni pinguino ha trovato esattamente una specie corrispondente. È lo schema **molti-a-uno** (*many-to-one*), il più comune nella pratica.
+
+Un secondo uso molto frequente è riattaccare alle unità delle **sintesi di gruppo**. Per esempio, la massa media di ciascuna specie:
+
+```{r}
+#| label: join-summary
+species_mass <- penguins |>
+  summarise(mean_mass = mean(body_mass, na.rm = TRUE), .by = species)
+
+penguins |>
+  select(species, body_mass) |>
+  left_join(species_mass, by = join_by(species)) |>
+  mutate(diff_from_mean = body_mass - mean_mass)
+```
+
+(Lo stesso risultato si può ottenere in un solo passaggio con un `mutate()` per gruppi, come mostrato in [Sintesi per gruppi](10-grouped-summaries.qmd).)
+
+## 8. R base: `merge()`
+
+`merge()` svolge gli stessi compiti. Per impostazione predefinita esegue un inner join; gli argomenti `all*` aggiungono le righe senza corrispondenza.
+
+```{r}
+#| label: merge
+merge(producers, movies, by = "surname")                # inner
+merge(producers, movies, by = "surname", all.x = TRUE)  # left
+```
+
+```{r}
+#| label: merge-diff
+merge(producers, movies2, by.x = "surname", by.y = "director")
+```
+
+| dplyr | `merge()` di R base |
+|---|---|
+| `inner_join(x, y, by = join_by(k))` | `merge(x, y, by = "k")` |
+| `left_join(x, y, by = join_by(k))` | `merge(x, y, by = "k", all.x = TRUE)` |
+| `right_join(x, y, by = join_by(k))` | `merge(x, y, by = "k", all.y = TRUE)` |
+| `full_join(x, y, by = join_by(k))` | `merge(x, y, by = "k", all = TRUE)` |
+| `join_by(a == b)` | `by.x = "a", by.y = "b"` |
+| `semi_join(x, y, ...)` | `x[x$k %in% y$k, ]` |
+| `anti_join(x, y, ...)` | `x[!x$k %in% y$k, ]` |
+
+Una differenza pratica: `merge()` **ordina** il risultato per chiave, mentre i join di dplyr mantengono l'ordine delle righe di `x`.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Non verificare che la chiave sia unica** dal lato in cui dovrebbe esserlo. Usa `count(key) |> filter(n > 1)` prima del join.
+2. **Righe che si moltiplicano senza avviso.** Confronta sempre `nrow()` prima e dopo un join; un `left_join()` non dovrebbe aumentare le righe di `x` se la chiave di `y` è unica.
+3. **Chiavi che sembrano uguali ma non lo sono:** `"Hitchcock"` contro `"hitchcock"` contro `"Hitchcock "`. Usa `anti_join()` per trovarle e ripuliscile con `stringr`.
+4. **Chiavi di tipo diverso:** un `id` numerico in una tabella e un `id` di tipo carattere nell'altra causano un errore. Converti prima una delle due.
+5. **Usare `inner_join()` quando intendevi `left_join()`.** Le unità senza corrispondenza spariscono, e il campione che analizzi non è più quello che pensi.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. La tabella `x` ha 100 pazienti (`id` unico), la tabella `y` ha 250 visite con `id`. Quante righe può avere `left_join(x, y)`?
+
+Almeno 100 (ogni paziente viene tenuto) e potenzialmente di più: ogni paziente con *k* visite produce *k* righe. I pazienti senza visite producono una riga con `NA`. Se tutte le 250 visite appartengono a pazienti presenti in `x`, il risultato ha 250 righe più una riga per ogni paziente senza visite.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Qual è la differenza tra `semi_join(x, y)` e `inner_join(x, y)`?
+
+Entrambi tengono solo le righe di `x` che hanno una corrispondenza. `inner_join()` **aggiunge** le colonne di `y` e può **duplicare** le righe di `x` (una per corrispondenza); `semi_join()` non aggiunge nulla e non duplica mai.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Quando dplyr segnala una relazione many-to-many?
+
+Quando almeno una riga di `x` corrisponde a più righe di `y` **e** almeno una riga di `y` corrisponde a più righe di `x`. Di solito è il segnale di una chiave duplicata non voluta.
+:::
+
+## 10. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+```{webr}
+#| setup: true
+#| exercise: ex_11_1
+species_info <- tibble::tibble(
+  species    = c("Adelie", "Gentoo"),
+  scientific = c("Pygoscelis adeliae", "Pygoscelis papua")
+)
+```
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — left o inner?** La tabella `species_info` (già creata) contiene solo Adelie e Gentoo. Uniscila a `penguins` con `left_join()` e con `inner_join()`, e confronta il numero di righe.
+
+```{webr}
+#| exercise: ex_11_1
+species_info
+a <- penguins |> left_join(species_info, by = join_by(______))
+b <- penguins |> ______(species_info, by = join_by(species))
+nrow(a)
+nrow(b)
+```
+
+::: {.hint exercise="ex_11_1"}
+La chiave è `species`. Il secondo join è `inner_join`.
+:::
+
+::: {.solution exercise="ex_11_1"}
+```r
+a <- penguins |> left_join(species_info, by = join_by(species))
+b <- penguins |> inner_join(species_info, by = join_by(species))
+nrow(a)   # 344: tutti i pinguini, i Chinstrap con scientific = NA
+nrow(b)   # 276: i 68 pinguini Chinstrap vengono scartati
+```
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_11_2
+students <- tibble::tibble(
+  student_id = c(1, 2, 3, 4, 5),
+  name       = c("Ada", "Ben", "Chiara", "Dev", "Eli")
+)
+exams <- tibble::tibble(
+  id    = c(1, 1, 2, 4, 4, 4, 6),
+  exam  = c("Stats", "R", "Stats", "Stats", "R", "Maths", "Stats"),
+  grade = c(28, 30, 24, 27, 25, 30, 22)
+)
+```
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — chiavi con nomi diversi e join filtranti.** `students` ha la chiave `student_id`, `exams` ha `id`. (a) Aggiungi i nomi degli studenti a `exams`, tenendo solo gli esami di studenti noti. (b) Quali studenti non hanno sostenuto alcun esame? (c) Quali righe di esame appartengono a uno studente sconosciuto?
+
+```{webr}
+#| exercise: ex_11_2
+# (a)
+exams |> inner_join(students, by = join_by(______ == ______))
+# (b)
+students |> ______(exams, by = join_by(student_id == id))
+# (c)
+exams |> ______(students, by = join_by(id == student_id))
+```
+
+::: {.hint exercise="ex_11_2"}
+In `join_by(a == b)`, `a` è la colonna della tabella di sinistra. "Nessuna corrispondenza" significa `anti_join()`.
+:::
+
+::: {.solution exercise="ex_11_2"}
+```r
+exams |> inner_join(students, by = join_by(id == student_id))
+students |> anti_join(exams, by = join_by(student_id == id))
+exams |> anti_join(students, by = join_by(id == student_id))
+```
+(a) dà 6 righe; (b) Chiara ed Eli non hanno sostenuto esami; (c) l'esame dello studente 6 non ha uno studente corrispondente: un problema di qualità dei dati da indagare.
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_11_3
+shops <- tibble::tibble(
+  city = c("Rome", "Rome", "Milan"),
+  shop = c("R1", "R2", "M1")
+)
+weather <- tibble::tibble(
+  city = c("Rome", "Rome", "Milan"),
+  day  = c("Mon", "Tue", "Mon"),
+  temp = c(21, 23, 17)
+)
+```
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 3 — prevedi le righe.** Prima di eseguire il codice, prevedi quante righe restituisce il join e se dplyr darà un avviso. Poi eseguilo. Il risultato è utile?
+
+```{webr}
+#| exercise: ex_11_3
+shops |> left_join(weather, by = join_by(city))
+```
+
+::: {.hint exercise="ex_11_3"}
+Rome compare due volte in ciascuna tabella: 2 × 2 combinazioni. Milan: 1 × 1.
+:::
+
+::: {.solution exercise="ex_11_3"}
+```r
+shops |>
+  left_join(weather, by = join_by(city), relationship = "many-to-many")
+```
+5 righe (4 per Rome + 1 per Milan), con un avviso many-to-many. Qui il risultato ha senso (ogni negozio riceve il meteo di ogni giorno nella sua città), quindi dichiariamo `relationship = "many-to-many"`. Se invece ci aspettassimo una sola riga di meteo per città, l'avviso avrebbe rivelato un errore.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — traduzione in R base.** Usando `producers` e `movies` della sezione 2, riproduci `left_join()`, `full_join()` e `anti_join()` solo con R base. Verifica con `nrow()` di ottenere 8, 9 e 1 righe.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+nrow(merge(producers, movies, by = "surname", all.x = TRUE))   # 8
+nrow(merge(producers, movies, by = "surname", all = TRUE))     # 9
+producers[!producers$surname %in% movies$surname, ]            # Lucas
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — interpreta.** Una collega unisce una tabella di 1.000 clienti (`customer_id` unico) con una tabella di ordini e ottiene 3.412 righe. Poi calcola `mean(age)` sul risultato e lo riporta come "l'età media dei nostri clienti". Che cosa c'è di sbagliato, e come lo correggeresti?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Dopo il join l'unità è l'**ordine**, non il cliente: i clienti con molti ordini vengono contati molte volte, quindi la media è sbilanciata verso chi acquista spesso. Calcola l'età media sulla tabella dei clienti (una riga per cliente), oppure sintetizza prima gli ordini per cliente (`summarise(n_orders = n(), .by = customer_id)`) e poi unisci quella sintesi ai clienti con `left_join()`.
+:::
+:::
+
+## Riepilogo
+
+| Funzione | Tiene | Aggiunge colonne? |
+|---|---|---|
+| `inner_join(x, y)` | le righe con corrispondenza in entrambe | sì |
+| `left_join(x, y)` | tutte le righe di `x` | sì |
+| `right_join(x, y)` | tutte le righe di `y` | sì |
+| `full_join(x, y)` | tutte le righe di entrambe | sì |
+| `semi_join(x, y)` | le righe di `x` con corrispondenza | no |
+| `anti_join(x, y)` | le righe di `x` senza corrispondenza | no |
+| `join_by(a == b)` | chiavi con nomi diversi | — |
+| `relationship = ...` | dichiara / controlla la struttura della chiave | — |
+
+- Un join vale quanto la sua **chiave**: verifica prima che sia unica.
+- Conta le righe prima e dopo ogni join.
+- `left_join()` è la scelta di tutti i giorni; `anti_join()` è il controllo di tutti i giorni.
+- Le chiavi duplicate da entrambi i lati moltiplicano le righe: correggi i dati o dichiara `relationship = "many-to-many"`.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitolo "Joins", <https://r4ds.hadley.nz>
+- Documentazione di dplyr sui mutating join e su `join_by()`, <https://dplyr.tidyverse.org/reference/mutate-joins.html>
+:::

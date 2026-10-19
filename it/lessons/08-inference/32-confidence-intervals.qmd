@@ -1,0 +1,477 @@
+---
+title: "Intervalli di confidenza"
+subtitle: "Stima ± margine di errore — e che cosa significa davvero \"confidenza al 95%\""
+description: "Costruisci intervalli di confidenza per una media, una proporzione e una differenza tra medie, verifica con la simulazione che cosa promette il livello di confidenza e impara a interpretare correttamente gli intervalli."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 3 · Inferenza]{.level-3} [⏱ ~70 min]{} [Prerequisiti: [Distribuzioni campionarie](../07-probability/30-sampling-distributions.qmd), [Bootstrap](../07-probability/31-bootstrap.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- costruire un intervallo di confidenza per una media **a mano** e con `t.test()`;
+- costruire un intervallo di confidenza per una proporzione e spiegare perché il semplice intervallo "di Wald" può fallire;
+- **simulare** la copertura di un intervallo e spiegare che cosa promette il livello di confidenza;
+- prevedere come la dimensione del campione e il livello di confidenza modificano l'ampiezza di un intervallo;
+- interpretare correttamente un intervallo di confidenza e riconoscere le interpretazioni errate più comuni.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+```
+
+## 1. Perché un singolo numero non basta
+
+La lunghezza media della pinna dei pinguini Adelie nei nostri dati è di circa `r round(mean(penguins$flipper_len[penguins$species == "Adelie"], na.rm = TRUE), 1)` mm. Se un altro gruppo di ricercatori catturasse un insieme diverso di pinguini Adelie, otterrebbe una media leggermente diversa. In [Distribuzioni campionarie](../07-probability/30-sampling-distributions.qmd) abbiamo visto quanto variano queste stime da campione a campione; in [Bootstrap](../07-probability/31-bootstrap.qmd) abbiamo stimato tale variabilità tramite ricampionamento.
+
+Una **stima puntuale** (un solo numero) nasconde questa incertezza. Un **intervallo di confidenza** (IC) riporta invece un intervallo di valori:
+
+> stima ± margine di errore
+
+Il margine di errore è "qualche errore standard": dice al lettore quanto la nostra stima potrebbe plausibilmente distare dal valore vero, data la dimensione e la variabilità del campione.
+
+## 2. Un intervallo di confidenza per una media, a mano
+
+La ricetta ha tre ingredienti:
+
+1. la **stima**: la media campionaria $\bar x$;
+2. l'**errore standard** (ES): quanto varia tipicamente $\bar x$ da un campione all'altro, $s / \sqrt{n}$;
+3. un **moltiplicatore** che fissa il livello di confidenza. Per il 95% e una media, usiamo il quantile 97.5% di una distribuzione t con $n - 1$ gradi di libertà (vicino a 2 per $n$ moderato).
+
+```{r}
+#| label: ci-by-hand
+adelie <- penguins |>
+  filter(species == "Adelie", !is.na(flipper_len)) |>
+  pull(flipper_len)
+
+n      <- length(adelie)
+x_bar  <- mean(adelie)
+se     <- sd(adelie) / sqrt(n)
+t_crit <- qt(0.975, df = n - 1)
+
+c(inferiore = x_bar - t_crit * se, superiore = x_bar + t_crit * se)
+```
+
+Con $n =$ `r n` esemplari l'errore standard è solo `r round(se, 2)` mm e il moltiplicatore è `r round(t_crit, 3)`, quindi il margine di errore è `r round(t_crit * se, 2)` mm.
+
+`t.test()` esegue lo stesso calcolo (e molto altro — vedi [Test t](34-t-tests.qmd)). L'intervallo è memorizzato in `$conf.int`:
+
+```{r}
+#| label: ci-ttest
+ci_adelie <- t.test(adelie)$conf.int
+ci_adelie
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- I due numeri sono il **limite inferiore e il limite superiore**: da `r round(ci_adelie[1], 1)` a `r round(ci_adelie[2], 1)` mm.
+- `attr(,"conf.level")` ti ricorda il livello di confidenza usato (0.95 per impostazione predefinita; puoi cambiarlo, per esempio, con `conf.level = 0.90`).
+- A parole: *"La nostra migliore stima della lunghezza media della pinna dei pinguini Adelie è `r round(x_bar, 1)` mm; i valori compresi tra `r round(ci_adelie[1], 1)` e `r round(ci_adelie[2], 1)` mm sono compatibili con i dati."*
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: perché la distribuzione t?
+
+Se i dati provengono da una popolazione normale, la media standardizzata
+
+$$
+T = \frac{\bar X - \mu}{S / \sqrt{n}}
+$$
+
+segue una distribuzione t con $n-1$ gradi di libertà. Quindi $P(-t_{0.975} \le T \le t_{0.975}) = 0.95$ e, risolvendo la disuguaglianza rispetto a $\mu$, si ottiene l'intervallo
+
+$$
+\bar x \pm t_{n-1,\,0.975}\,\frac{s}{\sqrt n}.
+$$
+
+Usiamo $t$ anziché il quantile normale 1.96 perché anche $s$ è una stima: l'incertezza aggiuntiva rende le code più pesanti. La differenza conta solo per i campioni piccoli: `qt(0.975, 4)` vale `r round(qt(0.975, 4), 2)`, `qt(0.975, 29)` vale `r round(qt(0.975, 29), 2)` e `qnorm(0.975)` vale `r round(qnorm(0.975), 2)`. Grazie al teorema del limite centrale l'intervallo funziona anche per dati non normali quando $n$ è abbastanza grande — vedi l'Esercizio 3 per un caso in cui "abbastanza grande" fa la differenza.
+:::
+
+## 3. Che cosa significa davvero "95%": una simulazione
+
+Ecco l'idea più importante della lezione. Il "95%" **non** è una proprietà di un singolo intervallo. È una proprietà del **metodo**: se ripetessimo l'intero studio molte volte, costruendo ogni volta un intervallo, circa il 95% di quegli intervalli conterrebbe il valore vero.
+
+Possiamo verificarlo, perché in una simulazione la verità la scegliamo *noi*. Inventiamo una popolazione con media vera $\mu = 50$ e deviazione standard 10, estraiamo 100 campioni di dimensione 20 e costruiamo 100 intervalli.
+
+```{r}
+#| label: coverage-sim
+set.seed(2026)
+mu <- 50
+
+cis <- replicate(100, t.test(rnorm(20, mean = mu, sd = 10))$conf.int)
+
+sims <- tibble(
+  id     = 1:100,
+  lower  = cis[1, ],
+  upper  = cis[2, ],
+  covers = lower <= mu & mu <= upper
+)
+sum(sims$covers)
+```
+
+```{r}
+#| label: fig-coverage
+#| fig-cap: "100 intervalli di confidenza da 100 campioni della stessa popolazione. La linea tratteggiata è la media vera. Gli intervalli che non la contengono sono evidenziati."
+#| fig-height: 7
+ggplot(sims, aes(y = id, colour = covers)) +
+  geom_segment(aes(x = lower, xend = upper, yend = id), linewidth = 0.7) +
+  geom_vline(xintercept = mu, linetype = "dashed") +
+  scale_colour_manual(values = c(`TRUE` = "grey60", `FALSE` = "#D55E00"),
+                      labels = c(`TRUE` = "contiene 50",
+                                 `FALSE` = "non contiene 50")) +
+  labs(x = "Intervallo di confidenza al 95%", y = "Numero del campione", colour = NULL)
+```
+
+In questa esecuzione, `r sum(sims$covers)` dei 100 intervalli contengono la media vera e `r sum(!sims$covers)` non la contengono. Eseguendo di nuovo con un altro seme otterrai un conteggio leggermente diverso, ma vicino a 95. Nota due cose nella figura:
+
+- gli intervalli **si spostano** (i loro centri sono medie campionarie diverse) e hanno **ampiezze diverse** (ciascuno usa la propria $s$);
+- la media vera **non si sposta**. È fissa; sono gli intervalli a essere casuali.
+
+Con più ripetizioni la proporzione si stabilizza molto vicino a 0.95:
+
+```{r}
+#| label: coverage-many
+set.seed(1)
+covers <- replicate(5000, {
+  ci <- t.test(rnorm(20, mean = mu, sd = 10))$conf.int
+  ci[1] <= mu & mu <= ci[2]
+})
+mean(covers)
+```
+
+::: {.callout-important}
+## L'interpretazione corretta
+
+*"Abbiamo usato un metodo che cattura la media vera nel 95% dei campioni ripetuti. Applicato al nostro campione, fornisce l'intervallo [a, b]."*
+
+Una volta calcolato il **tuo** intervallo, la media vera o è al suo interno o non lo è — semplicemente non sai quale delle due. Il 95% descrive quanto spesso la procedura funziona, non la probabilità relativa a questo singolo intervallo.
+:::
+
+## 4. Che cosa rende un intervallo ampio o stretto?
+
+Il margine di errore è moltiplicatore × $s / \sqrt n$. Quindi:
+
+- **$n$ più grande** → ES più piccolo → intervallo più stretto. A causa della radice quadrata, per dimezzare l'ampiezza servono circa **quattro volte** più osservazioni;
+- **livello di confidenza più alto** → moltiplicatore più grande → intervallo più ampio. Più confidenza costa precisione;
+- **dati più variabili** ($s$ più grande) → intervallo più ampio.
+
+```{r}
+#| label: fig-width
+#| fig-cap: "Ampiezza attesa di un intervallo basato sulla t (DS della popolazione = 1) in funzione della dimensione del campione, per tre livelli di confidenza."
+widths <- expand.grid(n = 5:100, level = c(0.90, 0.95, 0.99)) |>
+  mutate(width = 2 * qt(1 - (1 - level) / 2, df = n - 1) / sqrt(n),
+         level = factor(paste0(level * 100, "%")))
+
+ggplot(widths, aes(n, width, colour = level)) +
+  geom_line(linewidth = 1) +
+  labs(x = "Dimensione del campione n", y = "Ampiezza dell'intervallo (in unità di DS)",
+       colour = "Livello di confidenza")
+```
+
+Lo stesso compromesso con dati reali:
+
+```{r}
+#| label: levels
+sapply(c(0.90, 0.95, 0.99), \(lev) t.test(adelie, conf.level = lev)$conf.int)
+```
+
+Ogni colonna è un intervallo (90%, 95%, 99%): hanno lo stesso centro e diventano più ampi al crescere del livello.
+
+## 5. Un intervallo di confidenza per una proporzione
+
+Per una variabile sì/no la stima è la proporzione campionaria $\hat p = x / n$ e il suo errore standard è $\sqrt{\hat p (1 - \hat p) / n}$. L'intervallo dei manuali (intervallo "**di Wald**") è
+
+$$
+\hat p \pm 1.96 \sqrt{\hat p (1 - \hat p) / n}.
+$$
+
+Stimiamo la proporzione di femmine tra i pinguini di cui è registrato il sesso:
+
+```{r}
+#| label: prop-wald
+n_known  <- sum(!is.na(penguins$sex))
+x_female <- sum(penguins$sex == "female", na.rm = TRUE)
+p_hat    <- x_female / n_known
+
+wald <- p_hat + c(-1, 1) * qnorm(0.975) * sqrt(p_hat * (1 - p_hat) / n_known)
+wald
+```
+
+R offre due intervalli migliori:
+
+```{r}
+#| label: prop-r
+prop.test(x_female, n_known)$conf.int    # intervallo score di Wilson
+binom.test(x_female, n_known)$conf.int   # intervallo "esatto" di Clopper-Pearson
+```
+
+Con `r n_known` esemplari e $\hat p$ vicino a 0.5, i tre intervalli sono praticamente identici. I problemi cominciano con **campioni piccoli o proporzioni vicine a 0 o a 1**. Supponiamo che 2 pazienti su 20 abbiano un effetto collaterale:
+
+```{r}
+#| label: prop-small
+p_small <- 2 / 20
+p_small + c(-1, 1) * qnorm(0.975) * sqrt(p_small * (1 - p_small) / 20)
+binom.test(2, 20)$conf.int
+```
+
+L'intervallo di Wald ha un **limite inferiore negativo** — una proporzione impossibile. L'intervallo di `binom.test()` resta all'interno di [0, 1] ed è asimmetrico, come deve essere quando $\hat p$ è vicino al bordo.
+
+Il problema più profondo è la copertura. Possiamo simularla esattamente come prima: la proporzione vera è 0.10 e $n = 20$.
+
+```{r}
+#| label: prop-coverage
+set.seed(3)
+x_sim <- rbinom(5000, size = 20, prob = 0.10)
+
+wald_covers <- sapply(x_sim, \(x) {
+  p <- x / 20
+  abs(p - 0.10) <= qnorm(0.975) * sqrt(p * (1 - p) / 20)
+})
+exact_covers <- sapply(x_sim, \(x) {
+  ci <- binom.test(x, 20)$conf.int
+  ci[1] <= 0.10 & 0.10 <= ci[2]
+})
+c(wald = mean(wald_covers), esatto = mean(exact_covers))
+```
+
+L'intervallo di Wald "al 95%" cattura in realtà il valore vero solo nel `r round(100 * mean(wald_covers))`% circa dei casi, mentre l'intervallo esatto ha una copertura di almeno il 95% (è volutamente conservativo). **Raccomandazione:** usa `prop.test()` o `binom.test()` e considera la formula di Wald solo uno strumento didattico.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: Wilson e Clopper–Pearson
+
+- **Wilson** (usato da `prop.test()`, con una correzione di continuità per impostazione predefinita) inverte il test score: raccoglie tutti i valori $p_0$ per cui $|\hat p - p_0| / \sqrt{p_0(1-p_0)/n} \le 1.96$. L'ES è valutato in $p_0$, non in $\hat p$, il che mantiene l'intervallo all'interno di [0, 1] e dà una copertura vicina al 95% anche per $n$ piccolo.
+- **Clopper–Pearson** (usato da `binom.test()`) inverte il test binomiale esatto. La sua copertura non è mai inferiore al livello nominale, quindi tende a essere un po' ampio.
+- L'intervallo di Wald fallisce perché, quando $\hat p$ è vicino a 0 o a 1, $\sqrt{\hat p (1-\hat p)/n}$ sottostima il vero ES (con $x = 0$ vale esattamente 0: un intervallo di ampiezza zero!).
+
+Le proporzioni vengono sottoposte a test formali in [Proporzioni e test chi-quadrato](35-proportions-chisq.qmd).
+:::
+
+## 6. Un intervallo di confidenza per una differenza tra medie
+
+Molto spesso la domanda è un confronto: *quanto sono più pesanti i pinguini Adelie maschi rispetto alle femmine?* Vale la stessa logica — stima ± moltiplicatore × ES — con l'ES di una **differenza**.
+
+```{r}
+#| label: ci-diff
+adelie_sex <- penguins |>
+  filter(species == "Adelie", !is.na(sex))
+
+ci_diff <- t.test(body_mass ~ sex, data = adelie_sex)$conf.int
+ci_diff
+```
+
+L'intervallo si riferisce a femmine − maschi (R ordina i gruppi alfabeticamente): le femmine sono, in media, più leggere di una quantità compresa tra `r abs(round(ci_diff[2]))` e `r abs(round(ci_diff[1]))` g. L'intervallo non contiene 0, quindi "nessuna differenza" non è un valore compatibile con i dati. La storia completa — test di Welch, dati appaiati, dimensioni dell'effetto — si trova in [Test t](34-t-tests.qmd).
+
+## 7. Interpretazioni corrette e sbagliate
+
+Supponiamo che uno studio riporti un IC al 95% per una media pari a [12.1, 15.3].
+
+| Affermazione | Corretta? |
+|---|---|
+| "Se ripetessimo lo studio molte volte, circa il 95% degli intervalli calcolati in questo modo conterrebbe la media vera." | ✅ Sì — è la definizione. |
+| "I valori tra 12.1 e 15.3 sono compatibili con i dati; i valori molto al di fuori non lo sono." | ✅ Sì — un'utile lettura pratica. |
+| "C'è una probabilità del 95% che la media vera sia compresa tra 12.1 e 15.3." | ❌ No. La media vera è fissa; questo particolare intervallo o la contiene o non la contiene. |
+| "Il 95% delle osservazioni è compreso tra 12.1 e 15.3." | ❌ No. L'IC riguarda la **media**, non i singoli valori. I singoli valori sono molto più dispersi. |
+| "Un secondo campione darebbe una media compresa tra 12.1 e 15.3 con probabilità del 95%." | ❌ No. La prossima media campionaria ha una propria variabilità; questa probabilità è sensibilmente inferiore al 95%. |
+| "Due intervalli che si sovrappongono significano che i gruppi non differiscono in modo significativo." | ❌ Non necessariamente. Due IC al 95% possono sovrapporsi un po' anche quando la differenza è significativa. Costruisci invece un IC **per la differenza**. |
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Leggere un IC come un'affermazione probabilistica sul parametro.** Il 95% riguarda il comportamento di lungo periodo del metodo.
+2. **Confondere l'IC per una media con il campo di variazione dei dati.** Con $n$ grande l'IC diventa molto stretto, mentre i dati restano dispersi come sempre.
+3. **Usare l'intervallo di Wald per campioni piccoli o proporzioni estreme.** Può uscire da [0, 1] e ha una copertura insufficiente. Usa `binom.test()` o `prop.test()`.
+4. **Confrontare i gruppi controllando se i loro IC separati si sovrappongono.** Calcola l'intervallo della differenza.
+5. **Dimenticare ciò che l'intervallo non può correggere.** Un IC tiene conto solo dell'errore dovuto al *campionamento casuale*. Un campione distorto (per esempio, solo i pinguini facili da catturare) produce un intervallo preciso attorno al valore sbagliato.
+:::
+
+## 8. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Quadruplichi la dimensione del campione. Che cosa succede, approssimativamente, all'ampiezza di un IC al 95% per una media?
+
+Si **dimezza** all'incirca, perché l'errore standard è proporzionale a $1/\sqrt{n}$ e $\sqrt{4} = 2$.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Un collega calcola un IC al 99% e un IC al 90% dagli stessi dati. Quale dei due è più ampio, e perché?
+
+L'intervallo al **99%**. Per catturare più spesso il valore vero, il metodo deve gettare una rete più ampia, quindi usa un moltiplicatore più grande.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Nella simulazione della Sezione 3, perché alcuni intervalli non contenevano la media vera?
+
+Perché per caso quei campioni avevano una media lontana da 50 (o una deviazione standard insolitamente piccola). Ci si *aspetta* che un metodo al 95% sbagli in circa il 5% dei campioni — non è un errore nel codice.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. In un'indagine, 0 persone su 15 dichiarano una condizione rara. Che cosa fornisce l'intervallo di Wald, e che cosa dovresti usare invece?
+
+L'intervallo di Wald è $0 \pm 0$, cioè [0, 0], come se fossimo certi che la proporzione sia zero. `binom.test(0, 15)$conf.int` fornisce un intervallo sensato da 0 a circa 0.22.
+:::
+
+## 9. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — IC per una media.** Calcola gli intervalli di confidenza al 95% e al 90% per la media di `mpg` in `mtcars`. Quale dei due è più stretto?
+
+```{webr}
+#| exercise: ex_32_1
+ci95 <- t.test(mtcars$mpg)$______
+ci90 <- t.test(mtcars$mpg, conf.level = ______)$conf.int
+ci95
+ci90
+```
+
+::: {.hint exercise="ex_32_1"}
+L'intervallo è memorizzato nell'elemento `conf.int`; il livello è un numero tra 0 e 1.
+:::
+
+::: {.solution exercise="ex_32_1"}
+```r
+ci95 <- t.test(mtcars$mpg)$conf.int
+ci90 <- t.test(mtcars$mpg, conf.level = 0.90)$conf.int
+ci95   # circa da 17.9 a 22.3
+ci90   # circa da 18.3 a 21.9
+```
+L'intervallo al 90% è più stretto: una confidenza minore si traduce in una precisione maggiore.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — Wald contro esatto.** In un piccolo studio pilota 3 partecipanti su 15 si sono ritirati. Calcola a mano l'intervallo di Wald al 95% e confrontalo con `binom.test()`. Che cosa non va nell'intervallo di Wald in questo caso?
+
+```{webr}
+#| exercise: ex_32_2
+x <- 3
+n <- 15
+p_hat <- x / n
+se <- sqrt(______)
+wald <- p_hat + c(-1, 1) * qnorm(0.975) * se
+wald
+binom.test(______, ______)$conf.int
+```
+
+::: {.hint exercise="ex_32_2"}
+L'ES di una proporzione è `sqrt(p_hat * (1 - p_hat) / n)`. `binom.test()` riceve il numero di successi e il numero di prove.
+:::
+
+::: {.solution exercise="ex_32_2"}
+```r
+se <- sqrt(p_hat * (1 - p_hat) / n)
+wald <- p_hat + c(-1, 1) * qnorm(0.975) * se
+wald                         # circa da -0.002 a 0.40
+binom.test(x, n)$conf.int    # circa da 0.04 a 0.48
+```
+L'intervallo di Wald scende sotto lo zero (una proporzione impossibile) ed è simmetrico anche se $\hat p = 0.2$ è vicino al bordo. L'intervallo esatto è asimmetrico e resta all'interno di [0, 1].
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 3 — 95% significa sempre 95%?** I dati provenienti da una distribuzione esponenziale (tasso 1, media vera 1) sono fortemente asimmetrici. Simula 5.000 campioni di dimensione `n = 10`, costruisci ogni volta l'intervallo al 95% basato sulla t e stimane la copertura. Poi ripeti con `n = 50`. Che cosa osservi?
+
+```{webr}
+#| exercise: ex_32_3
+set.seed(1)
+n <- 10
+covers <- replicate(5000, {
+  x  <- rexp(n, rate = 1)
+  ci <- t.test(x)$conf.int
+  ci[1] <= ______ & ______ <= ci[2]
+})
+mean(covers)
+```
+
+::: {.hint exercise="ex_32_3"}
+La media vera di `rexp(n, rate = 1)` è 1. Poi cambia `n <- 10` in `n <- 50` ed esegui di nuovo.
+:::
+
+::: {.solution exercise="ex_32_3"}
+```r
+covers <- replicate(5000, {
+  x  <- rexp(n, rate = 1)
+  ci <- t.test(x)$conf.int
+  ci[1] <= 1 & 1 <= ci[2]
+})
+mean(covers)   # circa 0.90 con n = 10; circa 0.93 con n = 50
+```
+Con dati asimmetrici e un campione piccolo, l'intervallo "al 95%" contiene il valore vero solo nel 90% circa dei casi. Con $n$ più grande entra in gioco il teorema del limite centrale e la copertura si avvicina al 95%. Il livello di confidenza è una promessa che vale **solo se le ipotesi sono soddisfatte** (o se $n$ è abbastanza grande). Per dati asimmetrici, un intervallo bootstrap ([Bootstrap](../07-probability/31-bootstrap.qmd)) o una trasformazione possono aiutare.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — un intervallo per ogni gruppo.** Per ciascuna specie di pinguini, calcola la lunghezza media del becco (`bill_len`) e il suo IC al 95%, e rappresenta i tre intervalli con `geom_pointrange()`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+bill_ci <- penguins |>
+  filter(!is.na(bill_len)) |>
+  summarise(
+    mean  = mean(bill_len),
+    lower = t.test(bill_len)$conf.int[1],
+    upper = t.test(bill_len)$conf.int[2],
+    .by = species
+  )
+bill_ci
+
+ggplot(bill_ci, aes(x = species, y = mean, ymin = lower, ymax = upper)) +
+  geom_pointrange() +
+  labs(x = NULL, y = "Lunghezza media del becco (mm) con IC al 95%")
+```
+I becchi degli Adelie sono chiaramente più corti (intervallo all'incirca da 38.4 a 39.2 mm); gli intervalli di Chinstrap e Gentoo (all'incirca 48.0–49.6 e 47.0–48.1 mm) sono vicini tra loro. Per decidere se queste due specie differiscono, costruisci un intervallo **per la loro differenza** (Sezione 6), non giudicare a occhio.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — interpreta.** Un articolo di giornale afferma: *"Il tempo medio di pendolarismo è di 32 minuti (IC al 95% da 30 a 34). Quindi il 95% dei pendolari viaggia tra 30 e 34 minuti."* Spiega l'errore in due frasi e riscrivi correttamente la seconda frase.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+L'intervallo riguarda il tempo **medio** di pendolarismo, non i singoli pendolari: i tempi individuali variano molto di più (molte persone viaggiano 10 o 60 minuti). Una frase corretta è: *"Tempi medi di pendolarismo compresi tra 30 e 34 minuti sono compatibili con i dati; il metodo usato cattura la vera media nel 95% delle indagini ripetute."*
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| stima ± moltiplicatore × ES | Ricetta generale per un intervallo di confidenza |
+| `qt(0.975, df = n - 1)` | Moltiplicatore t per un IC al 95% per una media |
+| `t.test(x)$conf.int` | IC per una media (`conf.level =` per cambiare il livello) |
+| `t.test(y ~ g, data = df)$conf.int` | IC per una differenza tra medie |
+| `prop.test(x, n)$conf.int` | IC di Wilson per una proporzione |
+| `binom.test(x, n)$conf.int` | IC esatto (Clopper–Pearson) per una proporzione |
+
+- Il livello di confidenza descrive il **metodo**: in campioni ripetuti circa il 95% degli intervalli contiene il valore vero.
+- Il parametro è fisso; è l'**intervallo a essere casuale**.
+- L'ampiezza si riduce con $\sqrt n$ e cresce con il livello di confidenza e con la variabilità dei dati.
+- Per le proporzioni, evita l'intervallo di Wald con $n$ piccolo o $\hat p$ estremo.
+- Un IC copre solo l'errore campionario — non la distorsione nel modo in cui i dati sono stati raccolti.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), capitoli sugli intervalli di confidenza, <https://openintro-ims.netlify.app>
+- Lakens, D., *Improving Your Statistical Inferences*, capitolo sugli intervalli di confidenza, <https://lakens.github.io/statistical_inferences/>
+- Documentazione di R: `?t.test`, `?prop.test`, `?binom.test`
+:::

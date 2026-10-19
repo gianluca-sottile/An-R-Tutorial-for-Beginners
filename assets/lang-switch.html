@@ -1,0 +1,62 @@
+<script>
+/* Language switch EN <-> IT ---------------------------------------------------
+   The Italian site mirrors the English one under /it/ with identical file
+   names. This script (1) wires the "Italiano / English" navbar button to the
+   same page in the other language and (2) on Italian pages translates the
+   navbar and points its links to the Italian pages.                          */
+(function () {
+  // Pages that exist in Italian (paths relative to the site root, no .html)
+  var TRANSLATED = /^(index|setup|learning-path|glossary|about|lessons\/0[1-8]-[^/]+\/[^/]+)$/;
+
+  var meta = document.querySelector('meta[name="quarto:offset"]');
+  var offset = meta ? meta.getAttribute('content') : './';
+  var root = new URL(offset, window.location.href);            // site root URL
+  var here = new URL(window.location.href);
+  var rel = decodeURIComponent(here.pathname.substring(root.pathname.length)); // e.g. "it/lessons/..."
+  if (rel === '' || rel.endsWith('/')) rel += 'index.html';
+  var isIt = rel.indexOf('it/') === 0;
+  var page = (isIt ? rel.substring(3) : rel).replace(/\.html$/, '');
+
+  function target() {
+    if (isIt) return new URL(page + '.html', root);              // -> English
+    if (TRANSLATED.test(page)) return new URL('it/' + page + '.html', root);
+    return new URL('it/index.html', root);                         // not translated yet
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    // 1. the switch button
+    document.querySelectorAll('a[aria-label="Switch language"]').forEach(function (a) {
+      a.setAttribute('href', target().href + here.hash);
+      var label = a.querySelector('.menu-text') || a;
+      label.textContent = isIt ? 'English' : 'Italiano';
+      a.setAttribute('title', isIt ? 'Read this page in English' : 'Leggi questa pagina in italiano');
+      a.setAttribute('lang', isIt ? 'en' : 'it');
+      try { localStorage.setItem('course-lang', isIt ? 'it' : 'en'); } catch (e) {}
+    });
+
+    if (!isIt) return;
+
+    // 2. Italian pages: translate navbar labels ...
+    var labels = {
+      'Start here': 'Inizia qui', 'Learning path': 'Percorso',
+      'Lessons': 'Lezioni', 'Glossary': 'Glossario', 'About': 'Il corso'
+    };
+    document.querySelectorAll('#quarto-header .menu-text').forEach(function (el) {
+      var t = el.textContent.trim();
+      if (labels[t]) el.textContent = labels[t];
+    });
+
+    // ... and point navbar links (and logo/title) to the Italian pages
+    document.querySelectorAll('#quarto-header a[href]').forEach(function (a) {
+      if (a.getAttribute('aria-label') === 'Switch language') return;
+      var u = new URL(a.getAttribute('href'), window.location.href);
+      if (u.origin !== root.origin || u.pathname.indexOf(root.pathname) !== 0) return;
+      var r = u.pathname.substring(root.pathname.length);
+      if (r === '' || r.endsWith('/')) r += 'index.html';
+      if (r.indexOf('it/') === 0) return;
+      var p = r.replace(/\.html$/, '');
+      if (TRANSLATED.test(p)) a.setAttribute('href', new URL('it/' + p + '.html', root).href);
+    });
+  });
+})();
+</script>

@@ -1,0 +1,557 @@
+---
+title: "Stringhe, fattori e date"
+subtitle: "Ripulire il testo, domare le categorie e calcolare con le date del calendario"
+description: "Le funzioni essenziali di stringr e un primo sguardo alle espressioni regolari, un riepilogo di forcats per ripulire le variabili categoriali, e lubridate per leggere le date, estrarne le componenti e calcolare differenze, con un esempio completo di pulizia dei dati."
+format:
+  live-html:
+    webr:
+      packages: ["dplyr", "tibble", "stringr", "forcats", "lubridate"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+library(tibble)
+library(stringr)
+library(forcats)
+library(lubridate)
+```
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~75 min]{} [Prerequisiti: [Fattori](../01-foundations/06-factors.qmd), [Manipolazione dei dati con dplyr](09-dplyr-verbs.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- ripulire il testo con `str_trim()`, `str_squish()`, `str_to_lower()`, `str_to_title()`, `str_replace()` e `str_sub()`;
+- individuare ed estrarre schemi con `str_detect()` e `str_split()`, usando cinque schemi di base delle **espressioni regolari**;
+- costruire testo a partire dai dati con `str_glue()`;
+- correggere categorie incoerenti con `forcats` (`fct_recode()`, `fct_collapse()`, `fct_lump_n()`, `fct_infreq()`);
+- leggere le date con `ymd()` / `dmy()`, estrarne anno, mese e giorno della settimana, calcolare differenze e arrotondare le date con `floor_date()`.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(tibble)
+library(stringr)
+library(forcats)
+library(lubridate)
+```
+
+## 1. Perché ripulire stringhe e date?
+
+I dati inseriti a mano dalle persone sono disordinati. La stessa città compare come `"Rome"`, `"rome"` e `"Rome "` (con uno spazio finale). I prezzi sono memorizzati come testo, tipo `"€12.50"`. Le date arrivano come `"05/03/2024"`: è il 5 marzo o il 3 maggio?
+
+Per R, `"Rome"` e `"Rome "` sono **valori diversi**: una tabella di frequenza li conterà separatamente, un [join](11-joins.qmd) non riuscirà ad abbinarli e un modello li tratterà come categorie diverse. Ripulire testo e date quindi non è un fatto estetico: decide **quali unità vengono contate insieme**, e di conseguenza cambia le statistiche.
+
+Tutte le funzioni di stringr iniziano con `str_`, ricevono la stringa (o le stringhe) come primo argomento e sono vettorizzate: lavorano su un'intera colonna in una volta.
+
+## 2. Ripulire il testo con stringr
+
+```{r}
+#| label: str-basics
+x <- c("  Rome", "rome ", "ROME", "Milan  centre")
+
+str_trim(x)          # rimuove gli spazi a entrambe le estremità
+str_squish(x)        # comprime anche gli spazi interni ripetuti
+str_to_lower(x)      # minuscolo
+str_to_title(str_squish(x))   # Iniziali Maiuscole
+str_length(x)        # numero di caratteri (gli spazi contano!)
+```
+
+`str_length()` mostra perché `"  Rome"` e `"Rome"` non corrispondono: hanno un numero diverso di caratteri.
+
+### Sostituire ed estrarre parti
+
+```{r}
+#| label: str-replace-sub
+prices <- c("€12.50", "€7.00", "€30.10")
+
+str_replace(prices, "€", "")            # sostituisce la prima corrispondenza
+str_remove(prices, "€") |> as.numeric() # scorciatoia + conversione in numero
+
+codes <- c("IT-2024-001", "FR-2023-017", "ES-2024-112")
+str_sub(codes, 1, 2)     # caratteri da 1 a 2
+str_sub(codes, -3)       # gli ultimi tre caratteri
+```
+
+`str_replace()` modifica solo la **prima** corrispondenza in ciascuna stringa; `str_replace_all()` le modifica tutte. Le posizioni negative in `str_sub()` si contano dalla fine.
+
+### Dividere e combinare
+
+```{r}
+#| label: str-split
+str_split("Adelie,Chinstrap,Gentoo", ",")
+str_split_i(codes, "-", 2)     # il 2° pezzo di ogni stringa
+```
+
+`str_split()` restituisce una **lista** (ogni stringa può produrre un numero diverso di pezzi); `str_split_i()` restituisce solo l'*i*-esimo pezzo come vettore. Per dividere una colonna in più colonne di un data frame usa `separate_wider_delim()`, vista in [Dati tidy e ristrutturazione](12-tidy-reshape.qmd).
+
+`str_glue()` costruisce testo inserendo valori dentro `{ }`:
+
+```{r}
+#| label: str-glue
+penguins |>
+  summarise(m = mean(body_mass, na.rm = TRUE), .by = species) |>
+  mutate(label = str_glue("{species}: {round(m)} g"))
+```
+
+È comodo per le etichette dei grafici e per i report automatici.
+
+## 3. Un primo sguardo alle espressioni regolari
+
+`str_detect(string, pattern)` restituisce `TRUE`/`FALSE` per ogni stringa. Il `pattern` è un'**espressione regolare** (*regex*): un piccolo linguaggio per descrivere il testo. Cinque schemi coprono la maggior parte delle esigenze quotidiane:
+
+```{r}
+#| label: regex-data
+fruits <- c("apple", "banana", "kiwi 2", "Cherry", "pear.", "blueberry")
+```
+
+| Schema | Significato | Corrispondenze in `fruits` |
+|---|---|---|
+| `"^b"` | inizia con `b` | banana, blueberry |
+| `"y$"` | finisce con `y` | Cherry, blueberry |
+| `"\\d"` | una cifra qualsiasi | kiwi 2 |
+| `"[aeiou]{2}"` | due vocali consecutive | pear., blueberry |
+| `"\\."` | un punto letterale | pear. |
+
+```{r}
+#| label: regex-demo
+str_detect(fruits, "^b")
+fruits[str_detect(fruits, "y$")]
+str_subset(fruits, "\\d")          # scorciatoia per x[str_detect(x, p)]
+str_subset(fruits, "[aeiou]{2}")
+str_subset(fruits, "\\.")
+str_subset(fruits, "an|err")      # | significa "oppure"
+```
+
+Due dettagli che ti serviranno spesso:
+
+- `.` significa **qualsiasi carattere**; per cercare un vero punto scrivi `"\\."` (la barra rovesciata "neutralizza" il significato speciale, e in una stringa di R va a sua volta raddoppiata).
+- La ricerca **distingue maiuscole e minuscole**: `"^c"` non corrisponde a `"Cherry"`. Converti prima il testo in minuscolo, oppure usa `regex("^c", ignore_case = TRUE)`.
+
+```{r}
+#| label: regex-extract
+str_extract(c("kiwi 2", "pack of 12 eggs", "none"), "\\d+")
+```
+
+`+` significa "uno o più del precedente", quindi `"\\d+"` estrae un numero intero completo. Le stringhe senza corrispondenza danno `NA`.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: un promemoria sulle regex
+
+| Schema | Significato |
+|---|---|
+| `.` | qualsiasi carattere |
+| `\\d`, `\\s`, `\\w` | cifra, spazio bianco, carattere di "parola" (lettera, cifra, `_`) |
+| `[abc]`, `[^abc]`, `[a-z]` | uno tra / nessuno tra / un intervallo |
+| `*`, `+`, `?`, `{n,m}` | 0 o più, 1 o più, 0 o 1, tra n e m |
+| `^`, `$` | inizio, fine della stringa |
+| `(...)` | un gruppo (usato da `str_match()` e da `names_pattern`) |
+
+La barra verticale significa "oppure": `"cat|dog"` corrisponde a una delle due parole.
+
+stringr usa il motore di regex ICU. Il capitolo "Regular expressions" di R4DS è un'introduzione graduale e completa.
+:::
+
+## 4. Variabili categoriali: un riepilogo di forcats
+
+Una volta ripulita, una colonna di testo è di solito una variabile categoriale e dovrebbe diventare un [fattore](../01-foundations/06-factors.qmd). Le funzioni di forcats iniziano tutte con `fct_`:
+
+```{r}
+#| label: fct-recode
+city <- c("Rome", "Milan", "Milano", "Roma", "Turin", "Rome", "Naples")
+
+fct_recode(city, Milan = "Milano", Rome = "Roma") |> fct_count()
+```
+
+`fct_recode(nuovo = "vecchio")` rinomina singoli livelli. Per unire più livelli in gruppi, usa `fct_collapse()`:
+
+```{r}
+#| label: fct-collapse
+fct_collapse(city,
+  North = c("Milan", "Milano", "Turin"),
+  Centre = c("Rome", "Roma"),
+  South = "Naples"
+) |> fct_count()
+```
+
+Due funzioni sono particolarmente utili prima di tabelle e grafici a barre:
+
+```{r}
+#| label: fct-infreq-lump
+models <- word(rownames(mtcars), 1)   # prima parola = marca
+fct_infreq(models) |> levels() |> head()        # ordina i livelli per frequenza
+fct_lump_n(models, n = 3) |> fct_count(sort = TRUE)
+```
+
+`fct_infreq()` ordina i livelli dal più frequente al meno frequente; `fct_lump_n(n = 3)` tiene i tre livelli più frequenti (più gli eventuali pari merito) e accorpa il resto in `"Other"`. I valori mancanti possono diventare un livello esplicito con `fct_na_value_to_level()`.
+
+## 5. Date con lubridate
+
+### Lettura: dal testo a `Date`
+
+`as.Date()` di R base si aspetta il formato ISO `"YYYY-MM-DD"`. Con altri formati può sbagliare senza avvisare:
+
+```{r}
+#| label: as-date-trap
+as.Date("05/03/2024")
+```
+
+R l'ha letto come l'anno 5! Le funzioni di lettura di lubridate prendono il nome dall'**ordine** delle componenti: `ymd()`, `dmy()`, `mdy()`, … Accettano qualsiasi separatore comune.
+
+```{r}
+#| label: parse
+ymd("2024-03-05")
+dmy(c("05/03/2024", "5-3-2024", "05.03.2024"))
+mdy("March 5, 2024")
+```
+
+Scegli la funzione in base a come i dati sono stati *registrati*: i dati europei sono di solito `dmy`, quelli statunitensi `mdy`. Le stringhe che non si riescono a leggere diventano `NA`, con un avviso.
+
+### Estrarre le componenti
+
+```{r}
+#| label: components
+d <- ymd(c("2024-03-05", "2024-07-14", "2024-12-25"))
+
+year(d)
+month(d)
+month(d, label = TRUE)                  # un fattore ordinato
+wday(d, label = TRUE, week_start = 1)   # giorno della settimana, settimane che iniziano di lunedì
+yday(d)                                 # giorno dell'anno
+```
+
+`month(label = TRUE)` e `wday(label = TRUE)` restituiscono **fattori ordinati**, così tabelle e grafici mostrano i mesi in ordine di calendario anziché in ordine alfabetico.
+
+### Differenze e arrotondamenti
+
+```{r}
+#| label: differences
+start <- ymd("2024-03-05")
+end   <- ymd("2024-07-17")
+
+end - start                         # un difftime, in giorni
+as.numeric(end - start)             # solo il numero
+time_length(interval(start, end), "months")
+start + days(30)                    # aritmetica con i periodi
+```
+
+`floor_date()` arrotonda le date **per difetto** a un'unità: è lo strumento chiave per sintetizzare per settimana o per mese:
+
+```{r}
+#| label: floor-date
+floor_date(d, "month")
+floor_date(d, "week", week_start = 1)
+```
+
+### Applicazione: costruire le date in `airquality`
+
+`airquality` memorizza la data in due colonne, `Month` e `Day`, dell'anno 1973. `make_date()` le combina:
+
+```{r}
+#| label: airquality-dates
+aq <- airquality |>
+  as_tibble() |>
+  mutate(date = make_date(1973, Month, Day),
+         weekday = wday(date, label = TRUE, week_start = 1))
+
+aq |>
+  summarise(mean_temp = mean(Temp), n = n(), .by = weekday) |>
+  arrange(weekday)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Poiché `weekday` è un fattore ordinato, `arrange()` lo ordina da lunedì a domenica.
+- Le temperature medie sono molto simili tra i giorni della settimana (tra circa `r round(min(tapply(aq$Temp, aq$weekday, mean)))` e `r round(max(tapply(aq$Temp, aq$weekday, mean)))` °F): nessuna sorpresa, perché il meteo non sa che giorno della settimana è. Un effetto del giorno della settimana sarebbe atteso per l'inquinamento da *traffico*, non per la temperatura.
+:::
+
+## 6. Mini-esempio applicato: ripulire una tabella disordinata
+
+Un piccolo questionario è stato trascritto a mano:
+
+```{r}
+#| label: messy
+messy <- tibble(
+  name   = c("  ada LOVELACE", "Ben  Smith ", "chiara ROSSI",
+             "Dev patel", "eli  MARTIN"),
+  city   = c("rome", "Rome ", "MILAN", "milano", "Rome"),
+  phone  = c("+39 333 123 4567", "333-987-6543", "(333) 555 0000",
+             "3331112222", NA),
+  signup = c("05/03/2024", "5-4-2024", "17.06.2024", "01/08/2024",
+             "30/09/2024"),
+  spent  = c("€12.50", "€ 7", "30,00 €", "15.2", "€0")
+)
+messy
+```
+
+Ogni colonna ha un problema: maiuscole e spazi incoerenti, due grafie per Milano, numeri di telefono in formati diversi, date con separatori diversi, importi con simboli di valuta e la virgola decimale. Un'unica pipeline li risolve tutti:
+
+```{r}
+#| label: clean
+clean <- messy |>
+  mutate(
+    name   = name |> str_squish() |> str_to_title(),
+    city   = city |> str_trim() |> str_to_title() |>
+      fct_recode(Milan = "Milano"),
+    phone  = phone |> str_remove_all("[^0-9]") |> str_sub(-10),
+    signup = dmy(signup),
+    spent  = spent |> str_replace(",", ".") |>
+      str_remove_all("[^0-9.]") |> as.numeric()
+  )
+clean
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `name`: spazi superflui rimossi e iniziali maiuscole applicate.
+- `city`: un **fattore** con `r nlevels(clean$city)` livelli invece di `r n_distinct(messy$city)` grafie diverse.
+- `phone`: `"[^0-9]"` significa "qualsiasi carattere che *non* sia una cifra"; rimuoverli e tenere le ultime 10 cifre elimina il prefisso internazionale `+39`. Il telefono mancante resta `NA`: la pulizia non deve inventare dati.
+- `signup`: una vera `Date`, quindi possiamo fare calcoli con essa.
+- `spent`: un numero, quindi possiamo sintetizzarlo.
+:::
+
+Ora i dati si possono analizzare:
+
+```{r}
+#| label: clean-analysis
+clean |>
+  summarise(
+    customers   = n(),
+    total_spent = sum(spent),
+    first_signup = min(signup),
+    .by = city
+  )
+
+clean |>
+  mutate(signup_month = month(signup, label = TRUE)) |>
+  count(signup_month)
+```
+
+Sulla tabella grezza `messy`, la prima sintesi avrebbe mostrato cinque "città" e non avrebbe potuto calcolare un totale.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Spazi invisibili.** `"Rome "` ≠ `"Rome"`. Usa `str_trim()`/`str_squish()` su ogni colonna di testo che verrà usata per raggruppare o per un join.
+2. **Dimenticare di neutralizzare i caratteri speciali** nelle regex: `"."` corrisponde a qualsiasi cosa, `"\\."` a un punto; `"$"` significa "fine della stringa", quindi per cercare il simbolo del dollaro scrivi `"\\$"`.
+3. **Leggere le date con l'ordine sbagliato.** `"05/03/2024"` è il 5 marzo con `dmy()` e il 3 maggio con `mdy()`. Entrambe "funzionano"; solo una è corretta. Controlla con una data in cui il giorno è maggiore di 12.
+4. **`as.Date()` su testo non in formato ISO** può produrre senza avvisi date assurde (l'anno 5). Controlla il `range()` di ogni nuova colonna di date.
+5. **Una pulizia che inventa informazioni:** riempire un telefono mancante o indovinare una data ambigua. Lascia `NA` ciò che è davvero sconosciuto.
+:::
+
+## 7. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Che cosa verifica `str_detect(x, "^[A-Z]")`?
+
+Se ogni stringa **inizia con** una lettera maiuscola. `^` ancora lo schema all'inizio; `[A-Z]` è un carattere compreso tra A e Z.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Perché `month(d, label = TRUE)` è meglio di `format(d, "%b")` per una tabella di frequenza?
+
+`month(label = TRUE)` restituisce un **fattore ordinato**, quindi la tabella elenca i mesi in ordine di calendario (gen, feb, …). `format()` restituisce semplice testo, che viene ordinato alfabeticamente (ad esempio, in inglese: Apr, Aug, Dec, …).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Una colonna contiene i valori "M", "m", "male", "F", "female", "Female". Come otterresti un fattore pulito con due livelli?
+
+Converti il testo in minuscolo con `str_to_lower()`, poi usa `fct_collapse(x, male = c("m", "male"), female = c("f", "female"))`.
+:::
+
+## 8. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+```{webr}
+#| setup: true
+#| exercise: ex_13_1
+models <- rownames(mtcars)
+```
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — individuare.** `models` contiene i 32 nomi di automobili di `mtcars`. Quante sono Mercedes (iniziano con `"Merc"`)? Quanti nomi contengono almeno una cifra?
+
+```{webr}
+#| exercise: ex_13_1
+sum(str_detect(models, ______))
+str_subset(models, ______)
+```
+
+::: {.hint exercise="ex_13_1"}
+"Inizia con" è `^`; "una cifra" è `\\d`. `sum()` di un vettore logico conta i `TRUE`.
+:::
+
+::: {.solution exercise="ex_13_1"}
+```r
+sum(str_detect(models, "^Merc"))   # 7
+str_subset(models, "\\d")          # 17 nomi, da "Mazda RX4" a "Volvo 142E"
+```
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_13_2
+models <- rownames(mtcars)
+```
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — marche.** Estrai la marca (la prima parola) di ogni automobile con `str_split_i()`, e mostra le tre marche più frequenti, accorpando le altre in `"Other"`.
+
+```{webr}
+#| exercise: ex_13_2
+brand <- str_split_i(models, ______, ______)
+fct_lump_n(brand, n = ______) |> fct_count(sort = TRUE)
+```
+
+::: {.hint exercise="ex_13_2"}
+Dividi sullo spazio `" "` e prendi il pezzo `1`.
+:::
+
+::: {.solution exercise="ex_13_2"}
+```r
+brand <- str_split_i(models, " ", 1)
+fct_lump_n(brand, n = 3) |> fct_count(sort = TRUE)
+```
+Merc è di gran lunga la marca più frequente (7 automobili). Diverse marche sono a pari merito con 2 automobili, e `fct_lump_n()` tiene tutti i livelli a pari merito, quindi potresti vedere più di tre livelli con nome prima di `"Other"`.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi le date.** Il codice seguente dovrebbe calcolare quanti giorni dopo l'inizio del corso si è svolto ciascun esame, ma i risultati sono assurdi. Trova il problema e correggilo con lubridate.
+
+```{webr}
+#| exercise: ex_13_3
+exams <- tibble(
+  student = c("Ada", "Ben", "Chiara"),
+  date    = c("17/06/2024", "02/07/2024", "15/07/2024")
+)
+course_start <- as.Date("04/03/2024")
+
+exams |>
+  mutate(date = as.Date(date),
+         days_after = date - course_start)
+```
+
+::: {.hint exercise="ex_13_3"}
+Le date sono nel formato giorno/mese/anno. Sostituisci `as.Date()` con `dmy()` in entrambi i punti.
+:::
+
+::: {.solution exercise="ex_13_3"}
+```r
+course_start <- dmy("04/03/2024")
+
+exams |>
+  mutate(date = dmy(date),
+         days_after = as.numeric(date - course_start))
+```
+`as.Date()` ha letto `"17/06/2024"` come l'anno 17, quindi tutte le differenze erano prive di senso. Con `dmy()` gli esami cadono 105, 120 e 133 giorni dopo l'inizio del corso.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — ozono settimanale.** Costruisci una colonna `date` per `airquality` con `make_date()`, poi calcola la media di `Ozone` per **settimana** (usa `floor_date()` con settimane che iniziano di lunedì). Quale settimana ha avuto la media di ozono più alta?
+
+```{webr}
+#| exercise: ex_13_4
+airquality |>
+  mutate(date = make_date(1973, ______, ______),
+         week = floor_date(date, ______, week_start = 1)) |>
+  summarise(mean_ozone = mean(Ozone, na.rm = TRUE),
+            n_obs = sum(!is.na(Ozone)),
+            .by = week) |>
+  arrange(desc(mean_ozone))
+```
+
+::: {.hint exercise="ex_13_4"}
+`make_date(1973, Month, Day)` e l'unità `"week"`.
+:::
+
+::: {.solution exercise="ex_13_4"}
+```r
+airquality |>
+  mutate(date = make_date(1973, Month, Day),
+         week = floor_date(date, "week", week_start = 1)) |>
+  summarise(mean_ozone = mean(Ozone, na.rm = TRUE),
+            n_obs = sum(!is.na(Ozone)),
+            .by = week) |>
+  arrange(desc(mean_ozone))
+```
+In cima alla lista c'è la settimana che inizia il 25 giugno 1973, ma guarda `n_obs`: la sua media si basa su **un solo giorno**, perché la maggior parte dei valori di ozono di giugno è mancante. Tra le settimane con almeno cinque osservazioni, le medie più alte sono in agosto (settimane che iniziano il 27 e il 6 agosto). Una media basata su un solo valore non è una sintesi affidabile di una settimana; riporta sempre `n` accanto alla media.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — la tua tabella disordinata.** Crea un tibble con 6 righe e le colonne `sex` (valori come `"M"`, `" f"`, `"Female"`, `"male "`), `birth` (date scritte come `"1999-03-12"`, `"2001/11/05"`, …) e `height` (testo come `"1,72 m"`, `"1.80m"`). Ripuliscilo in modo che `sex` sia un fattore con due livelli, `birth` sia una `Date`, `height` sia numerica in centimetri, e aggiungi l'età in anni compiuti al 1° gennaio 2025.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+people <- tibble(
+  sex    = c("M", " f", "Female", "male ", "F", "m"),
+  birth  = c("1999-03-12", "2001/11/05", "2000-01-30",
+             "1998.07.21", "2002-12-01", "1997/05/17"),
+  height = c("1,72 m", "1.80m", "1,65 m", "1.91 m", "1.58m", "1,77m")
+)
+
+people |>
+  mutate(
+    sex = sex |> str_trim() |> str_to_lower() |>
+      fct_collapse(male = c("m", "male"), female = c("f", "female")),
+    birth  = ymd(birth),
+    height = height |> str_replace(",", ".") |>
+      str_remove_all("[^0-9.]") |> as.numeric() * 100,
+    age = floor(time_length(interval(birth, ymd("2025-01-01")), "years"))
+  )
+```
+Controlla il risultato con `glimpse()`: `sex` dovrebbe essere `<fct>`, `birth` `<date>`, `height` e `age` `<dbl>`.
+:::
+:::
+
+## Riepilogo
+
+| Operazione | Funzione/i |
+|---|---|
+| Rimuovere spazi | `str_trim()`, `str_squish()` |
+| Cambiare maiuscole/minuscole | `str_to_lower()`, `str_to_upper()`, `str_to_title()` |
+| Cercare schemi | `str_detect()`, `str_subset()`, `str_extract()` |
+| Sostituire / rimuovere | `str_replace()`, `str_replace_all()`, `str_remove_all()` |
+| Parti di stringhe | `str_sub()`, `str_split()`, `str_split_i()` |
+| Costruire testo | `str_glue()` |
+| Correggere categorie | `fct_recode()`, `fct_collapse()`, `fct_lump_n()`, `fct_infreq()` |
+| Leggere date | `ymd()`, `dmy()`, `mdy()`, `make_date()` |
+| Componenti delle date | `year()`, `month(label = TRUE)`, `wday(label = TRUE)`, `yday()` |
+| Aritmetica delle date | `d2 - d1`, `time_length(interval(d1, d2), "years")`, `days()`, `floor_date()` |
+
+- Valori di testo che sembrano uguali possono non esserlo: elimina gli spazi superflui e uniforma maiuscole e minuscole prima di raggruppare o fare un join.
+- Cinque schemi regex (`^`, `$`, `\\d`, `[...]`, `|`) coprono la maggior parte dei compiti di pulizia; neutralizza i caratteri speciali con `\\`.
+- Leggi le date con la funzione che corrisponde all'ordine in cui sono state registrate, poi controllane l'intervallo.
+- La pulizia decide quali unità vengono contate insieme: falla in modo esplicito, nel codice, e non inventare mai valori.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitoli "Strings", "Regular expressions", "Factors" e "Dates and times", <https://r4ds.hadley.nz>
+- Documentazione di stringr, <https://stringr.tidyverse.org>
+- Documentazione di lubridate, <https://lubridate.tidyverse.org>
+:::

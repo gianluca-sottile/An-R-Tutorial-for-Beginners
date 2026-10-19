@@ -1,0 +1,80 @@
+---
+title: "Il corso"
+description: "Finalità, prerequisiti, risultati di apprendimento, calendario indicativo e risorse di From Data to Models with R."
+---
+
+## Il corso in un paragrafo
+
+*From Data to Models with R* è un corso aperto e accessibile ai principianti di programmazione in R e statistica applicata. Parte dalla primissima riga di codice R e arriva ai modelli di regressione, al machine learning, alla riduzione della dimensionalità e al clustering, con un percorso facoltativo di deep learning. È pensato per studenti universitari — e per chiunque altro — che devono analizzare dati ma **non hanno una formazione statistica rigorosa**: ogni idea statistica viene introdotta attraverso un problema concreto, un grafico o una simulazione prima di qualsiasi formula. Il materiale può sostenere un modulo universitario fino a **9 CFU (circa 72 ore di lezione)** ed è liberamente disponibile su GitHub.
+
+La versione italiana copre attualmente i Livelli 1–3; le lezioni del Livello 4 e il percorso di deep learning sono disponibili in inglese.
+
+## Prerequisiti
+
+- **Non è richiesta alcuna esperienza di programmazione.**
+- **Non è richiesto alcun corso di statistica precedente**: i Livelli 2 e 3 costruiscono da zero la statistica descrittiva, la probabilità e l'inferenza. Chi conosce già questi argomenti può affrontarli più rapidamente.
+- Competenze informatiche di base (gestire file e cartelle, installare software) e un computer portatile su cui installare R e un editor. Molti esercizi funzionano anche nel browser, senza installare nulla.
+- Per le lezioni facoltative di deep learning: un'installazione locale funzionante di `keras3` (vedi la [Lezione 61](../lessons/13-deep-learning/61-dl-setup.qmd), in inglese).
+
+## Risultati di apprendimento
+
+**Conoscenze.** Al termine del corso gli studenti comprenderanno:
+
+- il ruolo di R come ambiente per l'analisi dei dati, la visualizzazione e la reportistica riproducibile, e i suoi principali tipi di oggetti;
+- le idee di base della statistica descrittiva, della probabilità, della variabilità campionaria e dell'inferenza statistica, inclusa la corretta interpretazione degli intervalli di confidenza e dei p-value;
+- la logica dei modelli statistici (modelli lineari e lineari generalizzati) e dell'apprendimento supervisionato e non supervisionato, compreso il modo in cui i modelli vengono convalidati e perché possono andare in sovradattamento (overfitting);
+- (percorso facoltativo) i componenti fondamentali delle reti neurali e il loro rapporto con i modelli statistici.
+
+**Abilità.** Gli studenti saranno in grado di:
+
+- organizzare un'analisi come progetto R riproducibile e scrivere codice R chiaro e moderno (tidyverse, funzioni, iterazione);
+- importare, pulire, ristrutturare e unire dati reali, e gestire i valori mancanti in modo fondato;
+- descrivere i dati con tabelle, statistiche di sintesi e grafici ggplot2 ben progettati;
+- scegliere, eseguire e interpretare i test e gli intervalli di confidenza più comuni, e riportare la dimensione dell'effetto;
+- stimare, diagnosticare, confrontare e interpretare modelli di regressione e modelli di machine learning con tidymodels;
+- applicare PCA, analisi fattoriale, analisi delle corrispondenze e metodi di clustering, valutandone criticamente i risultati.
+
+**Comunicazione.** Gli studenti sapranno spiegare metodi, assunzioni, risultati e limiti in un linguaggio semplice, in relazioni scritte generate direttamente dal codice con Quarto.
+
+## Calendario indicativo (72 ore)
+
+Il calendario è indicativo; i docenti possono adattarlo.
+
+| Ore | Moduli | Argomenti |
+|:---:|---|---|
+| 12 | 1–2 | R, editor e progetti; tipi di dati, vettori, fattori, liste; data frame e dplyr; join e ristrutturazione |
+| 6 | 3–4 | Funzioni, istruzioni condizionali, cicli e iterazione; importare/esportare dati; dati mancanti |
+| 8 | 5–6 | Tabelle di frequenza, statistiche di sintesi, descrizione di due variabili; ggplot2; correlazione |
+| 12 | 7–8 | Probabilità tramite simulazione; distribuzioni; distribuzioni campionarie; bootstrap; intervalli di confidenza; test d'ipotesi; test t, test χ², test non parametrici, ANOVA |
+| 14 | 9–10 | Regressione lineare, logistica e di Poisson; selezione del modello; regressione penalizzata; il flusso di lavoro del machine learning con tidymodels; alberi, random forest, boosting, SVM |
+| 10 | 11–12 | PCA, analisi fattoriale, analisi delle corrispondenze, MDS, t-SNE/UMAP; k-means, clustering gerarchico, DBSCAN, clustering basato su modelli e spettrale |
+| 10 | Progetto finale | Progetto guidato dall'inizio alla fine e presentazioni |
+| *facoltative 6–10* | 13 | Deep learning con keras3: reti dense, autoencoder, LSTM/GRU, CNN |
+
+## Come è costruito il materiale
+
+- Ogni lezione è un documento [Quarto](https://quarto.org): testo, codice e risultati provengono dallo stesso sorgente, quindi l'output che vedi è quello che il codice produce.
+- Gli esercizi interattivi vengono eseguiti nel browser con [webR](https://docs.r-wasm.org/webr/latest/) tramite l'estensione [quarto-live](https://r-wasm.github.io/quarto-live/).
+- Il machine learning usa il framework [tidymodels](https://www.tidymodels.org); la [Lezione 44](../lessons/10-ml/44-ml-workflow.qmd) (in inglese) spiega perché in questo corso ha sostituito `caret`.
+- Le figure usano una tavolozza di colori adatta a chi ha deficit nella percezione dei colori.
+
+## Risorse gratuite consigliate
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.) — <https://r4ds.hadley.nz>
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2a ed.) — <https://openintro-ims.netlify.app>
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2a ed.) — <https://www.statlearning.com>
+- Kuhn & Silge, *Tidy Modeling with R* — <https://www.tmwr.org>
+- Venables, Smith & R Core Team, *An Introduction to R* — su CRAN
+
+## Autore
+
+**Gianluca Sottile** — Università degli Studi di Palermo.
+[Pagina personale](https://www.unipa.it/persone/docenti/s/gianluca.sottile) · [GitHub](https://github.com/gianluca-sottile) · gianluca.sottile@unipa.it
+
+## Licenza e citazione
+
+Il corso è distribuito con licenza [Creative Commons Attribuzione - Condividi allo stesso modo 4.0 Internazionale (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) (vedi [LICENSE](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners/blob/master/LICENSE)): puoi riutilizzarlo e adattarlo, citando la fonte, con la stessa licenza. Se lo usi nella tua didattica, un link al corso è gradito:
+
+> Sottile, G. (2026). *From Data to Models with R: A beginner's course in statistics and machine learning*. <https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/>
+
+Correzioni e suggerimenti sono benvenuti tramite le [issue di GitHub](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners/issues).

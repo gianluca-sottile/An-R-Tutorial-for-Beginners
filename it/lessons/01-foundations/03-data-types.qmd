@@ -1,0 +1,484 @@
+---
+title: "Tipi di dati e operatori"
+subtitle: "Numeri, testo e TRUE/FALSE, e le sorprese nascoste nel mezzo"
+description: "I tipi di dati di base di R (numeric, integer, character, logical), come ispezionarli e convertirli, la coercizione implicita, gli operatori aritmetici, di confronto e logici, i valori speciali (NA, NULL, NaN, Inf) e la trappola dell'uguaglianza tra numeri in virgola mobile."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Primi passi](02-first-steps.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- riconoscere i quattro tipi di dati di base e ispezionarli con `class()`, `typeof()` e `is.*()`;
+- convertire tra tipi con `as.*()` e **prevedere** che cosa farà la coercizione implicita;
+- usare gli operatori aritmetici (compresi `%/%` e `%%`), di confronto e logici;
+- distinguere `NA`, `NULL`, `NaN` e `Inf`;
+- confrontare in modo sicuro i numeri decimali con `all.equal()`.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+# Solo R base: nulla da caricare.
+```
+
+## 1. Perché i tipi di dati sono importanti?
+
+Guarda queste due righe:
+
+```{r}
+#| label: motivation
+10 < 9
+"10" < "9"
+```
+
+Il primo confronto è `FALSE`, come previsto. Il secondo è `TRUE`! Con le virgolette, `"10"` e `"9"` sono **testo**, e il testo viene confrontato in ordine alfabetico, carattere per carattere: `"1"` viene prima di `"9"`, proprio come "albicocca" viene prima di "banana".
+
+Non è una curiosità. Quando importi un foglio di calcolo e una cella in una colonna di numeri contiene `"n/a"`, R può leggere **l'intera colonna come testo**. Le medie non funzionano, l'ordinamento è sbagliato, i grafici hanno un aspetto strano. Sapere di che tipo è ogni oggetto, e che cosa fa R quando i tipi vengono mescolati, previene un'intera famiglia di errori.
+
+## 2. I tipi di base
+
+Ogni valore in R ha un tipo. Quattro si usano tutti i giorni:
+
+| Tipo | Esempio | Che cosa memorizza |
+|---|---|---|
+| **numeric** (double) | `4.5`, `-3`, `1e6` | Numeri reali, con decimali. È il tipo predefinito per i numeri. |
+| **integer** | `4L`, `1:10` | Numeri interi. Il suffisso `L` crea un intero. |
+| **character** | `"Adelie"`, `'R is fun'` | Testo (*stringhe*), sempre tra virgolette, singole o doppie. |
+| **logical** | `TRUE`, `FALSE` | Valori sì/no (*booleani*). Sempre in maiuscolo, senza virgolette. |
+
+Un quinto tipo, **complex** (ad es. `2+3i`), memorizza numeri complessi; difficilmente ti servirà nell'analisi dei dati.
+
+```{r}
+#| label: types
+x <- 28
+y <- "R è fantastico"
+z <- TRUE
+w <- 4L
+
+class(x)
+class(y)
+class(z)
+class(w)
+```
+
+### `class()` e `typeof()`
+
+Due funzioni descrivono un oggetto:
+
+- `class()` risponde a **"che tipo di oggetto è, per l'utente?"**. È ciò che decide come l'oggetto viene stampato, riassunto e rappresentato graficamente.
+- `typeof()` risponde a **"come è memorizzato?"**.
+
+Per i valori semplici di solito coincidono. La differenza principale che noterai è che i numeri ordinari hanno classe `"numeric"` ma tipo `"double"` (abbreviazione di *double-precision floating point*, virgola mobile a doppia precisione):
+
+```{r}
+#| label: typeof
+typeof(28)
+typeof(28L)
+class(penguins$species)    # un fattore: vedi la lezione sui fattori
+typeof(penguins$species)   # ...memorizzato internamente come interi
+```
+
+Incontrerai di nuovo la seconda coppia in [Fattori](06-factors.qmd).
+
+### Verificare e convertire: `is.*()` e `as.*()`
+
+Ogni tipo ha una coppia di funzioni: `is.<tipo>()` chiede "lo è?", e `as.<tipo>()` dice "fallo diventare così".
+
+```{r}
+#| label: is-as
+is.numeric(28)
+is.character(28)
+
+as.numeric("3.14")
+as.character(42)
+as.integer(3.9)       # tronca verso lo zero, non arrotonda!
+as.logical(c("TRUE", "false", "T", "yes"))
+```
+
+Nota due cose: `as.integer(3.9)` dà `3`, non `4`; e `"yes"` non può essere trasformato in un valore logico, quindi R restituisce `NA` (mancante). Quando una conversione fallisce, R non si ferma: restituisce `NA` e di solito un avviso:
+
+```{r}
+#| label: as-fail
+#| warning: true
+as.numeric(c("12", "7.5", "n/a"))
+```
+
+È esattamente ciò che succede alla colonna del foglio di calcolo con la cella `"n/a"` della Sezione 1.
+
+## 3. Coercizione implicita: mescolare i tipi
+
+Un **vettore** (una sequenza di valori, creata con `c()`: ne parliamo in [Vettori](04-vectors.qmd)) può contenere **un solo tipo**. Se mescoli i tipi, R converte silenziosamente tutto nel tipo più "flessibile". Questa operazione si chiama **coercizione implicita** e segue sempre la stessa gerarchia:
+
+$$
+\texttt{logical} \;\rightarrow\; \texttt{integer} \;\rightarrow\; \texttt{double} \;\rightarrow\; \texttt{character}
+$$
+
+Qualunque cosa può essere scritta come testo, ma non ogni testo può essere un numero; ogni valore logico può essere un numero (`TRUE` = 1, `FALSE` = 0), ma non ogni numero è `TRUE`/`FALSE`. Per questo R si sposta sempre verso destra.
+
+```{r}
+#| label: coercion
+c(1, TRUE, FALSE)       # logical -> double
+c(1L, 2.5)              # integer -> double
+c(1, "a", TRUE)         # tutto -> character
+```
+
+Il fatto che `TRUE` diventi `1` e `FALSE` diventi `0` è molto utile: la **somma** di un vettore logico conta i `TRUE`, e la sua **media** è la proporzione di `TRUE`.
+
+```{r}
+#| label: logical-sum
+answers <- c(TRUE, FALSE, TRUE, TRUE)
+sum(answers)
+mean(answers)
+```
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: perché "double"?
+
+I computer memorizzano i numeri reali in *virgola mobile binaria*. Un `double` usa 64 bit: circa 15–16 cifre decimali significative e numeri fino a circa $1.8 \times 10^{308}$. Un `integer` usa 32 bit e può contenere solo numeri interi fino a `r format(.Machine$integer.max, big.mark = ".")` (cioè $2^{31} - 1$). Poiché i double coprono un intervallo molto più ampio, R li usa per impostazione predefinita; gli interi compaiono quando scrivi `5L`, usi `1:10` o conti delle cose (`nrow()`, `length()`).
+:::
+
+## 4. Operatori aritmetici
+
+| Operatore | Significato | Esempio | Risultato |
+|---|---|---|---|
+| `+` `-` | addizione, sottrazione | `5 - 2` | `r 5 - 2` |
+| `*` `/` | moltiplicazione, divisione | `7 / 2` | `r 7 / 2` |
+| `^` | potenza | `2^5` | `r 2^5` |
+| `%/%` | **divisione intera** (quante volte intere?) | `17 %/% 5` | `r 17 %/% 5` |
+| `%%` | **modulo** (resto) | `17 %% 5` | `r 17 %% 5` |
+
+```{r}
+#| label: arith
+(5 + 5) / 2
+2^5
+17 %/% 5
+17 %% 5
+```
+
+Leggi `17 %/% 5` e `17 %% 5` insieme: "in 17 il 5 sta *tre* volte, con resto *due*", perché $17 = 5 \times 3 + 2$. Il modulo è utile in pratica: `x %% 2 == 0` verifica se `x` è pari, e `minutes %/% 60` e `minutes %% 60` dividono una durata in ore e minuti.
+
+R segue il consueto ordine delle operazioni: prima `^`, poi `*` e `/`, poi `+` e `-`. Nel dubbio, aggiungi le parentesi.
+
+## 5. Operatori di confronto
+
+I confronti restituiscono un valore logico.
+
+| Operatore | Significato |
+|---|---|
+| `<`, `<=` | minore di, minore o uguale a |
+| `>`, `>=` | maggiore di, maggiore o uguale a |
+| `==` | **uguale a** (due segni di uguale!) |
+| `!=` | diverso da |
+
+```{r}
+#| label: compare
+x <- 1:10
+x > 5
+```
+
+R confronta **ogni elemento** di `x` con 5 e restituisce un `TRUE`/`FALSE` per elemento. Metti quel vettore logico tra parentesi quadre per tenere solo gli elementi in cui è `TRUE`:
+
+```{r}
+#| label: filter-preview
+x[x > 5]
+```
+
+Questa idea (*selezionare con una condizione logica*) è la base di ogni filtraggio dei dati in R. La svilupperemo in [Vettori](04-vectors.qmd).
+
+## 6. Operatori logici
+
+| Operatore | Significato |
+|---|---|
+| `!x` | NOT (negazione): scambia `TRUE` e `FALSE` |
+| `x & y` | AND, elemento per elemento: `TRUE` solo se entrambi sono `TRUE` |
+| `x \| y` | OR, elemento per elemento: `TRUE` se almeno uno è `TRUE` |
+| `xor(x, y)` | OR esclusivo: `TRUE` se esattamente uno è `TRUE` |
+| `x && y`, `x \|\| y` | AND / OR per un **singolo** valore `TRUE`/`FALSE` |
+| `isTRUE(x)` | `TRUE` solo se `x` è un singolo `TRUE` non mancante |
+
+```{r}
+#| label: logical-ops
+x[(x > 4) & (x < 7)]
+x[x < 3 | x > 8]
+!c(TRUE, FALSE)
+```
+
+### `&` e `&&`
+
+- `&` e `|` sono **vettorizzati**: lavorano elemento per elemento su interi vettori. Usali per **filtrare i dati**.
+- `&&` e `||` si aspettano **esattamente un** valore per lato e restituiscono un solo valore. Usali nelle **condizioni `if ()`** ([Istruzioni condizionali](../03-programming/15-conditionals.qmd)). Da R 4.3, passare loro un vettore di lunghezza maggiore di uno è un errore:
+
+```{r}
+#| label: double-amp
+#| error: true
+c(TRUE, FALSE) & c(TRUE, TRUE)    # vettorizzato: due risposte
+c(TRUE, FALSE) && TRUE            # errore: && richiede un singolo valore
+```
+
+`&&` e `||` inoltre fanno *corto circuito* (*short-circuit*): se il lato sinistro decide già la risposta (`FALSE && …`), il lato destro non viene nemmeno valutato.
+
+## 7. Valori speciali: `NA`, `NULL`, `NaN`, `Inf`
+
+| Valore | Significato | Esempio | `length()` |
+|---|---|---|---|
+| `NA` | **Not Available** (non disponibile): un valore esiste ma è sconosciuto (mancante) | un pinguino che non è stato pesato | 1 |
+| `NULL` | **niente**: l'assenza di un oggetto | `c()` | 0 |
+| `NaN` | **Not a Number** (non è un numero): un calcolo non definito | `0 / 0` | 1 |
+| `Inf`, `-Inf` | più/meno infinito | `1 / 0` | 1 |
+
+```{r}
+#| label: specials
+0 / 0
+1 / 0
+c(1, NA, 3)      # NA mantiene la sua posizione
+c(1, NULL, 3)    # NULL scompare
+```
+
+`NA` è "contagioso": quasi ogni calcolo che coinvolge un valore sconosciuto dà un risultato sconosciuto.
+
+```{r}
+#| label: na-contagious
+NA + 1
+mean(c(4, NA, 6))
+mean(c(4, NA, 6), na.rm = TRUE)
+NA == NA
+```
+
+`NA == NA` è `NA`, non `TRUE`: se due pinguini hanno pesi sconosciuti, non sappiamo se pesano lo stesso. Per lo stesso motivo **non puoi** cercare i valori mancanti con `x == NA`. Usa `is.na()`:
+
+```{r}
+#| label: is-na
+v <- c(4, NA, 6, NaN)
+is.na(v)     # TRUE sia per NA sia per NaN
+is.nan(v)    # TRUE solo per NaN
+```
+
+Ci sono alcune eccezioni alla regola del "contagio", che derivano dalla logica: `NA & FALSE` è `FALSE` (qualunque sia il valore sconosciuto, un AND con `FALSE` è `FALSE`) e `NA | TRUE` è `TRUE`.
+
+## 8. La trappola della virgola mobile
+
+Prova questo:
+
+```{r}
+#| label: float-trap
+0.1 + 0.2 == 0.3
+```
+
+`FALSE`! R non è rotto: i computer memorizzano i numeri in binario, e 0.1 non ha una rappresentazione binaria esatta, così come 1/3 non ha una rappresentazione decimale esatta (0.333…). Stampando più cifre si vede il minuscolo errore:
+
+```{r}
+#| label: float-digits
+print(0.1 + 0.2, digits = 17)
+```
+
+La regola: **non usare mai `==` per confrontare numeri decimali ottenuti da calcoli.** Usa `all.equal()`, che ammette una piccola tolleranza (circa $1.5 \times 10^{-8}$ per impostazione predefinita):
+
+```{r}
+#| label: all-equal
+all.equal(0.1 + 0.2, 0.3)
+all.equal(1, 1.1)
+isTRUE(all.equal(1, 1.1))
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+`all.equal()` restituisce `TRUE` quando i numeri sono uguali a meno della tolleranza, ma quando differiscono restituisce una **descrizione** della differenza (`"Mean relative difference: 0.1"`, differenza relativa media), non `FALSE`. Quel testo manderebbe in errore un'istruzione `if ()`, quindi racchiudilo in `isTRUE()` ogni volta che ti serve una risposta rigorosamente `TRUE`/`FALSE`: `if (isTRUE(all.equal(a, b))) ...`.
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Numeri memorizzati come testo.** `"10" < "9"` è `TRUE` e `mean("5")` fallisce. Controlla con `class()` e converti con `as.numeric()`, e cerca l'avviso `NAs introduced by coercion`, che segnala i valori che non è stato possibile convertire.
+2. **Usare `=` invece di `==`.** `x = 5` assegna; `x == 5` confronta.
+3. **Verificare i valori mancanti con `x == NA`.** Restituisce sempre `NA`. Usa `is.na(x)`.
+4. **Confrontare decimali con `==`.** Usa `isTRUE(all.equal(a, b))`.
+5. **Usare `&&` sui vettori.** Nel R moderno è un errore. Usa `&` per filtrare i vettori e `&&` solo per valori singoli in `if ()`.
+6. **Aspettarsi che `as.integer()` arrotondi.** Tronca: `as.integer(3.9)` è 3. Usa prima `round()` se vuoi arrotondare.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Di che tipo è `c(2L, 3.5, TRUE)`?
+
+Double (`"numeric"`). Il tipo più flessibile tra integer, double e logical è double, quindi `TRUE` diventa `1` e `2L` diventa `2`.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Che cosa calcola `sum(penguins$body_mass > 5000, na.rm = TRUE)`?
+
+Il **numero** di pinguini che pesano più di 5.000 g. Il confronto produce un vettore logico; `sum()` ne conta i valori `TRUE` (e `na.rm = TRUE` salta gli animali la cui massa è mancante). Sostituendo `sum()` con `mean()` si otterrebbe invece la **proporzione**.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Qual è la differenza tra `NA` e `NULL`?
+
+`NA` è un segnaposto per un valore che esiste ma è sconosciuto; occupa una posizione (lunghezza 1). `NULL` significa "nessun oggetto" e ha lunghezza 0: `c(1, NULL)` ha lunghezza 1, `c(1, NA)` ha lunghezza 2.
+:::
+
+## 10. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — prevedi l'output.** Prima di eseguire il codice, scrivi (in un commento) di che tipo ti aspetti che sia ciascun vettore. Poi eseguilo e verifica con `class()`.
+
+```{webr}
+#| exercise: ex_03_1
+class(c(1, "a", TRUE))
+class(c(1, TRUE, FALSE))
+class(c(1L, 2L, 3.5))
+class(c(TRUE, NA))
+class(c("1", NA))
+```
+
+::: {.hint exercise="ex_03_1"}
+Applica la gerarchia logical → integer → double → character. `NA` da solo è logico, quindi si adatta a qualunque altra cosa ci sia nel vettore.
+:::
+
+::: {.solution exercise="ex_03_1"}
+```r
+class(c(1, "a", TRUE))   # "character"
+class(c(1, TRUE, FALSE)) # "numeric"
+class(c(1L, 2L, 3.5))    # "numeric"
+class(c(TRUE, NA))       # "logical"
+class(c("1", NA))        # "character"
+```
+`NA` non forza mai una conversione: assume il tipo degli altri valori.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — divisione intera e modulo.** Un film dura 135 minuti. Usa `%/%` e `%%` per calcolare quante ore intere e quanti minuti in più sono. Poi usa `%%` per verificare quali numeri da 1 a 10 sono pari.
+
+```{webr}
+#| exercise: ex_03_2
+minutes <- 135
+minutes ______ 60   # ore
+minutes ______ 60   # minuti rimanenti
+
+n <- 1:10
+n[n %% 2 == ______]
+```
+
+::: {.hint exercise="ex_03_2"}
+`%/%` dà il numero intero di volte; `%%` dà il resto. Un numero pari ha resto 0 quando viene diviso per 2.
+:::
+
+::: {.solution exercise="ex_03_2"}
+```r
+minutes %/% 60   # 2
+minutes %% 60    # 15
+n[n %% 2 == 0]   # 2 4 6 8 10
+```
+135 minuti sono 2 ore e 15 minuti.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — contare con i valori logici.** Usando `penguins`, calcola (a) quanti pinguini hanno una lunghezza della pinna di almeno 210 mm e (b) quale **proporzione** rappresentano tra i pinguini con lunghezza della pinna nota.
+
+```{webr}
+#| exercise: ex_03_3
+long <- penguins$flipper_len >= 210
+______(long, na.rm = TRUE)    # (a) quanti
+______(long, na.rm = TRUE)    # (b) proporzione
+```
+
+::: {.hint exercise="ex_03_3"}
+`TRUE` conta come 1 e `FALSE` come 0. Quale funzione li somma, e quale ne fa la media?
+:::
+
+::: {.solution exercise="ex_03_3"}
+```r
+sum(long, na.rm = TRUE)
+mean(long, na.rm = TRUE)
+```
+Circa 114 pinguini, all'incirca un terzo (33%) di quelli con lunghezza della pinna registrata. Senza `na.rm = TRUE` entrambi i risultati sarebbero `NA`, perché due animali non hanno la misura della pinna.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — correggi il confronto.** Il codice qui sotto dovrebbe indicare che il valore calcolato è uguale a 0.3, ma stampa `FALSE`. Correggi il confronto in modo che restituisca `TRUE` e assicurati che il risultato sia un singolo `TRUE`/`FALSE` anche quando i numeri differiscono.
+
+```{webr}
+#| exercise: ex_03_4
+total <- 0.1 + 0.2
+total == 0.3
+
+# dovrebbe essere FALSE (e non un messaggio di testo):
+1 == 1.1
+```
+
+::: {.hint exercise="ex_03_4"}
+Usa `all.equal()` e racchiudilo in `isTRUE()`, così che una differenza dia `FALSE` invece di un messaggio.
+:::
+
+::: {.solution exercise="ex_03_4"}
+```r
+total <- 0.1 + 0.2
+isTRUE(all.equal(total, 0.3))   # TRUE
+isTRUE(all.equal(1, 1.1))       # FALSE
+```
+I numeri decimali prodotti dall'aritmetica portano con sé minuscoli errori di arrotondamento; `all.equal()` ignora le differenze minori di circa $1.5 \times 10^{-8}$.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — ripulire una colonna letta come testo.** Un collega ti invia dei pesi digitati a mano: `w <- c("3750", "3800", "n/a", "3250", "unknown", "3450")`. (a) Che cosa restituisce `class(w)`? (b) Convertilo in numeri. (c) Quanti valori non è stato possibile convertire? (d) Calcola il peso medio degli altri.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+w <- c("3750", "3800", "n/a", "3250", "unknown", "3450")
+class(w)                    # "character"
+w_num <- as.numeric(w)      # avviso: NAs introduced by coercion
+w_num
+sum(is.na(w_num))           # 2
+mean(w_num, na.rm = TRUE)   # 3562.5
+```
+Quando importi un file reale, puoi indicare a `readr::read_csv()` quali stringhe significano "mancante" con il suo argomento `na` (vedi [Importare i dati](../04-io/18-import.qmd)).
+:::
+:::
+
+## Riepilogo
+
+| Funzione / operatore | Che cosa fa |
+|---|---|
+| `class()`, `typeof()` | Tipo di oggetto / tipo di memorizzazione |
+| `is.numeric()`, `is.character()`, … | Verifica un tipo |
+| `as.numeric()`, `as.character()`, … | Converte un tipo (i fallimenti diventano `NA`) |
+| `+ - * / ^`, `%/%`, `%%` | Aritmetica, divisione intera, resto |
+| `== != < <= > >=` | Confronti |
+| `!`, `&`, `\|`, `xor()` | Logica vettorizzata |
+| `&&`, `\|\|` | Logica su valori singoli (per `if ()`) |
+| `is.na()`, `is.nan()` | Individua valori mancanti / non definiti |
+| `all.equal()`, `isTRUE()` | Confronto sicuro tra decimali |
+
+- Quattro tipi di uso quotidiano: numeric (double), integer, character, logical.
+- Mescolare i tipi porta alla coercizione verso il più flessibile: logical → integer → double → character.
+- `TRUE` vale 1 e `FALSE` vale 0: `sum()` conta, `mean()` dà le proporzioni.
+- `NA` è contagioso; verificalo con `is.na()`, mai con `== NA`.
+- Non confrontare mai con `==` decimali ottenuti da calcoli.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- *R for Data Science* (2e), capitoli "Logical vectors" e "Numbers", <https://r4ds.hadley.nz>
+- Wickham, *Advanced R* (2e), capitolo "Vectors", <https://adv-r.hadley.nz/vectors-chap.html>
+:::

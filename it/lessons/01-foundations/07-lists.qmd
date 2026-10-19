@@ -1,0 +1,440 @@
+---
+title: "Liste"
+subtitle: "Il contenitore più flessibile di R, e la chiave per leggere i risultati di qualsiasi analisi"
+description: "Crea liste e dai un nome ai loro elementi, comprendi la differenza tra [ , [[ e $ con l'analogia del treno, lavora con liste annidate, aggiungi, modifica e rimuovi elementi, ispeziona le liste con str(), estrai i risultati dalla lista restituita da t.test() e fai un primo assaggio di lapply()."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~50 min]{} [Prerequisiti: [Vettori](04-vectors.qmd), [Matrici](05-matrices.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- creare una lista contenente oggetti di tipi e dimensioni diverse, e dare un nome ai suoi elementi;
+- scegliere correttamente tra `[`, `[[` e `$` per estrarre gli elementi;
+- aggiungere, modificare e rimuovere elementi, anche in liste annidate;
+- ispezionare qualsiasi lista con `str()` e `names()`;
+- estrarre risultati specifici (p-value, intervallo di confidenza) dalla lista restituita da una funzione statistica come `t.test()`.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+# Solo R base. readr viene usato una volta, come readr::read_csv().
+```
+
+## 1. Perché le liste?
+
+Vettori e matrici contengono valori di **un solo tipo**, disposti in una forma regolare. I risultati reali sono più disordinati. Pensa a ciò che produce un test statistico: una statistica test (un numero), i gradi di libertà (un numero), un p-value (un numero), un intervallo di confidenza (due numeri), le medie dei gruppi (due numeri con nome), il nome del metodo (testo)…
+
+R ha bisogno di un contenitore che possa tenere **qualsiasi cosa, di qualsiasi dimensione, insieme**. Quel contenitore è la **lista**. Le liste sono ovunque in R, spesso nascoste: ogni modello, ogni risultato di un test e ogni data frame è, sotto sotto, una lista. Imparare a muoversi nelle liste è ciò che ti permette di passare dal *guardare* un output stampato all'*usare* i numeri che contiene.
+
+## 2. Creare una lista
+
+Usa `list()`, idealmente dando un **nome** a ciascun elemento:
+
+```{r}
+#| label: build-parts
+vect <- 1:5
+mat  <- matrix(1:10, nrow = 2, ncol = 5)
+df   <- as.data.frame(EuStockMarkets)[1:10, ]   # indici di borsa, primi 10 giorni
+```
+
+```{r}
+#| label: build-list
+my_list <- list(
+  vect = vect,
+  mat  = mat,
+  df   = df
+)
+names(my_list)
+length(my_list)
+```
+
+La lista ha tre elementi di natura completamente diversa: un vettore di interi di lunghezza 5, una matrice 2 x 5 e un data frame con 10 righe e 4 colonne. `length()` conta gli **elementi** della lista (3), non ciò che contengono.
+
+### Guardare dentro: `str()`
+
+Stampare una lista può produrre pagine di output. `str()` (*structure*, struttura) dà una panoramica compatta, ed è in assoluto la funzione più utile per le liste:
+
+```{r}
+#| label: str
+str(my_list)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `List of 3`: l'oggetto è una lista con tre elementi.
+- Ogni riga `$ nome :` è un elemento, seguito dal suo tipo e dalla sua dimensione: `int [1:5]` (vettore di interi di lunghezza 5), `int [1:2, 1:5]` (matrice di interi 2 x 5), `'data.frame': 10 obs. of 4 variables` (10 osservazioni di 4 variabili).
+- Le righe che iniziano con `..$` sono un livello più **in profondità**: qui, le colonne del data frame.
+:::
+
+## 3. `[`, `[[` e `$`: estrarre gli elementi
+
+Questa è la parte delle liste che all'inizio confonde tutti. Una buona immagine mentale è un **treno**: la lista è il treno, e ogni elemento è un **vagone** con un carico all'interno.
+
+| Codice | Analogia del treno | Restituisce |
+|---|---|---|
+| `my_list[1]` | stacchi il vagone 1: ottieni un **treno** (più corto) | una **lista** di lunghezza 1 |
+| `my_list[[2]]` | apri il vagone 2 e ne tiri fuori il **carico** | l'elemento stesso (qui, la matrice) |
+| `my_list$df` | come `[[`, usando il **nome** del vagone | l'elemento stesso (qui, il data frame) |
+| `my_list[c(1, 3)]` | stacchi i vagoni 1 e 3: è ancora un **treno** | una lista di lunghezza 2 |
+
+```{r}
+#| label: single-bracket
+my_list[1]
+class(my_list[1])
+```
+
+`my_list[1]` è ancora una **lista**: nota l'etichetta `$vect` nell'output; stai guardando un treno con un solo vagone.
+
+```{r}
+#| label: double-bracket
+my_list[[2]]
+class(my_list[[2]])
+```
+
+`my_list[[2]]` è la **matrice stessa**, quindi ora puoi usarla come matrice, per esempio per estrarne un elemento:
+
+```{r}
+#| label: chain
+my_list[[2]][2, 3]          # riga 2, colonna 3 della matrice
+my_list[["vect"]][3]        # 3° elemento del vettore, per nome
+head(my_list$df, 3)         # $ è un'abbreviazione di [["df"]]
+```
+
+La differenza conta non appena calcoli qualcosa:
+
+```{r}
+#| label: bracket-error
+#| error: true
+my_list[[1]] + 100     # funziona: un vettore più un numero
+my_list[1] + 100       # fallisce: non puoi sommare un numero a un treno
+```
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: `$` e `[[`
+
+`$` funziona solo con un nome scritto letteralmente (`my_list$df`), mentre `[[` accetta anche una variabile: `which_one <- "df"; my_list[[which_one]]`. Questo rende `[[` la scelta giusta all'interno di funzioni e cicli. Inoltre, `$` sulle liste fa una *corrispondenza parziale* (*partial matching*): `my_list$ve` restituisce silenziosamente l'elemento `vect`. `[[` accetta solo nomi esatti, ed è quindi più sicuro. Infine, chiedere un nome che non esiste restituisce `NULL` sia con `$` sia con `[["nome"]]`, mentre una posizione che non esiste (`my_list[[10]]`) è un errore.
+:::
+
+## 4. Modificare, aggiungere e rimuovere elementi
+
+L'assegnazione con `$` o `[[` modifica un elemento, oppure lo **aggiunge** se il nome è nuovo. Assegnare `NULL` lo **rimuove**.
+
+```{r}
+#| label: modify
+my_list$vect <- 6:10              # sostituisce un elemento
+my_list$note <- "primi 10 giorni" # aggiunge un nuovo elemento
+names(my_list)
+
+my_list$note <- NULL              # lo rimuove
+names(my_list)
+```
+
+Puoi anche combinare liste con `c()` e trasformare una lista di valori semplici in un vettore con `unlist()`:
+
+```{r}
+#| label: unlist
+c(list(a = 1), list(b = "x")) |> str()
+unlist(list(a = 1, b = 2:3))
+```
+
+`unlist()` segue le regole di coercizione dei vettori: `unlist(list(1, "a"))` dà il vettore di caratteri `"1" "a"`.
+
+## 5. Liste annidate
+
+Un elemento di una lista può essere a sua volta una lista. È così che R memorizza informazioni complesse e gerarchiche:
+
+```{r}
+#| label: nested
+adelie <- list(
+  species = "Adelie",
+  stats = list(
+    n       = 152,
+    islands = c("Biscoe", "Dream", "Torgersen")
+  )
+)
+str(adelie)
+```
+
+Per raggiungere qualcosa in profondità, concatena gli estrattori da sinistra a destra, un passo per livello:
+
+```{r}
+#| label: nested-access
+adelie$stats$n
+adelie[["stats"]][["islands"]][2]
+adelie$stats$islands[2] <- "Dream Island"   # modifica in profondità
+adelie$stats$islands
+```
+
+## 6. Liste che usi già senza saperlo
+
+### Un data frame è una lista di colonne
+
+```{r}
+#| label: df-is-list
+is.list(penguins)
+length(penguins)            # numero di colonne
+penguins[["species"]][1:3]  # [[ estrae una colonna, come $
+```
+
+Un data frame è una lista i cui elementi (le colonne) hanno tutti la **stessa lunghezza**. Ecco perché `penguins$body_mass` e `penguins[["body_mass"]]` funzionano, e perché `length()` di un data frame è il suo numero di colonne. Lo stesso vale per i dati letti da un file, per esempio il dataset del corso sulle carceri statunitensi:
+
+```{r}
+#| label: prison
+prison <- readr::read_csv(data_path("prison.csv"), show_col_types = FALSE)
+is.list(prison)
+length(prison)                  # 46 colonne
+str(prison[, 2:6])              # tutte le righe, colonne da 2 a 6
+```
+
+Studieremo a fondo i data frame in [Data frame](../02-data/08-data-frames.qmd) e l'importazione dei file in [Importare i dati](../04-io/18-import.qmd).
+
+### Il risultato di un test è una lista
+
+Qui le liste diventano davvero utili. Esegui un t-test di Welch che confronta la massa corporea dei pinguini Adelie e Gentoo (vedi [Test t](../08-inference/34-t-tests.qmd)):
+
+```{r}
+#| label: ttest
+two_sp <- penguins[penguins$species %in% c("Adelie", "Gentoo"), ]
+two_sp$species <- droplevels(two_sp$species)
+
+res <- t.test(body_mass ~ species, data = two_sp)
+res
+```
+
+L'output stampato è pensato per gli esseri umani. Ma `res` è una lista, e puoi prenderne qualsiasi parte:
+
+```{r}
+#| label: ttest-list
+is.list(res)
+names(res)
+res$p.value
+res$conf.int
+res$estimate
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+`names(res)` elenca le componenti del risultato. Le più utili sono `statistic` (il valore t), `parameter` (i gradi di libertà), `p.value`, `conf.int` (l'intervallo di confidenza, con un attributo che ne registra il livello) ed `estimate` (le medie dei due gruppi). Poiché sono normali oggetti R, puoi farci dei calcoli (per esempio, la differenza stimata è `diff(res$estimate)`, circa `r round(diff(res$estimate))` g) o inserirli in un report, come fa questo corso con il codice inline. Gli oggetti dei modelli restituiti da `lm()` e `glm()` funzionano allo stesso modo.
+:::
+
+## 7. Un primo assaggio di `lapply()`
+
+Spesso vuoi fare la stessa cosa a **ogni elemento** di una lista. `lapply()` ("list apply") applica una funzione a ciascun elemento e restituisce una lista di risultati:
+
+```{r}
+#| label: lapply
+measurements <- list(
+  bill    = penguins$bill_len,
+  flipper = penguins$flipper_len
+)
+lapply(measurements, mean, na.rm = TRUE)
+```
+
+Gli argomenti aggiuntivi dopo il nome della funzione (`na.rm = TRUE`) vengono passati alla funzione. La sua "sorella" `sapply()` semplifica il risultato in un vettore quando possibile: `sapply(measurements, mean, na.rm = TRUE)`. Queste funzioni, e i loro equivalenti moderni del pacchetto `purrr`, sono trattate in [Iterazione](../03-programming/17-iteration.qmd).
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **`[` quando intendevi `[[`.** `my_list[1]` è una lista con un elemento, non l'elemento. Se una funzione si lamenta di aver ricevuto una lista, controlla le parentesi.
+2. **`$` con una variabile.** `name <- "df"; my_list$name` cerca un elemento chiamato letteralmente `name`. Usa `my_list[[name]]`.
+3. **Corrispondenza parziale con `$`.** `my_list$ve` restituisce silenziosamente `my_list$vect`. Scrivi sempre i nomi completi.
+4. **Stampare una lista enorme.** Usa invece `str()` (o `str(x, max.level = 1)`).
+5. **Copiare i numeri dall'output stampato.** Estraili dal risultato (`res$p.value`) invece di riscriverli: niente errori di battitura, e si aggiornano quando cambiano i dati.
+:::
+
+## 8. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. `x <- list(a = 1:3, b = "hi")`. Quanto valgono `class(x["a"])`, `class(x[["a"]])` e `length(x)`?
+
+`"list"`, `"integer"` e `2`. Le parentesi singole mantengono la lista; le parentesi doppie ne estraggono il contenuto; `length()` conta gli elementi.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Come rimuovi l'elemento `b` da `x`?
+
+`x$b <- NULL` (oppure `x[["b"]] <- NULL`). Dopo, `names(x)` è soltanto `"a"`.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Perché `length(penguins)` restituisce 8 e non 344?
+
+Perché un data frame è una lista delle sue **colonne**: `length()` conta gli elementi della lista, cioè le 8 variabili. Usa `nrow()` per il numero di righe.
+:::
+
+## 9. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — costruisci e ispeziona.** Crea una lista `info` con tre elementi: `course` (il testo `"R for beginners"`), `year` (il numero `2026`) e `topics` (il vettore `c("vectors", "factors", "lists")`). Poi ispezionala con `str()` e stampa il secondo argomento.
+
+```{webr}
+#| exercise: ex_07_1
+info <- list(
+  course = ______,
+  year   = ______,
+  topics = ______
+)
+str(info)
+info$topics[______]
+```
+
+::: {.hint exercise="ex_07_1"}
+Il testo va tra virgolette; gli argomenti sono un vettore creato con `c()`.
+:::
+
+::: {.solution exercise="ex_07_1"}
+```r
+info <- list(
+  course = "R for beginners",
+  year   = 2026,
+  topics = c("vectors", "factors", "lists")
+)
+str(info)
+info$topics[2]   # "factors"
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — prevedi l'output: `[` e `[[`.** Per ogni riga, prevedi se il risultato è una lista o qualcos'altro, poi esegui il codice per verificare.
+
+```{webr}
+#| exercise: ex_07_2
+x <- list(a = 1:3, b = "hi", c = list(d = TRUE))
+class(x["a"])
+class(x[["a"]])
+class(x$c)
+class(x$c$d)
+length(x[c("a", "b")])
+sum(x[["a"]])
+```
+
+::: {.hint exercise="ex_07_2"}
+Le parentesi singole restituiscono sempre una lista. `x$c` è la lista interna; `x$c$d` è ciò che contiene.
+:::
+
+::: {.solution exercise="ex_07_2"}
+```r
+class(x["a"])          # "list"
+class(x[["a"]])        # "integer"
+class(x$c)             # "list"   (l'elemento stesso è una lista)
+class(x$c$d)           # "logical"
+length(x[c("a", "b")]) # 2
+sum(x[["a"]])          # 6
+```
+`sum(x["a"])` fallirebbe: non puoi sommare una lista.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — estrai i risultati da un test.** Usando i dati `sleep`, esegui un t-test per campioni appaiati che confronta le ore di sonno aggiuntive con il farmaco 2 e con il farmaco 1, memorizza il risultato in `res` ed estrai (a) il p-value, (b) l'intervallo di confidenza, (c) la differenza media.
+
+```{webr}
+#| exercise: ex_07_3
+drug1 <- sleep$extra[sleep$group == 1]
+drug2 <- sleep$extra[sleep$group == 2]
+res <- t.test(drug2, drug1, paired = TRUE)
+names(res)
+res$______
+res$______
+res$______
+```
+
+::: {.hint exercise="ex_07_3"}
+Guarda `names(res)`: ti servono `p.value`, `conf.int` ed `estimate`.
+:::
+
+::: {.solution exercise="ex_07_3"}
+```r
+res$p.value    # circa 0.003
+res$conf.int   # da circa 0.70 a 2.46 ore
+res$estimate   # differenza media di circa 1.58 ore
+```
+In media, i pazienti hanno dormito circa 1.6 ore in più con il farmaco 2. Avere questi numeri come oggetti ti permette di arrotondarli, combinarli o inserirli in una tabella.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — debug.** Il codice qui sotto dovrebbe aggiungere un nuovo elemento `sd` alla lista `summary_list` e poi calcolare il coefficiente di variazione (sd / media). Fallisce. Trova e correggi i due problemi.
+
+```{webr}
+#| exercise: ex_07_4
+mass <- penguins$body_mass
+summary_list <- list(mean = mean(mass, na.rm = TRUE))
+summary_list$sd <- sd(mass, na.rm = TRUE)
+stat <- "sd"
+summary_list$stat / summary_list[1]
+```
+
+::: {.hint exercise="ex_07_4"}
+`summary_list$stat` cerca un elemento chiamato letteralmente `stat`. E `summary_list[1]` è una lista, non un numero.
+:::
+
+::: {.solution exercise="ex_07_4"}
+```r
+summary_list[[stat]] / summary_list[["mean"]]   # circa 0.19
+```
+Usa `[[stat]]` per estrarre in base al nome memorizzato in una variabile, e `[[` (oppure `$mean`) per ottenere il numero invece di una lista con un solo elemento. La massa corporea varia di circa il 19% della sua media.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — una tabella di risultati a partire da una lista.** Per ogni specie di pinguino, esegui un t-test a un campione della lunghezza della pinna rispetto a 200 mm. Usa `split()` per creare una lista delle lunghezze della pinna per specie, `lapply()` per eseguire i tre test e poi `sapply()` per estrarre i tre p-value e le tre medie campionarie.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+fl <- split(penguins$flipper_len, penguins$species)   # una lista di 3 vettori
+str(fl)
+tests <- lapply(fl, t.test, mu = 200)                 # una lista di 3 risultati di test
+sapply(tests, \(r) r$p.value)
+sapply(tests, \(r) r$estimate)
+```
+`split()` restituisce una lista con nomi; `lapply()` conserva i nomi, quindi i risultati sono etichettati per specie. `\(r) r$p.value` è una breve funzione anonima: "dato un risultato `r`, restituisci il suo p-value" (vedi [Funzioni](../03-programming/14-functions.qmd)). Adelie e Chinstrap hanno lunghezze medie della pinna inferiori a 200 mm, Gentoo nettamente superiori. (`t.test()` elimina automaticamente i valori mancanti.)
+:::
+:::
+
+## Riepilogo
+
+| Funzione / sintassi | Che cosa fa |
+|---|---|
+| `list(a = ..., b = ...)` | Crea una lista (con nomi) |
+| `names()`, `length()`, `str()` | Nomi degli elementi, numero di elementi, struttura |
+| `x[i]` | Sotto-lista (ancora una lista): "staccare i vagoni" |
+| `x[[i]]`, `x[["name"]]` | L'elemento stesso: "tirare fuori il carico" |
+| `x$name` | Abbreviazione di `x[["name"]]` |
+| `x$new <- value`, `x$name <- NULL` | Aggiunge / rimuove un elemento |
+| `unlist()` | Appiattisce una lista in un vettore |
+| `res$p.value`, `res$conf.int` | Estrae i risultati di un test |
+| `lapply()`, `sapply()` | Applicano una funzione a ogni elemento |
+
+- Le liste contengono oggetti di **qualsiasi tipo e dimensione**.
+- `[` restituisce una lista; `[[` e `$` restituiscono l'elemento.
+- Data frame, risultati di test e modelli sono tutti liste: `str()` e `names()` ne rivelano il contenuto.
+- Estrai i numeri dai risultati invece di copiarli a mano.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- *R for Data Science* (2e), capitolo "Hierarchical data" (liste), <https://r4ds.hadley.nz/rectangling.html>
+- Wickham, *Advanced R* (2e), sezioni "Lists" e "Subsetting", <https://adv-r.hadley.nz/subsetting.html>
+:::

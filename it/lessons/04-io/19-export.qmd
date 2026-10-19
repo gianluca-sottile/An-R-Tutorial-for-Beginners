@@ -1,0 +1,481 @@
+---
+title: "Esportare dati e risultati"
+subtitle: "Salva tabelle, oggetti R e grafici nel formato giusto, nel posto giusto"
+description: "Scrivi file CSV ed Excel, esporta nei formati SPSS, Stata e SAS transport, salva oggetti R con saveRDS() e save(), memorizza dati in formato Parquet, salva grafici con ggsave() e tieni in ordine i file generati in una cartella di output."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~40 min]{} [Prerequisiti: [Importare i dati](18-import.qmd), [Sintesi per gruppi](../02-data/10-grouped-summaries.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- organizzare i file generati in una cartella `output/`, separata dai dati grezzi;
+- scrivere data frame in formato CSV (`write_csv()`, `write_csv2()`) ed Excel (`writexl`, `openxlsx`);
+- esportare nei formati SPSS, Stata e SAS transport con `haven`;
+- salvare e ripristinare oggetti R con `saveRDS()`/`readRDS()` e spiegare quando preferirli al CSV;
+- salvare un grafico ggplot con `ggsave()`, controllandone dimensioni e risoluzione.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(readr)
+library(ggplot2)
+```
+
+## 1. Perché pensare all'esportazione?
+
+Alla fine di un'analisi hai prodotto qualcosa che vale la pena conservare: un insieme di dati ripulito, una tabella di sintesi per una relazione, una figura per una slide, un modello stimato che non vuoi ristimare domani. Esportare significa scegliere:
+
+1. **dove** va il file (una cartella),
+2. **in quale formato** (CSV, Excel, `.rds`, PNG, …),
+3. **chi** lo leggerà (una persona in Excel, un collega in SPSS, R stesso la settimana prossima).
+
+Il terzo punto determina il secondo. In questa lezione il codice che scrive file viene mostrato ma non eseguito sul sito (`eval: false`); eseguilo nel tuo progetto.
+
+## 2. Organizza i tuoi file
+
+Una struttura di progetto semplice tiene al sicuro i dati grezzi e rende facili da trovare i file generati:
+
+```
+my-project/
+├── my-project.Rproj      (oppure un file .here)
+├── data/                 dati grezzi: mai modificati dal codice
+├── R/ or scripts/        i tuoi file .R o .qmd
+└── output/               tutto ciò che il codice crea (tabelle, figure, .rds)
+```
+
+Due regole fanno funzionare questo schema:
+
+- **I dati grezzi sono in sola lettura.** Gli script leggono da `data/` e scrivono in `output/`. Se qualcosa va storto puoi cancellare `output/` e rieseguire tutto.
+- **I percorsi sono relativi al progetto**, costruiti con `here::here()` (vedi [Importare i dati](18-import.qmd#files-and-paths)).
+
+Crea la cartella di output dal codice, così lo script funziona anche su una copia nuova del progetto:
+
+```{r}
+#| label: output-dir
+#| eval: false
+dir.create(here::here("output"), showWarnings = FALSE)
+```
+
+`showWarnings = FALSE` evita un avviso quando la cartella esiste già. Dai ai file nomi informativi (`mpg_by_gear.csv`, non `table1_final_v3.csv`), in minuscolo e senza spazi.
+
+## 3. Una tabella da esportare
+
+Esportiamo una piccola sintesi di `mtcars`: il consumo medio di carburante e la cilindrata media per numero di marce.
+
+```{r}
+#| label: summary-table
+by_gear <- mtcars |>
+  summarise(
+    n         = n(),
+    mean_mpg  = mean(mpg),
+    mean_disp = mean(disp),
+    .by = gear
+  ) |>
+  arrange(gear)
+
+by_gear
+```
+
+## 4. File CSV
+
+Il CSV è il formato più portabile: qualsiasi programma può leggerlo, ed essendo testo semplice funziona bene con il controllo di versione. I suoi limiti: **non conserva i tipi** (un fattore diventa testo, una data diventa una stringa) e contiene **una sola tabella** per file.
+
+### `readr::write_csv()` e `write_csv2()`
+
+```{r}
+#| label: write-csv
+#| eval: false
+write_csv(by_gear, here::here("output", "mpg_by_gear.csv"))
+
+# separatore punto e virgola e virgola decimale (Excel in molte impostazioni europee, Italia compresa)
+write_csv2(by_gear, here::here("output", "mpg_by_gear_eu.csv"))
+```
+
+`write_csv()` non scrive mai i nomi di riga, usa sempre la codifica UTF-8 e scrive i valori mancanti come `NA` (usa `na = ""` per avere celle vuote). Se il file è pensato per essere aperto con un doppio clic in Excel e contiene lettere accentate, `write_excel_csv()` aggiunge un marcatore che segnala a Excel che il file è in UTF-8.
+
+### R base: `write.csv()` e `write.csv2()`
+
+```{r}
+#| label: write-csv-base
+#| eval: false
+write.csv(by_gear, here::here("output", "mpg_by_gear.csv"), row.names = FALSE)
+write.csv2(by_gear, here::here("output", "mpg_by_gear_eu.csv"),
+           row.names = FALSE)
+```
+
+Senza `row.names = FALSE`, R base aggiunge una prima colonna con i numeri (o i nomi) di riga: è la prima colonna senza nome che hai incontrato importando `mtcars.csv`. Senza un nome di file, `write.csv()` stampa sulla console, un modo rapido per vedere che cosa verrebbe scritto:
+
+```{r}
+#| label: write-console
+write.csv(head(by_gear, 2), row.names = FALSE)
+```
+
+## 5. File Excel
+
+### Rapido: `writexl::write_xlsx()`
+
+`writexl` non ha dipendenze (non servono né Java né Excel) e fa una sola cosa: scrivere data frame in `.xlsx`. Una **lista con nomi** di data frame diventa una cartella di lavoro con un foglio per ogni elemento:
+
+```{r}
+#| label: writexl
+#| eval: false
+writexl::write_xlsx(by_gear, here::here("output", "mpg_by_gear.xlsx"))
+
+writexl::write_xlsx(
+  list(summary_by_gear = by_gear, raw_data = mtcars),
+  here::here("output", "mtcars_export.xlsx")
+)
+```
+
+### Con formattazione: `openxlsx`
+
+Quando la cartella di lavoro è un prodotto da consegnare (intestazioni in grassetto, larghezza delle colonne, prima riga bloccata), usa `openxlsx`. Costruisci un oggetto cartella di lavoro passo dopo passo e lo salvi alla fine:
+
+```{r}
+#| label: openxlsx
+#| eval: false
+wb <- openxlsx::createWorkbook()
+openxlsx::addWorksheet(wb, "summary")
+openxlsx::writeData(wb, "summary", by_gear,
+                    headerStyle = openxlsx::createStyle(textDecoration = "bold"))
+openxlsx::setColWidths(wb, "summary", cols = 1:4, widths = "auto")
+openxlsx::freezePane(wb, "summary", firstRow = TRUE)
+openxlsx::saveWorkbook(wb, here::here("output", "mpg_by_gear_formatted.xlsx"),
+                       overwrite = TRUE)
+```
+
+Per un singolo data frame senza formattazione, `openxlsx::write.xlsx(by_gear, file, overwrite = TRUE)` è un'alternativa in una riga. (`openxlsx2` è un successore più recente e attivamente sviluppato, con lo stesso scopo e un'interfaccia adatta alla pipe; il vecchio pacchetto `xlsx` richiede Java ed è meglio evitarlo.)
+
+::: {.callout-tip}
+## Excel è per le persone, non per le pipeline
+Esporta in Excel quando una *persona* deve guardare i numeri. Se il file verrà riletto dal codice, CSV, `.rds` o Parquet sono più sicuri: Excel può convertire valori in silenzio (nomi di geni come `SEPT2` in date, identificativi lunghi in numeri arrotondati) quando qualcuno apre il file e lo risalva.
+:::
+
+## 6. SPSS, Stata e SAS
+
+`haven` scrive i formati nativi di SPSS e Stata, e il formato SAS **transport**:
+
+```{r}
+#| label: haven-write
+#| eval: false
+haven::write_sav(by_gear, here::here("output", "mpg_by_gear.sav"))    # SPSS
+haven::write_dta(by_gear, here::here("output", "mpg_by_gear.dta"))    # Stata
+haven::write_xpt(by_gear, here::here("output", "mpg_by_gear.xpt"))    # SAS
+```
+
+- I fattori vengono scritti come codici interi **con etichette**, così chi usa SPSS e Stata vede sia i codici sia i nomi delle categorie.
+- I nomi delle variabili devono rispettare le regole del software di destinazione (per esempio, in Stata i nomi non possono contenere punti e hanno al massimo 32 caratteri). Di solito `janitor::clean_names()` risolve il problema.
+- Per SAS usa `write_xpt()`, che scrive un file **SAS transport (XPORT)** che SAS legge in modo affidabile (è anche il formato richiesto da alcune agenzie regolatorie). `haven::write_sas()` (formato nativo `.sas7bdat`) è deprecata e i suoi file potrebbero non aprirsi correttamente in SAS.
+
+## 7. I formati nativi di R: `.rds` e `.RData`
+
+### `saveRDS()` / `readRDS()`: un oggetto, esattamente com'è
+
+Un file `.rds` conserva **qualsiasi singolo oggetto R** (un data frame, una lista, un modello stimato) con tutti i suoi tipi e attributi:
+
+```{r}
+#| label: rds
+#| eval: false
+saveRDS(by_gear, here::here("output", "by_gear.rds"))
+
+gear_table <- readRDS(here::here("output", "by_gear.rds"))  # qualsiasi nome tu voglia
+```
+
+Perché è importante? Un passaggio di andata e ritorno attraverso un CSV **perde i tipi**. Qui scriviamo in un file temporaneo (che R cancella alla fine della sessione), così la dimostrazione non tocca alcuna cartella del progetto:
+
+```{r}
+#| label: roundtrip
+peng <- penguins[1:5, c("species", "island", "body_mass")]
+
+tmp_csv <- tempfile(fileext = ".csv")
+tmp_rds <- tempfile(fileext = ".rds")
+write.csv(peng, tmp_csv, row.names = FALSE)
+saveRDS(peng, tmp_rds)
+
+from_csv <- read.csv(tmp_csv)
+from_rds <- readRDS(tmp_rds)
+
+class(from_csv$species)          # testo: i livelli del fattore sono spariti
+class(from_rds$species)          # ancora un fattore
+identical(from_rds, peng)        # esattamente lo stesso oggetto
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+Dopo il passaggio attraverso il CSV, `species` è `character`: l'informazione che si trattava di un fattore con livelli `Adelie`, `Chinstrap`, `Gentoo` (in quell'ordine, compresi i livelli che non compaiono in queste cinque righe) è andata persa. La copia `.rds` è `identical()` all'originale. Usa `.rds` per i risultati intermedi tra i tuoi script; usa il CSV per condividere dati con altri programmi.
+:::
+
+### `save()` / `load()`: più oggetti insieme
+
+```{r}
+#| label: rdata
+#| eval: false
+model <- lm(mpg ~ wt, data = mtcars)
+save(by_gear, model, file = here::here("output", "analysis.RData"))
+
+load(here::here("output", "analysis.RData"))   # ricrea by_gear e model
+```
+
+`load()` ricrea gli oggetti **con i loro nomi originali**, sovrascrivendo in silenzio qualsiasi oggetto con lo stesso nome nel tuo workspace. Per questo di solito si preferisce `saveRDS()`: il nome lo scegli tu al momento della lettura. (Anche una lista di oggetti si può salvare con `saveRDS(list(a = a, b = b), ...)`.)
+
+## 8. Parquet: tipizzato, compatto, per qualsiasi linguaggio (facoltativo)
+
+**Parquet** è un formato di file orientato alle colonne, usato dagli strumenti per i dati in R, Python, Spark e nei database. Conserva i tipi delle colonne (come `.rds`), si comprime bene e può essere letto da molti programmi (a differenza di `.rds`). Il pacchetto `arrow` lo legge e lo scrive:
+
+```{r}
+#| label: parquet
+#| eval: false
+arrow::write_parquet(penguins, here::here("output", "penguins.parquet"))
+penguins_pq <- arrow::read_parquet(here::here("output", "penguins.parquet"))
+```
+
+Vale la pena considerarlo quando i file sono grandi (milioni di righe) o condivisi con chi usa Python.
+
+## 9. Salvare i grafici con `ggsave()`
+
+`ggsave()` scrive un grafico ggplot in un file; il formato segue l'estensione del file (`.png`, `.pdf`, `.svg`, `.jpg`, …).
+
+```{r}
+#| label: fig-mass-flipper
+#| fig-cap: "Massa corporea rispetto alla lunghezza della pinna per le tre specie di pinguini: è la figura che salviamo qui sotto."
+p <- ggplot(penguins, aes(flipper_len, body_mass, colour = species)) +
+  geom_point(alpha = 0.7, na.rm = TRUE) +
+  labs(x = "Lunghezza della pinna (mm)", y = "Massa corporea (g)", colour = "Specie")
+p
+```
+
+```{r}
+#| label: ggsave
+#| eval: false
+ggsave(
+  filename = here::here("output", "mass_vs_flipper.png"),
+  plot   = p,            # indica quale grafico: non affidarti all'"ultimo mostrato"
+  width  = 16,
+  height = 10,
+  units  = "cm",
+  dpi    = 300           # 300 punti per pollice: adatto alla stampa
+)
+
+ggsave(here::here("output", "mass_vs_flipper.pdf"), plot = p,
+       width = 16, height = 10, units = "cm")
+```
+
+- Passa sempre `plot =` in modo esplicito. Senza di esso, `ggsave()` salva l'**ultimo grafico visualizzato**, che in uno script lungo potrebbe non essere quello che intendi.
+- **Imposta le dimensioni** (`width`, `height`, `units`). Altrimenti vengono usate quelle della finestra grafica corrente, e il risultato cambia da un computer all'altro.
+- **PNG** (raster) con `dpi = 300` è adatto a documenti e slide; **PDF/SVG** (vettoriali) restano nitidi a qualsiasi ingrandimento e sono preferiti da molte riviste.
+- La dimensione del testo nel file salvato dipende dalle dimensioni fisiche: un grafico largo 30 cm ha un testo relativamente *più piccolo* di uno largo 12 cm. Scegli le dimensioni che userai davvero.
+
+Per la grafica di R base, apri un dispositivo grafico, disegna e chiudilo: `png(file, width = 1600, height = 1000, res = 200)`, poi il codice del grafico, poi `dev.off()`.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Sovrascrivere i dati grezzi.** Non scrivere mai in `data/`. Scrivi in `output/`, così l'originale resta intatto.
+2. **Una colonna in più con i numeri di riga.** `write.csv()` di R base richiede `row.names = FALSE`; `readr::write_csv()` non li scrive mai.
+3. **Aspettarsi che il CSV ricordi i tipi.** Fattori, date e valori con etichette diventano semplice testo o numeri. Usa `.rds` (solo R) o Parquet per i dati tipizzati.
+4. **`load()` che sovrascrive oggetti in silenzio.** Preferisci `saveRDS()` + `x <- readRDS()`.
+5. **`ggsave()` senza `plot =` e senza dimensioni.** Rischi di salvare il grafico sbagliato con dimensioni imprevedibili.
+6. **Percorsi assoluti nel codice di esportazione** (`"C:/Users/…/Desktop/out.csv"`). Usa `here::here("output", "out.csv")`.
+:::
+
+## 10. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. I tuoi dati ripuliti contengono fattori con un ordine specifico dei livelli e delle date. Domani proseguirai l'analisi in R. Quale formato?
+
+`.rds` con `saveRDS()`: conserva ogni tipo e attributo. (Anche Parquet li conserverebbe, e sarebbe leggibile da Python.)
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Un collega usa SAS. Quale funzione di `haven` usi?
+
+`haven::write_xpt()`, che scrive un file SAS transport. `write_sas()` è deprecata.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Perché scrivere `plot = p` in `ggsave()`?
+
+Senza di esso, `ggsave()` salva l'ultimo grafico visualizzato, che potrebbe non essere `p`. Essere espliciti rende lo script riproducibile.
+:::
+
+## 11. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+Nel browser R gira in un ambiente isolato (*sandbox*), quindi i file scritti con `tempfile()` si possono creare e rileggere senza rischi.
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — prevedi l'output.** Senza eseguirlo, prevedi quante colonne ha il testo CSV qui sotto e come appare la prima riga. Poi eseguilo e confrontalo con la versione che usa `row.names = FALSE`.
+
+```{webr}
+#| exercise: ex_19_1
+small <- head(mtcars[, c("mpg", "cyl")], 3)
+write.csv(small)
+write.csv(small, row.names = ______)
+```
+
+::: {.hint exercise="ex_19_1"}
+`mtcars` ha i nomi di riga (i modelli delle auto). Per impostazione predefinita `write.csv()` li scrive come prima colonna senza nome.
+:::
+
+::: {.solution exercise="ex_19_1"}
+```r
+write.csv(small)                     # 3 colonne: "", "mpg", "cyl"
+write.csv(small, row.names = FALSE)  # 2 colonne: "mpg", "cyl"
+```
+La prima versione inizia con `"","mpg","cyl"` e ha i nomi delle auto nella prima colonna. Qui i nomi delle auto sono un'informazione reale, quindi se elimini i nomi di riga trasformali prima in una vera colonna: `small$model <- rownames(small)`.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — un'andata e ritorno che perde informazioni.** Salva `chickwts` (in cui `feed` è un fattore) in un file CSV temporaneo e in un file `.rds` temporaneo, rileggili entrambi e confronta i **livelli** di `feed`.
+
+```{webr}
+#| exercise: ex_19_2
+tmp_csv <- tempfile(fileext = ".csv")
+tmp_rds <- tempfile(fileext = ".rds")
+write.csv(chickwts, tmp_csv, row.names = FALSE)
+______(chickwts, tmp_rds)
+
+from_csv <- read.csv(tmp_csv)
+from_rds <- ______(tmp_rds)
+
+class(from_csv$feed)
+levels(from_rds$feed)
+identical(from_rds, chickwts)
+```
+
+::: {.hint exercise="ex_19_2"}
+Usa `saveRDS()` per scrivere e `readRDS()` per leggere.
+:::
+
+::: {.solution exercise="ex_19_2"}
+```r
+saveRDS(chickwts, tmp_rds)
+from_rds <- readRDS(tmp_rds)
+class(from_csv$feed)       # "character"
+levels(from_rds$feed)      # i sei tipi di mangime, nel loro ordine originale
+identical(from_rds, chickwts)   # TRUE
+```
+Potresti ritrasformare `from_csv$feed` in un fattore, ma dovresti conoscere (e riscrivere) l'ordine dei livelli. Il file `.rds` lo conserva per te.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — un CSV "europeo".** Scrivi sulla console la media di `len` per `supp` e `dose` di `ToothGrowth` nel formato CSV "europeo" (punto e virgola e virgola decimale). Usa `aggregate()` per calcolare la tabella.
+
+```{webr}
+#| exercise: ex_19_3
+tg <- aggregate(len ~ supp + dose, data = ToothGrowth, FUN = mean)
+______(tg, row.names = FALSE)
+```
+
+::: {.hint exercise="ex_19_3"}
+La funzione di R base per questo formato è `write.csv2()`.
+:::
+
+::: {.solution exercise="ex_19_3"}
+```r
+tg <- aggregate(len ~ supp + dose, data = ToothGrowth, FUN = mean)
+write.csv2(tg, row.names = FALSE)
+```
+Ogni riga ha la forma `"OJ";0,5;13,23`: `;` separa i valori e `,` è il separatore decimale. È il formato che un Excel impostato in italiano apre correttamente con un doppio clic. Con `readr` caricato, `write_csv2()` fa la stessa cosa.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — una piccola cartella di report.** In un tuo progetto: crea `output/`, calcola la massa corporea media per specie e sesso di `penguins` (escludendo i valori mancanti) e salva (a) la tabella come CSV e come file Excel con un foglio per la tabella e uno per i dati grezzi, e (b) un boxplot della massa corporea per specie come PNG di 15 × 10 cm a 300 dpi.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+library(dplyr)
+library(readr)
+library(ggplot2)
+
+dir.create(here::here("output"), showWarnings = FALSE)
+
+mass_tab <- penguins |>
+  filter(!is.na(sex), !is.na(body_mass)) |>
+  summarise(mean_mass = mean(body_mass), n = n(), .by = c(species, sex))
+
+write_csv(mass_tab, here::here("output", "mass_by_species_sex.csv"))
+writexl::write_xlsx(
+  list(summary = mass_tab, raw = penguins),
+  here::here("output", "penguins_mass.xlsx")
+)
+
+p <- ggplot(penguins, aes(species, body_mass)) +
+  geom_boxplot(na.rm = TRUE) +
+  labs(x = NULL, y = "Massa corporea (g)")
+ggsave(here::here("output", "mass_boxplot.png"), plot = p,
+       width = 15, height = 10, units = "cm", dpi = 300)
+```
+Cancella la cartella `output/` e riesegui lo script: tutto viene ricreato. È questa la prova di un flusso di lavoro riproducibile.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — andata e ritorno con SPSS.** Scrivi `penguins` in un file SPSS con `haven::write_sav()`, rileggilo con `read_sav()` e confronta la classe di `species` prima e dopo. Ritrasformala in un fattore e verifica che i livelli siano gli stessi dell'originale.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+library(haven)
+path <- here::here("output", "penguins.sav")
+write_sav(penguins, path)
+back <- read_sav(path)
+
+class(penguins$species)   # "factor"
+class(back$species)       # "haven_labelled" ...: codici 1, 2, 3 con etichette
+
+back$species <- as_factor(back$species)
+identical(levels(back$species), levels(penguins$species))   # TRUE
+```
+SPSS non ha un tipo fattore: memorizza numeri con etichette di valore. `as_factor()` ricostruisce il fattore a partire da quelle etichette.
+:::
+:::
+
+## Riepilogo
+
+| Obiettivo | Funzione | Note |
+|---|---|---|
+| Cartella di output | `dir.create(here::here("output"), showWarnings = FALSE)` | non scrivere mai in `data/` |
+| CSV | `readr::write_csv()`, `write.csv(row.names = FALSE)` | portabile, senza tipi |
+| CSV per Excel europeo (e italiano) | `readr::write_csv2()`, `write.csv2()` | `;` e virgola decimale |
+| Excel, rapido | `writexl::write_xlsx(df_or_named_list, path)` | un foglio per ogni elemento della lista |
+| Excel, formattato | `openxlsx::createWorkbook()` … `saveWorkbook()` | stili, larghezze, riquadri bloccati |
+| SPSS / Stata / SAS | `haven::write_sav()`, `write_dta()`, `write_xpt()` | `write_sas()` è deprecata |
+| Un oggetto R | `saveRDS()` / `readRDS()` | conserva tutti i tipi |
+| Più oggetti R | `save()` / `load()` | `load()` può sovrascrivere oggetti |
+| Dati grandi e tipizzati, per qualsiasi linguaggio | `arrow::write_parquet()` | facoltativo |
+| Grafici | `ggsave(file, plot = p, width, height, units, dpi)` | imposta sempre `plot` e dimensioni |
+
+- Tieni i **dati grezzi in sola lettura** e scrivi tutto in **`output/`** con percorsi relativi al progetto.
+- Scegli il formato in base a **chi lo leggerà dopo**: persone (Excel, CSV), altri software (CSV, SPSS/Stata/XPT, Parquet), R (`.rds`).
+- Il CSV è portabile ma **dimentica i tipi**; `.rds` ricorda tutto.
+- Salva i grafici indicando **esplicitamente il grafico e le dimensioni**.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitoli "Data import" (sezione sulla scrittura) e "Spreadsheets", <https://r4ds.hadley.nz/data-import.html>
+- Documentazione di haven, <https://haven.tidyverse.org>
+- Documentazione di ggplot2 per `ggsave()`, <https://ggplot2.tidyverse.org/reference/ggsave.html>
+:::

@@ -1,0 +1,404 @@
+---
+title: "Che cos'è R?"
+subtitle: "Che cos'è R, a cosa serve e come installare R e un IDE"
+description: "Un'introduzione amichevole a R: in cosa eccelle, come si confronta con altri strumenti, il suo ecosistema di pacchetti e come installare R, RStudio o Positron e i tuoi primi pacchetti."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~40 min]{} [Prerequisiti: nessuno]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare con parole tue che cos'è R e per cosa viene usato di solito;
+- descrivere le parti principali dell'ecosistema R (CRAN, il tidyverse, Quarto, Shiny);
+- installare R e un IDE (RStudio Desktop o Positron) sul tuo computer;
+- riconoscere i quattro riquadri di RStudio e a cosa serve ciascuno;
+- installare e caricare un pacchetto con `install.packages()` e `library()`.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+# Questa lezione usa solo R base: nulla da caricare.
+```
+
+## 1. Perché imparare un linguaggio di programmazione per i dati?
+
+Immagina di avere un foglio di calcolo con le misurazioni di 344 pinguini: specie, isola, lunghezza del becco, massa corporea. Il tuo supervisore ti chiede:
+
+- *"Qual è la massa corporea media di ciascuna specie?"*
+- *"Fammi un grafico che le confronti."*
+- *"La differenza è più grande di quella che ci aspetteremmo per caso?"*
+- *"Ah, e sono appena arrivati i nuovi dati del 2025: puoi rifare tutto?"*
+
+Con un software a menu ripeteresti ogni passaggio a mano, e fra due mesi nessuno (te compreso) ricorderebbe esattamente quali pulsanti sono stati premuti. Con un linguaggio di programmazione scrivi i passaggi **una sola volta**, in uno script. Rieseguire l'analisi sui nuovi dati diventa allora questione di un clic, e chiunque può leggere lo script per vedere esattamente cosa è stato fatto. Questa proprietà si chiama **riproducibilità**, ed è uno dei motivi principali per cui ricercatori e analisti usano il codice.
+
+R è un linguaggio progettato proprio per questo tipo di lavoro. Ecco la domanda sui pinguini risolta in R: non devi ancora capire il codice, nota solo quanto è breve:
+
+```{r}
+#| label: teaser
+tapply(penguins$body_mass, penguins$species, mean, na.rm = TRUE)
+```
+
+Alla fine di questo corso sarai in grado di scrivere codice come questo (e molto altro) da solo.
+
+## 2. Che cos'è R?
+
+**R** è un linguaggio di programmazione e un ambiente software libero e open source per la **statistica, l'analisi dei dati e la grafica**. È stato creato all'inizio degli anni Novanta da Ross Ihaka e Robert Gentleman all'Università di Auckland, e oggi è sviluppato dal *R Core Team* e da una comunità molto ampia di collaboratori.
+
+Alcune caratteristiche rendono R particolare:
+
+- **È stato creato da statistici, per i dati.** Vettori, tabelle, valori mancanti (`NA`) e modelli statistici fanno parte del linguaggio stesso, non sono aggiunte.
+- **È interattivo.** Scrivi un comando e R risponde subito. Questo rende veloce l'esplorazione dei dati.
+- **È estendibile tramite pacchetti.** Un *pacchetto* è un insieme di funzioni, dati e documentazione scritto da altri, che puoi installare con una sola riga di codice.
+- **È libero.** Gratuito, nel senso di "nessun costo di licenza", e libero, nel senso di "puoi leggere e modificare il codice sorgente".
+
+La maggior parte dei pacchetti R è scritta in R; le parti che devono essere molto veloci sono spesso scritte in C, C++ o Fortran e richiamate da R. Ottieni la velocità senza dover scrivere tu quel codice.
+
+### A cosa serve R?
+
+| Ambito | Attività tipiche |
+|---|---|
+| Statistica | statistiche descrittive, test d'ipotesi, regressione, modelli misti, analisi di sopravvivenza, modelli bayesiani |
+| Manipolazione dei dati | importare, pulire, ristrutturare e unire dati provenienti da file e database |
+| Visualizzazione | grafici di qualità editoriale, mappe, grafici interattivi |
+| Machine learning | classificazione, regressione, clustering, riduzione della dimensionalità |
+| Comunicazione | report, articoli, presentazioni, siti web e dashboard che combinano codice, testo e risultati |
+
+Un'analisi dei dati tipica segue il ciclo **importare → ordinare (tidy) → trasformare → visualizzare → modellare → comunicare**. R dispone di strumenti maturi per ogni passaggio, e questo corso segue esattamente questo percorso.
+
+## 3. R a confronto con altri strumenti
+
+Non esiste un unico strumento "migliore": ognuno è un compromesso tra quanto velocemente puoi iniziare e quanto lontano ti può portare.
+
+| Strumento | Punti di forza | Limiti per l'analisi dei dati |
+|---|---|---|
+| **Fogli di calcolo** (Excel, LibreOffice, Google Sheets) | Immediati, visivi, li hanno tutti | Difficili da riprodurre, soggetti a errori con molti dati, statistica limitata |
+| **Software statistici a menu** (ad es. SPSS, JASP, jamovi) | Curva di apprendimento dolce, menu per i test più comuni | Meno flessibili; le analisi possono essere più difficili da automatizzare e condividere |
+| **R** | Gamma vastissima di metodi statistici, grafica potente, report con Quarto | È un linguaggio di programmazione: all'inizio c'è una curva di apprendimento |
+| **Python** | Linguaggio generalista, forte nel machine learning e nell'ingegneria del software | La modellazione statistica e la reportistica si appoggiano a diverse librerie separate |
+| **Linguaggi statistici commerciali** (ad es. SAS, Stata) | Maturi, ben documentati, diffusi in alcuni settori | Licenze a pagamento; ecosistema aperto più piccolo |
+
+R e Python sono i due linguaggi open source più usati nella data science, e **collaborano** invece di farsi concorrenza: puoi richiamare Python da R (con il pacchetto `reticulate`) e viceversa. I concetti che impari qui (data frame, vettori, funzioni, modelli) si trasferiscono direttamente.
+
+::: {.callout-tip}
+## Quale linguaggio dovrei imparare per primo?
+
+La risposta onesta: quello usato dalle persone intorno a te. Imparare il *ragionamento statistico* e un *flusso di lavoro sui dati* pulito conta molto più del linguaggio specifico. Una volta padroneggiato un linguaggio, imparare il secondo è molto più facile.
+:::
+
+### R è difficile?
+
+R ha la fama di essere un po' bizzarro, e alcune delle sue funzioni più vecchie sono effettivamente incoerenti. Due sviluppi lo hanno reso molto più amichevole:
+
+1. **Il tidyverse**: una famiglia di pacchetti (`dplyr`, `ggplot2`, `tidyr`, `readr`, …) che condividono un design coerente, così che, imparato uno, gli altri risultano familiari.
+2. **Gli IDE moderni** (vedi la Sezione 5), che offrono completamento automatico, guida in linea ed evidenziazione degli errori.
+
+R va anche più lontano di quanto la maggior parte dei principianti si aspetti: può dialogare con i database e con motori per big data come Spark, usare più core della CPU in parallelo ed eseguire modelli di deep learning tramite interfacce a Keras e Torch.
+
+## 4. L'ecosistema R
+
+Quando si dice "R" spesso si intende il linguaggio **più** tutto ciò che gli sta intorno.
+
+| Componente | Che cos'è |
+|---|---|
+| **CRAN** | Il *Comprehensive R Archive Network*: il repository ufficiale dei pacchetti R. Ospita più di ventimila pacchetti, ciascuno verificato automaticamente su diversi sistemi operativi. |
+| **Bioconductor** | Un repository di pacchetti per la bioinformatica e la genomica. |
+| **Il tidyverse** | Una raccolta di pacchetti per la data science con una grammatica comune. Lo userai a partire dalla [Lezione 9](../02-data/09-dplyr-verbs.qmd). |
+| **Quarto** | Un sistema di pubblicazione che trasforma un documento che combina testo e codice in HTML, PDF, Word, presentazioni o un sito web. *Il sito di questo corso è realizzato con Quarto.* |
+| **Shiny** | Un pacchetto per costruire applicazioni web interattive direttamente da R, senza scrivere HTML o JavaScript. |
+| **webR** | R compilato per funzionare dentro un browser web. È ciò che fa funzionare gli esercizi interattivi di questo sito. |
+
+Puoi provare R subito, senza installare nulla: il riquadro qui sotto esegue vero codice R **nel tuo browser**.
+
+```{webr}
+# Premi "Run code". Poi cambia i numeri ed esegui di nuovo!
+2 + 3
+sqrt(144)
+mean(c(4, 8, 15, 16, 23, 42))
+```
+
+## 5. Installare R e un IDE
+
+Devi installare **due** cose, in quest'ordine:
+
+1. **R** stesso: il motore che esegue effettivamente il codice.
+2. **Un IDE** (*Integrated Development Environment*, ambiente di sviluppo integrato): il cruscotto che usi per scrivere codice e vedere risultati, grafici e guida. In linea di principio è facoltativo, ma in pratica nessuno lavora senza.
+
+Un'analogia utile: R è il motore dell'auto; l'IDE è il cruscotto, il volante e i sedili.
+
+### Passo 1: installare R
+
+Vai sul sito del CRAN, <https://cran.r-project.org>, e scegli il tuo sistema operativo:
+
+- **Windows**: "Download R for Windows" → "base" → scarica il programma di installazione ed eseguilo, accettando le impostazioni predefinite.
+- **macOS**: "Download R for macOS" → scegli il programma di installazione adatto al tuo processore (Apple silicon, cioè chip della serie M, oppure Intel). Apri il file `.pkg` e segui le istruzioni.
+- **Linux**: segui le istruzioni per la tua distribuzione (Ubuntu, Debian, Fedora, …) sulla stessa pagina.
+
+Questo corso presuppone **R 4.5 o successivo** (il dataset `penguins`, che usiamo in tutto il corso, è stato aggiunto a R base nella versione 4.5.0).
+
+### Passo 2: installare un IDE
+
+Scegli **uno** dei due IDE gratuiti sviluppati da Posit:
+
+| IDE | Download | Per chi è |
+|---|---|---|
+| **RStudio Desktop** | <https://posit.co/download/rstudio-desktop/> | L'IDE classico e più diffuso per R. La maggior parte dei tutorial e delle schermate che trovi online lo usa. **Consigliato ai principianti.** |
+| **Positron** | <https://positron.posit.co> | Il nuovo IDE di Posit, costruito sulla stessa base open source di Visual Studio Code. Supporta R e Python fianco a fianco. |
+
+Tutto ciò che c'è in questo corso funziona in entrambi. Quando descriviamo i menu usiamo i nomi di RStudio; Positron ha comandi equivalenti.
+
+::: {.callout-note}
+## Verifica l'installazione
+
+Apri il tuo IDE, scrivi `R.version.string` nella Console e premi Invio. Dovresti vedere la versione di R che hai appena installato. Se vedi una versione più vecchia, probabilmente hai due installazioni di R: disinstalla quella vecchia.
+:::
+
+## 6. Un giro in RStudio
+
+Quando apri RStudio vedi **quattro riquadri**. La loro posizione può essere cambiata (*Tools → Global Options → Pane Layout*), ma per impostazione predefinita sono:
+
+| Riquadro | Posizione | A cosa serve |
+|---|---|---|
+| **Source (editor)** | in alto a sinistra | Dove scrivi e salvi **script** (`.R`) e **documenti Quarto** (`.qmd`). Si apre con *File → New File*. |
+| **Console** | in basso a sinistra | Dove R viene effettivamente eseguito. Puoi scrivere i comandi direttamente qui; i risultati compaiono subito. Il simbolo `>` è il *prompt*: R ti sta aspettando. |
+| **Environment / History** | in alto a destra | *Environment* elenca gli oggetti che hai creato (dati, risultati). *History* elenca i comandi che hai eseguito. |
+| **Files / Plots / Packages / Help / Viewer** | in basso a destra | Sfogliare i file, vedere i grafici, gestire i pacchetti installati, leggere le pagine di guida. |
+
+La scorciatoia da tastiera più utile da imparare il primo giorno: **Ctrl + Invio** (Windows/Linux) o **Cmd + Invio** (macOS) invia la riga corrente dello script alla Console e la esegue.
+
+::: {.callout-tip}
+## Un'impostazione da cambiare subito
+
+In *Tools → Global Options → General*, **togli la spunta** a "Restore .RData into workspace at startup" e imposta "Save workspace to .RData on exit" su **Never**. Questo ti costringe a tenere tutto ciò che è importante negli script, che è il cuore del lavoro riproducibile. Spieghiamo il perché in [Primi passi](02-first-steps.qmd).
+:::
+
+## 7. Pacchetti: installare e caricare
+
+R base contiene già migliaia di funzioni, ma prima o poi avrai bisogno di un pacchetto. Usare un pacchetto è un processo in **due passaggi**:
+
+| Passaggio | Funzione | Quanto spesso? | Analogia |
+|---|---|---|---|
+| **Installare**: scaricarlo dal CRAN sul tuo computer | `install.packages("name")` | **una volta** per computer (e dopo aver aggiornato R) | comprare un libro e metterlo sullo scaffale |
+| **Caricare**: rendere disponibili le sue funzioni nella sessione corrente | `library(name)` | **ogni** volta che avvii R | prendere il libro dallo scaffale per leggerlo |
+
+```{r}
+#| label: install-example
+#| eval: false
+install.packages("ggplot2")   # qui le virgolette sono obbligatorie
+library(ggplot2)              # qui le virgolette non servono
+```
+
+Questo chunk non viene eseguito sul sito (installare pacchetti da una pagina web non ha senso), ma dovresti eseguirlo sul tuo computer.
+
+Puoi anche installare più pacchetti in una volta:
+
+```{r}
+#| label: install-several
+#| eval: false
+install.packages(c("dplyr", "tidyr", "readr"))
+```
+
+Per usare una singola funzione di un pacchetto *senza* caricare l'intero pacchetto, scrivi `pacchetto::funzione()`. Per esempio, `dplyr::glimpse(penguins)`. Nel corso usiamo questo stile quando un pacchetto serve una volta sola.
+
+### L'installatore del corso
+
+Per farti risparmiare tempo, il corso fornisce uno script che installa tutti i pacchetti usati nelle lezioni. Esegui questa riga una volta, nella Console:
+
+```{r}
+#| label: course-installer
+#| eval: false
+source("https://raw.githubusercontent.com/gianluca-sottile/An-R-Tutorial-for-Beginners/master/scripts/install-packages.R")
+```
+
+`source()` esegue uno script R; qui lo script viene letto direttamente dal repository GitHub del corso. La prima volta può richiedere un po' di tempo.
+
+### Dove mi trovo? `sessionInfo()`
+
+Quando chiedi aiuto (su un forum o al tuo docente), indica sempre quale versione di R e dei pacchetti stai usando. Una sola funzione stampa tutto:
+
+```{r}
+#| label: session-info
+sessionInfo()
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- La prima riga è la tua **versione di R** (qui `r R.version.string`).
+- **Platform** e **Running under** descrivono il tuo computer e il sistema operativo.
+- **attached base packages** sono i pacchetti caricati automaticamente ogni volta che R si avvia (`stats`, `graphics`, `utils`, `datasets`, …). Il pacchetto `datasets` è il motivo per cui `penguins`, `mtcars` e `iris` sono sempre disponibili.
+- **other attached packages** (se presenti) sono quelli che hai caricato con `library()`, con i relativi numeri di versione.
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Installare solo un IDE.** RStudio e Positron richiedono che R sia installato separatamente. Installa prima R.
+2. **Dimenticare le virgolette in `install.packages()`.** `install.packages(dplyr)` fallisce perché R cerca un *oggetto* chiamato `dplyr`. Usa `install.packages("dplyr")`.
+3. **Mettere `install.packages()` dentro uno script.** Ogni volta che lo script viene eseguito, il pacchetto viene scaricato di nuovo. Installa una volta dalla Console; negli script tieni solo `library()`.
+4. **"there is no package called …"** quando chiami `library()`. Significa che il pacchetto non è installato (oppure che il nome è scritto male: R distingue maiuscole e minuscole, quindi `library(ggplot2)`, non `library(GGplot2)`).
+5. **Salvare il workspace (`.RData`) all'uscita.** I vecchi oggetti ricompaiono silenziosamente nella sessione successiva e nascondono gli errori. Cambia l'impostazione descritta nella Sezione 6.
+:::
+
+## 8. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Qual è la differenza tra R e RStudio?
+
+R è il linguaggio e il motore che esegue il codice. RStudio (come Positron) è un IDE: un programma che rende comodo scrivere codice R e vedere risultati, grafici e guida. Puoi usare R senza RStudio, ma non RStudio senza R.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Ieri hai installato `dplyr`. Oggi riavvii R e `filter()` non si comporta come previsto. Che cosa hai probabilmente dimenticato?
+
+Di **caricare** il pacchetto con `library(dplyr)`. L'installazione si fa una volta; il caricamento va fatto in ogni nuova sessione.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Perché uno script è meglio che cliccare nei menu?
+
+Perché uno script è una registrazione precisa e rieseguibile di ogni passaggio. Tu (o chiunque altro) puoi rieseguire l'intera analisi su nuovi dati, controllarla per trovare errori e vedere esattamente come è stato ottenuto ogni risultato. Questa è la **riproducibilità**.
+:::
+
+## 9. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — R come calcolatrice.** Usa R per calcolare: (a) il numero di secondi in un giorno; (b) la radice quadrata di 2; (c) la media di 12, 15 e 21. Sostituisci ogni `______`.
+
+```{webr}
+#| exercise: ex_01_1
+______ * 60 * 60     # (a) secondi in un giorno
+sqrt(______)         # (b)
+(12 + 15 + 21) / ______   # (c)
+```
+
+::: {.hint exercise="ex_01_1"}
+Un giorno ha 24 ore. Per (c), dividi la somma per quanti numeri hai sommato.
+:::
+
+::: {.solution exercise="ex_01_1"}
+```r
+24 * 60 * 60
+sqrt(2)
+(12 + 15 + 21) / 3
+```
+Un giorno ha 86.400 secondi; $\sqrt 2 \approx 1.414$; la media è 16. Potresti anche scrivere `mean(c(12, 15, 21))`.
+:::
+:::
+
+::: {.exercise}
+[★]{.stars} **Esercizio 2 — quale R sto usando?** Stampa la versione di R che gira nel tuo browser e poi le informazioni complete sulla sessione.
+
+```{webr}
+#| exercise: ex_01_2
+R.version.______
+______()
+```
+
+::: {.hint exercise="ex_01_2"}
+La prima è una variabile chiamata `R.version.string`. La seconda è la funzione descritta nella Sezione 7.
+:::
+
+::: {.solution exercise="ex_01_2"}
+```r
+R.version.string
+sessionInfo()
+```
+Il browser esegue webR, una versione di R compilata per il web: la riga *Platform* menziona quindi `emscripten`/`wasm` invece di Windows o macOS.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — il tuo primo sguardo ai dati.** Il dataset `penguins` è sempre disponibile in R ≥ 4.5. Usa `nrow()` per contare i pinguini, `head()` per vedere le prime righe e `summary()` per avere una panoramica di ogni colonna.
+
+```{webr}
+#| exercise: ex_01_3
+nrow(______)
+head(______)
+summary(______)
+```
+
+::: {.hint exercise="ex_01_3"}
+Tutte e tre le funzioni prendono come argomento il dataset stesso: `penguins`.
+:::
+
+::: {.solution exercise="ex_01_3"}
+```r
+nrow(penguins)
+head(penguins)
+summary(penguins)
+```
+I pinguini sono 344. Nell'output di `summary()`, nota le righe `NA's`: alcune misurazioni mancano. Imparerai a gestirle in [Dati mancanti](../04-io/20-missing-data.qmd).
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★]{.stars} **Esercizio 4 — prepara il tuo computer.** (a) Installa R e RStudio Desktop (o Positron). (b) Nella Console, esegui `R.version.string` e verifica che la versione sia 4.5 o successiva. (c) Installa il pacchetto `ggplot2` e caricalo. (d) Cambia le impostazioni del workspace descritte nella Sezione 6.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+R.version.string            # ad es. "R version 4.6.0 (...)"
+install.packages("ggplot2")
+library(ggplot2)            # nessun output significa successo
+```
+Se `library(ggplot2)` non stampa nulla, ha funzionato: in R, il silenzio di solito significa successo. I messaggi in rosso non sono sempre errori, quindi leggili: le righe che iniziano con `Error` sono errori, le altre sono spesso solo informazioni.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — i pacchetti del corso.** Esegui l'installatore del corso della Sezione 7. Al termine, esegui `library(dplyr)` e `library(ggplot2)` e poi `sessionInfo()`. Trova i due pacchetti e i loro numeri di versione nell'output.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+source("https://raw.githubusercontent.com/gianluca-sottile/An-R-Tutorial-for-Beginners/master/scripts/install-packages.R")
+library(dplyr)
+library(ggplot2)
+sessionInfo()
+```
+Compaiono sotto **other attached packages**, ad es. `ggplot2_4.x.x` e `dplyr_1.x.x`. Se l'installatore segnala che un pacchetto non è stato installato, prova a installare solo quello con `install.packages()` e leggi con attenzione il messaggio di errore.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa significa |
+|---|---|
+| R | Linguaggio libero e open source per statistica, analisi dei dati e grafica |
+| RStudio Desktop, Positron | IDE: l'ambiente in cui scrivi ed esegui il codice R |
+| CRAN | Repository ufficiale dei pacchetti R |
+| `install.packages("pkg")` | Scarica e installa un pacchetto (una volta) |
+| `library(pkg)` | Carica un pacchetto installato (in ogni sessione) |
+| `pkg::fun()` | Usa una funzione senza caricare il pacchetto |
+| `sessionInfo()`, `R.version.string` | Quale versione di R e dei pacchetti stai usando |
+
+- R è un linguaggio creato per i dati: gli script rendono la tua analisi **riproducibile**.
+- Installa **prima R**, poi un IDE (RStudio Desktop o Positron).
+- I pacchetti si installano **una volta** e si caricano **in ogni sessione**.
+- R collabora con altri strumenti; le competenze che acquisisci qui sono trasferibili.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2e), capitoli "Whole game" e "Workflow: basics", <https://r4ds.hadley.nz>
+- La homepage e le FAQ del R Project, <https://www.r-project.org>
+- RStudio User Guide, <https://docs.posit.co/ide/user/>
+- Documentazione di Positron, <https://positron.posit.co>
+:::

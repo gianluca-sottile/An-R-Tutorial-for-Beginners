@@ -1,0 +1,485 @@
+---
+title: "Vettori"
+subtitle: "Il mattone di tutto in R: creare, indicizzare, calcolare ed evitare la trappola del riciclo"
+description: "Crea vettori con c(), :, seq() e rep(); indicizzali per posizione, per nome e con condizioni logiche; usa operazioni vettorizzate e funzioni di sintesi; comprendi il riciclo (recycling) e i suoi errori silenziosi; gestisci gli NA; ordina con sort, order e rank; verifica l'appartenenza con %in%."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Tipi di dati e operatori](03-data-types.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- creare vettori con `c()`, `:`, `seq()` e `rep()`;
+- estrarre elementi per posizione, per posizione negativa, con una condizione logica e per nome;
+- applicare operazioni **vettorizzate** e spiegare come funziona il **riciclo** (recycling), e quando produce silenziosamente risultati sbagliati;
+- rispondere a domande con `which()`, `any()`, `all()`, `sum()` di valori logici e `%in%`, gestendo gli `NA` con `na.rm`;
+- distinguere `sort()`, `order()` e `rank()`.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+# Solo R base: nulla da caricare.
+```
+
+## 1. Perché i vettori?
+
+In R non esistono "numeri singoli". Anche `5` è un **vettore** di lunghezza 1:
+
+```{r}
+#| label: length-one
+length(5)
+```
+
+Ogni colonna di un dataset è un vettore. `penguins$body_mass` è un vettore di `r length(penguins$body_mass)` numeri, uno per pinguino. Quasi tutto ciò che farai nell'analisi dei dati (calcolare una media, selezionare i pinguini più pesanti, contare le femmine, standardizzare una variabile) è un'operazione sui vettori.
+
+R è progettato in modo che tu possa lavorare sull'**intero vettore in una volta**, senza scrivere cicli. Una volta padroneggiate le idee di questa lezione, capirai la maggior parte di ciò che succede dentro `dplyr`, `ggplot2` e le funzioni statistiche.
+
+## 2. Creare vettori
+
+| Funzione | Esempio | Risultato |
+|---|---|---|
+| `c()` — *combine* (combinare) | `c(4, 8, 15)` | `r c(4, 8, 15)` |
+| `:` — sequenza di interi | `3:7` | `r 3:7` |
+| `seq()` — sequenza generica | `seq(0, 1, by = 0.25)` | `r seq(0, 1, by = 0.25)` |
+| `rep()` — ripetere | `rep(c("a", "b"), times = 3)` | `r rep(c("a", "b"), times = 3)` |
+
+```{r}
+#| label: create
+c(4, 8, 15, 16, 23, 42)
+10:1
+seq(0, 100, by = 20)
+seq(0, 1, length.out = 5)
+rep(c("a", "b"), times = 3)
+rep(c("a", "b"), each = 2)
+```
+
+`seq_len(n)` dà `1, 2, …, n` e `seq_along(x)` dà `1, 2, …, length(x)`. Sono più sicure di `1:n` perché si comportano correttamente quando `n` è 0 (`1:0` è il vettore `1 0`, di lunghezza 2!).
+
+Un vettore contiene **un solo tipo**. Se mescoli i tipi, R li converte per coercizione (vedi [Tipi di dati](03-data-types.qmd)). Il numero di elementi è dato da `length()`.
+
+### Vettori con nomi
+
+Gli elementi possono avere dei **nomi**, che rendono il codice più leggibile:
+
+```{r}
+#| label: named
+temps <- c(mon = 18, tue = 21, wed = 17, thu = 24, fri = 22)
+temps
+names(temps)
+```
+
+## 3. Indicizzazione: estrarre gli elementi
+
+Le parentesi quadre `[ ]` estraggono gli elementi. Ci sono quattro modi per indicare quali.
+
+### Per posizione
+
+```{r}
+#| label: idx-pos
+temps[2]          # il secondo elemento
+temps[c(1, 3)]    # il primo e il terzo
+temps[2:4]        # dal secondo al quarto
+```
+
+R conta da **1**, non da 0. Chiedere una posizione che non esiste restituisce `NA`, non un errore: `temps[10]` è `NA`.
+
+### Per posizione negativa: "tutto tranne"
+
+```{r}
+#| label: idx-neg
+temps[-1]           # elimina il primo
+temps[-c(1, 5)]     # elimina il primo e l'ultimo
+```
+
+### Con una condizione logica
+
+Un vettore logico della stessa lunghezza tiene gli elementi in cui è `TRUE`:
+
+```{r}
+#| label: idx-lgl
+temps > 20
+temps[temps > 20]
+```
+
+Leggi `temps[temps > 20]` come "temps, *dove* temps è maggiore di 20". È la tecnica di indicizzazione più importante nell'analisi dei dati: è ciò che `dplyr::filter()` fa dietro le quinte.
+
+### Per nome
+
+```{r}
+#| label: idx-name
+temps["thu"]
+temps[c("mon", "fri")]
+```
+
+### Modificare gli elementi
+
+Le stesse parentesi a sinistra di `<-` **sostituiscono** i valori:
+
+```{r}
+#| label: modify
+temps["wed"] <- 19
+temps[temps < 20] <- NA    # segna come mancanti i giorni freddi
+temps
+```
+
+## 4. Operazioni vettorizzate
+
+Le operazioni aritmetiche, i confronti e la maggior parte delle funzioni matematiche lavorano **elemento per elemento**:
+
+```{r}
+#| label: vectorised
+a <- c(1, 3, 5)
+b <- c(2, 4, 6)
+a + b
+a * b
+sqrt(b)
+```
+
+Le funzioni di sintesi, invece, prendono un intero vettore e restituiscono **un solo** valore:
+
+| Funzione | Restituisce |
+|---|---|
+| `sum()`, `prod()` | somma, prodotto |
+| `mean()`, `median()` | media, valore centrale |
+| `min()`, `max()`, `range()` | il più piccolo, il più grande, entrambi |
+| `sd()`, `var()` | deviazione standard, varianza |
+| `length()` | numero di elementi |
+
+Combinando le due cose si ottengono righe di codice molto potenti. Per esempio, questa converte ogni massa corporea da grammi a chilogrammi e poi ne calcola la media:
+
+```{r}
+#| label: one-liner
+mean(penguins$body_mass / 1000, na.rm = TRUE)
+```
+
+## 5. Il riciclo e le sue trappole
+
+Che cosa succede se due vettori hanno **lunghezze diverse**? R **ricicla** quello più corto: lo ripete finché non diventa lungo quanto quello più lungo.
+
+```{r}
+#| label: recycle
+1:6 * 2              # 2 viene riciclato sei volte
+1:6 + c(10, 20)      # c(10, 20) diventa c(10, 20, 10, 20, 10, 20)
+```
+
+Il primo caso è quello che vuoi quasi sempre: moltiplicare un vettore per un singolo numero. Il secondo è lecito ma raramente voluto.
+
+Quando la lunghezza maggiore **non è un multiplo** di quella minore, R ti avvisa:
+
+```{r}
+#| label: recycle-warn
+#| warning: true
+1:5 + c(10, 20)
+```
+
+Ma quando **è** un multiplo, **non c'è alcun avviso**. È così che è nato un errore silenzioso in una versione precedente proprio di questo corso. L'obiettivo era riscalare un vettore nell'intervallo [0, 1] con la formula
+
+$$
+x_{\text{riscalato}} = \frac{x - \min(x)}{\max(x) - \min(x)} .
+$$
+
+e questo era il codice:
+
+```{r}
+#| label: normalize-bug
+x <- c(3, 7, 1, 9, 5, 4)
+(x - range(x)) / diff(range(x))
+```
+
+Nessun errore, nessun avviso, e la risposta è **sbagliata**: i valori riscalati non possono essere negativi. `range(x)` restituisce **due** numeri, `c(min, max)` = `c(1, 9)`. Poiché `x` ha 6 elementi (un multiplo di 2), R ha riciclato `c(1, 9)` in `c(1, 9, 1, 9, 1, 9)` e ha sottratto il minimo da alcuni elementi e il **massimo** da altri. Il codice corretto sottrae solo il primo elemento del range:
+
+```{r}
+#| label: normalize-fix
+rng <- range(x)
+(x - rng[1]) / (rng[2] - rng[1])
+```
+
+::: {.callout-tip .read-output}
+## Come verificare un risultato come questo
+
+Controlla sempre la plausibilità dell'output rispetto a ciò che sai dover essere vero: i valori riscalati devono stare tra 0 e 1, il valore più piccolo di `x` (qui `1`, in posizione 3) deve diventare 0 e il più grande (`9`, posizione 4) deve diventare 1. La versione con l'errore fallisce tutti e tre i controlli. Trasformerai questo codice in una vera funzione in [Funzioni](../03-programming/14-functions.qmd).
+:::
+
+## 6. Fare domande con i vettori logici
+
+Un confronto produce un vettore logico. Diverse funzioni lo trasformano in risposte:
+
+| Domanda | Codice |
+|---|---|
+| *Dove* è vera la condizione? (posizioni) | `which(cond)` |
+| È vera per *almeno un* elemento? | `any(cond)` |
+| È vera per *tutti*? | `all(cond)` |
+| *Quante* volte è vera? | `sum(cond)` |
+| In quale *proporzione*? | `mean(cond)` |
+| Dove si trova il valore più grande / più piccolo? | `which.max(x)`, `which.min(x)` |
+
+```{r}
+#| label: questions
+temps <- c(mon = 18, tue = 21, wed = 17, thu = 24, fri = 22)
+which(temps > 20)
+any(temps > 23)
+all(temps > 15)
+sum(temps > 20)
+mean(temps > 20)
+which.max(temps)
+```
+
+### Appartenenza: `%in%`
+
+`x %in% y` chiede, per ogni elemento di `x`, "è uno dei valori di `y`?". È molto più chiaro di una catena di `==` e `|`.
+
+```{r}
+#| label: in
+c("Adelie", "Emperor") %in% c("Adelie", "Chinstrap", "Gentoo")
+sum(penguins$island %in% c("Dream", "Biscoe"))
+```
+
+## 7. Valori mancanti nei vettori
+
+I dati reali hanno dei buchi. In `penguins$body_mass`, `r sum(is.na(penguins$body_mass))` animali non sono stati pesati. Le funzioni di sintesi restituiscono `NA` a meno che tu non dica loro di saltare i valori mancanti con `na.rm = TRUE` ("NA remove", rimuovi gli NA):
+
+```{r}
+#| label: na-rm
+mass <- penguins$body_mass
+sum(is.na(mass))         # quanti sono mancanti?
+which(is.na(mass))       # quali?
+mean(mass)
+mean(mass, na.rm = TRUE)
+```
+
+L'indicizzazione logica ha un effetto collaterale sottile con gli `NA`: se la condizione è `NA` per un elemento, il risultato contiene un `NA` in quella posizione. `which()`, invece, ignora gli `NA`:
+
+```{r}
+#| label: na-index
+penguins$species[penguins$body_mass > 6000]          # include gli NA
+penguins$species[which(penguins$body_mass > 6000)]   # solo le corrispondenze reali
+```
+
+## 8. `sort()`, `order()` e `rank()`
+
+Queste tre funzioni si confondono facilmente. Rispondono a domande diverse:
+
+```{r}
+#| label: sort-order-rank
+v <- c(30, 10, 20, 50)
+sort(v)     # i valori, ordinati
+order(v)    # le POSIZIONI che ordinerebbero v
+rank(v)     # il rango di ciascun valore, nell'ordine originale
+```
+
+| Funzione | Domanda a cui risponde | Per `v = c(30, 10, 20, 50)` |
+|---|---|---|
+| `sort(v)` | Quali sono i valori dal più piccolo al più grande? | `r sort(c(30, 10, 20, 50))` |
+| `order(v)` | Quale elemento viene 1°, 2°, …? | `r order(c(30, 10, 20, 50))` (il 2° elemento, 10, viene per primo) |
+| `rank(v)` | Che posto occupa ciascun elemento? | `r rank(c(30, 10, 20, 50))` (30 è 3°, 10 è 1°, …) |
+
+`order()` è quella che ti servirà di più: `v[order(v)]` equivale a `sort(v)`, ma puoi anche usare l'ordine di un vettore per riordinarne **un altro**, per esempio per ordinare le righe di un data frame secondo una colonna ([Data frame](../02-data/08-data-frames.qmd)). Usa `decreasing = TRUE` per invertire l'ordine, e nota che `sort()` elimina gli `NA` mentre `order()` li mette in fondo. Ai valori ex aequo `rank()` assegna il rango medio: `rank(c(10, 20, 20, 30))` è `r rank(c(10, 20, 20, 30))`.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: `order()` e `rank()` sono l'una l'inversa dell'altra
+
+Per un vettore senza valori ripetuti, `order()` e `rank()` sono permutazioni inverse: `rank(v)[order(v)]` è `1, 2, …, n`, e `order(order(v))` è uguale a `rank(v)`. I ranghi sono la base dei test non parametrici che incontrerai in [Test non parametrici](../08-inference/36-nonparametric-tests.qmd), che sostituiscono i dati con i loro ranghi per diventare robusti ai valori anomali (outlier).
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Riciclo silenzioso.** Combinare vettori di lunghezze diverse non ferma R. Se la lunghezza maggiore è un multiplo della minore, non c'è alcun avviso. Controlla le lunghezze e verifica che i risultati rispettino ciò che deve essere vero.
+2. **Dimenticare `na.rm = TRUE`.** Un solo valore mancante trasforma `mean()`, `sum()`, `max()` in `NA`.
+3. **Indicizzazione logica con gli `NA`.** `x[x > 5]` mantiene gli `NA` dove la condizione è sconosciuta. Usa `x[which(x > 5)]` oppure `x[!is.na(x) & x > 5]`.
+4. **Confondere `order()` con `rank()`.** Per ordinare, usa `sort(x)` o `x[order(x)]`, mai `x[rank(x)]`.
+5. **`1:length(x)` su un vettore vuoto** dà `c(1, 0)`. Usa `seq_along(x)`.
+6. **Usare `==` con più valori.** `x == c("a", "b")` ricicla e confronta posizione per posizione; quasi sempre ciò che vuoi è `x %in% c("a", "b")`.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Quanto vale `c(10, 20, 30, 40)[-2]`?
+
+`10 30 40`. Un indice negativo **rimuove** quella posizione.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Che cosa restituisce `1:4 + c(100, 200)`, e R dà un avviso?
+
+`101 202 103 204`, **senza alcun avviso**, perché 4 è un multiplo di 2. `c(100, 200)` viene riciclato in `c(100, 200, 100, 200)`.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Per `x <- c(5, 2, 9)`, quanto valgono `order(x)` e `rank(x)`?
+
+`order(x)` è `2 1 3` (il valore più piccolo è in posizione 2, poi in posizione 1, poi 3). Anche `rank(x)` è `2 1 3`: una coincidenza di questo esempio! Prova `x <- c(5, 9, 2)`: `order(x)` è `3 1 2`, `rank(x)` è `2 3 1`.
+:::
+
+## 10. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — creare e indicizzare.** (a) Crea con `seq()` il vettore dei numeri pari da 2 a 20. (b) Estrai il 3° e il 5° elemento. (c) Estrai tutti gli elementi tranne i primi due. (d) Estrai gli elementi maggiori di 12.
+
+```{webr}
+#| exercise: ex_04_1
+ev <- seq(2, 20, by = ______)
+ev[c(______)]
+ev[-______]
+ev[ev ______ 12]
+```
+
+::: {.hint exercise="ex_04_1"}
+Il passo è 2. Un indice negativo rimuove delle posizioni: `-(1:2)` oppure `-c(1, 2)`.
+:::
+
+::: {.solution exercise="ex_04_1"}
+```r
+ev <- seq(2, 20, by = 2)
+ev[c(3, 5)]     # 6 10
+ev[-c(1, 2)]    # 6 8 10 ... 20
+ev[ev > 12]     # 14 16 18 20
+```
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 2 — correggi il riscalamento.** La funzione qui sotto dovrebbe riscalare qualsiasi vettore in [0, 1], ma dà valori sbagliati. Trova l'errore (la Sezione 5 ti aiuta) e correggilo. Poi verifica la correzione: la lunghezza della pinna più piccola deve diventare 0 e la più grande 1.
+
+```{webr}
+#| exercise: ex_04_2
+rescale01 <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng) / (rng[2] - rng[1])
+}
+
+rescale01(c(3, 7, 1, 9, 5, 4))
+
+fl <- rescale01(penguins$flipper_len)
+range(fl, na.rm = TRUE)
+```
+
+::: {.hint exercise="ex_04_2"}
+`rng` ha due elementi. Quale dei due va sottratto da ogni `x`?
+:::
+
+::: {.solution exercise="ex_04_2"}
+```r
+rescale01 <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng[1]) / (rng[2] - rng[1])
+}
+rescale01(c(3, 7, 1, 9, 5, 4))   # 0.250 0.750 0.000 1.000 0.500 0.375
+range(rescale01(penguins$flipper_len), na.rm = TRUE)   # 0 1
+```
+Con l'errore, `x - rng` ricicla `c(min, max)` lungo `x`. Poiché le lunghezze risultano compatibili (6 è un multiplo di 2; e anche quando non lo sono R si limita a dare un *avviso*), il codice gira e restituisce numeri dall'aspetto plausibile ma sbagliati: il tipo di errore più pericoloso.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — domande sui pinguini.** Usando `penguins$bill_len`: (a) quante lunghezze del becco mancano? (b) qual è il becco più lungo? (c) quale proporzione dei pinguini con lunghezza del becco nota ha un becco più lungo di 45 mm? (d) c'è qualche becco più corto di 30 mm?
+
+```{webr}
+#| exercise: ex_04_3
+bl <- penguins$bill_len
+sum(______(bl))
+max(bl, ______ = TRUE)
+mean(bl > 45, na.rm = TRUE)
+______(bl < 30, na.rm = TRUE)
+```
+
+::: {.hint exercise="ex_04_3"}
+`is.na()` individua i valori mancanti; `na.rm = TRUE` li salta; `any()` verifica se almeno un valore è `TRUE`.
+:::
+
+::: {.solution exercise="ex_04_3"}
+```r
+sum(is.na(bl))                  # 2
+max(bl, na.rm = TRUE)           # 59.6
+mean(bl > 45, na.rm = TRUE)     # circa 0.48
+any(bl < 30, na.rm = TRUE)      # FALSE
+```
+Quasi metà degli animali ha un becco più lungo di 45 mm; nessuno è più corto di 30 mm.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — prevedi, poi esegui: sort, order, rank.** Scrivi la tua previsione per ogni riga, poi esegui il codice.
+
+```{webr}
+#| exercise: ex_04_4
+scores <- c(ann = 72, bob = 95, cat = 60, dan = 88)
+sort(scores, decreasing = TRUE)
+order(scores)
+rank(scores)
+names(scores)[order(scores, decreasing = TRUE)][1:2]
+```
+
+::: {.hint exercise="ex_04_4"}
+`order()` restituisce delle posizioni (1 = ann, 2 = bob, …). L'ultima riga chiede i nomi dei due studenti migliori.
+:::
+
+::: {.solution exercise="ex_04_4"}
+```r
+sort(scores, decreasing = TRUE)  # bob 95, dan 88, ann 72, cat 60
+order(scores)                    # 3 1 4 2
+rank(scores)                     # ann 2, bob 4, cat 1, dan 3
+names(scores)[order(scores, decreasing = TRUE)][1:2]   # "bob" "dan"
+```
+L'ultima riga è uno schema tipico: applica `order()` a un vettore, poi usa il risultato per riordinarne un altro.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — appartenenza e pinguini pesanti.** (a) Quanti pinguini vivono su Dream **o** su Torgersen? Usa `%in%`. (b) A quali specie appartengono i pinguini che pesano più di 6.000 g? Assicurati che la risposta non contenga `NA`. (c) In quale posizione del dataset si trova il pinguino con la pinna più lunga, e di che specie è?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+sum(penguins$island %in% c("Dream", "Torgersen"))
+penguins$species[which(penguins$body_mass > 6000)]
+pos <- which.max(penguins$flipper_len)
+pos
+penguins$species[pos]
+```
+Entrambi i pinguini più pesanti di 6.000 g sono Gentoo, così come l'animale con la pinna più lunga. Nota come `which()` elimini gli `NA` che la semplice indicizzazione logica manterrebbe.
+:::
+:::
+
+## Riepilogo
+
+| Funzione / idea | Che cosa fa |
+|---|---|
+| `c()`, `:`, `seq()`, `rep()` | Creano vettori |
+| `seq_len()`, `seq_along()` | Sequenze di interi sicure |
+| `length()`, `names()` | Lunghezza e nomi di un vettore |
+| `x[i]`, `x[-i]`, `x[cond]`, `x["name"]` | Indicizzazione per posizione, esclusione, condizione, nome |
+| Riciclo | Il vettore più corto viene ripetuto; avviso solo se le lunghezze non sono multiple |
+| `which()`, `any()`, `all()`, `sum()`, `mean()` su valori logici | Dove / almeno uno / tutti / quanti / quale proporzione |
+| `%in%` | Verifica di appartenenza |
+| `na.rm = TRUE`, `is.na()` | Gestione dei valori mancanti |
+| `sort()`, `order()`, `rank()` | Valori ordinati / posizioni di ordinamento / ranghi |
+
+- Ogni valore in R è un vettore; la maggior parte delle operazioni è **vettorizzata**.
+- L'indicizzazione logica (`x[cond]`) è la base del filtraggio dei dati.
+- Il riciclo è comodo per `x * 2` e pericoloso negli altri casi: controlla le lunghezze e verifica la plausibilità dei risultati.
+- `order()` dà delle posizioni; usalo per riordinare altri vettori.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- *R for Data Science* (2e), capitoli "Logical vectors" e "Numbers", <https://r4ds.hadley.nz>
+- Wickham, *Advanced R* (2e), capitolo "Subsetting", <https://adv-r.hadley.nz/subsetting.html>
+:::

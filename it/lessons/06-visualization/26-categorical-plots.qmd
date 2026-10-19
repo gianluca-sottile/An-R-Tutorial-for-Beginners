@@ -1,0 +1,556 @@
+---
+title: "Grafici per variabili categoriali"
+subtitle: "Grafici a barre fatti bene: conteggi, ordine, proporzioni, etichette, e che cosa evitare"
+description: "Visualizzare variabili categoriali con ggplot2: geom_bar() contro geom_col(), ordinare le barre, barre sovrapposte, affiancate e proporzionali per due variabili, etichette, barre orizzontali, perché i grafici a torta di solito sono peggiori e perché i grafici a barre delle medie con barre d'errore nascondono i dati."
+format:
+  live-html:
+    webr:
+      packages: ["ggplot2", "dplyr", "forcats"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(ggplot2)
+library(dplyr)
+library(forcats)
+```
+
+::: {.lesson-meta}
+[Livello 2 · Descrivere ed esplorare]{.level-2} [⏱ ~60 min]{} [Prerequisiti: [La grammatica dei grafici](24-ggplot-grammar.qmd), [Descrivere due variabili](../05-descriptive/23-two-variables.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- scegliere tra `geom_bar()` (R conta al posto tuo) e `geom_col()` (le altezze le fornisci tu);
+- **ordinare** le barre in modo significativo con `forcats`, e disegnare barre **orizzontali** leggibili;
+- mostrare due variabili categoriali con barre **sovrapposte, affiancate e proporzionali**, e scegliere quella giusta per la domanda;
+- aggiungere **etichette** alle barre;
+- spiegare perché i **grafici a torta** e i **grafici a barre delle medie** (i "dynamite plot") sono di solito scelte infelici, e che cosa usare al loro posto.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(ggplot2)
+library(dplyr)
+library(forcats)
+```
+
+## 1. Perché i grafici a barre?
+
+Un **grafico a barre** è la rappresentazione grafica di una tabella di frequenza (vedi [Tabelle di frequenza](../05-descriptive/21-frequency-tables.qmd)): una barra per categoria, con lunghezza proporzionale a un numero, di solito un conteggio o una proporzione. Funziona così bene perché confrontiamo con grande precisione **lunghezze che partono da una linea di base comune**.
+
+Due situazioni diverse richiedono due geom diversi:
+
+| Hai… | Usa | Che cosa fa ggplot2 |
+|---|---|---|
+| Una riga per **osservazione** (per esempio una riga per auto) | `geom_bar()` | conta le righe in ciascuna categoria (`stat = "count"`) |
+| Una riga per **categoria**, con l'altezza già calcolata (un conteggio, una media, una percentuale) | `geom_col()` | disegna i valori così come sono (`stat = "identity"`) |
+
+## 2. Contare con `geom_bar()`
+
+Quante auto in `mtcars` hanno 4, 6 o 8 cilindri?
+
+```{r}
+#| label: fig-bar-basic
+#| fig-cap: "Numero di auto per numero di cilindri."
+ggplot(mtcars, aes(x = factor(cyl))) +
+  geom_bar() +
+  labs(x = "Cilindri", y = "Numero di auto")
+```
+
+`factor(cyl)` tratta i cilindri come categorie. Non abbiamo mai calcolato i conteggi: lo ha fatto `geom_bar()`.
+
+Impostare (non associare) `fill` e `alpha` cambia l'aspetto di tutte le barre; associare `fill` alla stessa variabile di `x` colora ogni barra in modo diverso ma non aggiunge informazione, quindi rimuoviamo la legenda:
+
+```{r}
+#| label: fig-bar-fill
+#| fig-cap: "A sinistra: un colore di riempimento costante con trasparenza. A destra: riempimento associato alla variabile x, colorato ma ridondante."
+#| fig-subcap:
+#|   - "fill e alpha impostati"
+#|   - "fill associato, legenda rimossa"
+#| layout-ncol: 2
+#| fig-asp: 0.8
+ggplot(mtcars, aes(factor(cyl))) +
+  geom_bar(fill = "#0072B2", alpha = 0.6) +
+  labs(x = "Cilindri", y = "Numero di auto")
+
+ggplot(mtcars, aes(factor(cyl), fill = factor(cyl))) +
+  geom_bar() +
+  guides(fill = "none") +
+  labs(x = "Cilindri", y = "Numero di auto")
+```
+
+## 3. Valori precalcolati con `geom_col()`
+
+Spesso prima si sintetizza con `dplyr` e poi si rappresenta il risultato. Gli stessi conteggi di prima, calcolati esplicitamente:
+
+```{r}
+#| label: fig-col
+#| fig-cap: "Lo stesso grafico a partire da una tabella di sintesi, con geom_col()."
+cyl_counts <- mtcars |>
+  count(cyl) |>
+  mutate(cyl = factor(cyl))
+cyl_counts
+
+ggplot(cyl_counts, aes(x = cyl, y = n)) +
+  geom_col() +
+  labs(x = "Cilindri", y = "Numero di auto")
+```
+
+Usare `geom_bar()` su `cyl_counts` sarebbe un errore: conterebbe le **righe** della tabella di sintesi (una per categoria) e disegnerebbe tre barre di altezza 1.
+
+## 4. L'ordine conta
+
+Per una variabile **nominale** l'ordine alfabetico delle barre è arbitrario e rende più difficili i confronti. Ordina le barre **per frequenza** con `forcats::fct_infreq()`:
+
+```{r}
+#| label: fig-order
+#| fig-cap: "Numero di stati USA in ciascuna divisione censuaria, ordinati per frequenza, con barre orizzontali per etichette leggibili."
+states <- tibble(division = state.division)
+
+ggplot(states, aes(y = fct_rev(fct_infreq(division)))) +
+  geom_bar() +
+  labs(x = "Numero di stati", y = NULL)
+```
+
+Qui succedono tre cose:
+
+1. `fct_infreq()` ordina i livelli dal più al meno frequente;
+2. `fct_rev()` inverte quell'ordine, perché ggplot2 disegna il primo livello in **basso** su un asse verticale: così la barra più lunga finisce in cima;
+3. associare la variabile a `y` produce **barre orizzontali**, che lasciano molto spazio per i nomi lunghi delle categorie. (Il modo più vecchio è associare `x` e aggiungere `coord_flip()`; funzionano entrambi.)
+
+Quando le altezze sono precalcolate, usa `fct_reorder()` per ordinare un fattore in base a un'altra variabile:
+
+```{r}
+#| label: fig-reorder
+#| fig-cap: "Peso medio dei pulcini per tipo di mangime, ordinato per media."
+feed_means <- chickwts |>
+  summarise(mean_weight = mean(weight), n = n(), .by = feed)
+
+ggplot(feed_means, aes(x = mean_weight, y = fct_reorder(feed, mean_weight))) +
+  geom_col() +
+  labs(x = "Peso medio dopo 6 settimane (g)", y = "Mangime")
+```
+
+**Non riordinare le variabili ordinali** (titolo di studio, scale di accordo, classi di età, mesi): il loro ordine naturale porta informazione. Mantieni l'ordine dei livelli e, se serve, impostalo con `factor(..., levels = ...)`.
+
+## 5. Aggiungere etichette
+
+Le etichette con i valori esatti aiutano quando i lettori hanno bisogno dei numeri. Su una tabella di sintesi, associa `label` e sposta il testo sopra le barre:
+
+```{r}
+#| label: fig-labels
+#| fig-cap: "Conteggi scritti sopra le barre."
+ggplot(cyl_counts, aes(cyl, n)) +
+  geom_col(width = 0.6) +
+  geom_text(aes(label = n), vjust = -0.4) +
+  expand_limits(y = max(cyl_counts$n) * 1.1) +
+  labs(x = "Cilindri", y = "Numero di auto")
+```
+
+`vjust = -0.4` sposta il testo appena sopra la cima di ogni barra, e `expand_limits()` lascia spazio perché l'etichetta più alta non venga tagliata. Con `geom_bar()` i conteggi esistono solo dentro il grafico; vi si fa riferimento con `after_stat()`:
+
+```{r}
+#| label: fig-labels-stat
+#| fig-cap: "Etichette su un grafico geom_bar() tramite after_stat(count)."
+ggplot(penguins, aes(island)) +
+  geom_bar(width = 0.6) +
+  geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.4) +
+  labs(x = NULL, y = "Numero di pinguini")
+```
+
+Per le barre orizzontali, usa `hjust` invece di `vjust`:
+
+```{r}
+#| label: fig-labels-horizontal
+#| fig-cap: "Consumo medio per numero di cilindri, barre orizzontali con etichette arrotondate."
+mpg_by_cyl <- mtcars |>
+  summarise(mean_mpg = mean(mpg), .by = cyl) |>
+  mutate(cyl = factor(cyl))
+
+ggplot(mpg_by_cyl, aes(x = mean_mpg, y = cyl)) +
+  geom_col(width = 0.6) +
+  geom_text(aes(label = round(mean_mpg, 1)), hjust = -0.15) +
+  expand_limits(x = max(mpg_by_cyl$mean_mpg) * 1.1) +
+  labs(x = "Miglia per gallone (media)", y = "Cilindri")
+```
+
+(Torneremo sulle barre delle **medie** nella Sezione 8: hanno un problema serio.)
+
+## 6. Due variabili categoriali
+
+Come si distribuisce il tipo di cambio (`am`: automatico o manuale) tra le classi di cilindrata? Prima trasformiamo i codici in fattori con etichette:
+
+```{r}
+#| label: cars-data
+cars <- mtcars |>
+  mutate(cyl = factor(cyl),
+         am = factor(am, levels = c(0, 1), labels = c("automatico", "manuale")))
+```
+
+L'argomento `position` decide come sono disposte le barre della seconda variabile:
+
+```{r}
+#| label: fig-positions
+#| fig-cap: "Tre disposizioni degli stessi conteggi."
+#| fig-subcap:
+#|   - "Sovrapposte (predefinito)"
+#|   - "Affiancate"
+#|   - "Riempite (proporzioni)"
+#| layout-ncol: 3
+#| fig-asp: 1.1
+p <- ggplot(cars, aes(x = cyl, fill = am)) +
+  labs(x = "Cilindri", fill = "Cambio")
+
+p + geom_bar() + labs(y = "Numero di auto")
+p + geom_bar(position = position_dodge(preserve = "single")) +
+  labs(y = "Numero di auto")
+p + geom_bar(position = "fill") + labs(y = "Proporzione")
+```
+
+| Disposizione | Risponde meglio a | Punto debole |
+|---|---|---|
+| **Sovrapposte** (*stacked*) | Totali per categoria, più una suddivisione approssimativa | Solo il segmento inferiore ha una linea di base comune; gli altri sono difficili da confrontare |
+| **Affiancate** (*dodged*) | Confronto diretto dei conteggi dei sottogruppi | I totali si vedono meno |
+| **Riempite** (`position = "fill"`) | Confronto delle **proporzioni condizionate** tra categorie | Nasconde quante osservazioni ci sono dietro ogni barra |
+
+Il grafico riempito è la rappresentazione della distribuzione condizionata vista in [Descrivere due variabili](../05-descriptive/23-two-variables.qmd): all'interno di ciascuna classe di cilindri, la proporzione di auto con cambio automatico e manuale. Mostra chiaramente che il `r round(100 * prop.table(table(cars$cyl, cars$am), 1)["8", "automatico"])`% delle auto a 8 cilindri ha il cambio automatico. Metti la variabile **esplicativa** sull'asse x e la **risposta** nel riempimento, proprio come calcoleresti le percentuali all'interno delle categorie della variabile esplicativa.
+
+`position_dodge(preserve = "single")` mantiene tutte le barre della stessa larghezza anche quando manca una combinazione: è importante per dati come isola × specie in `penguins`, che ha celle vuote.
+
+### Barre proporzionali con etichette percentuali
+
+Per etichettare un grafico riempito, calcola tu le proporzioni e usa `position_fill(vjust = 0.5)` per centrare le etichette dentro i segmenti:
+
+```{r}
+#| label: fig-fill-labels
+#| fig-cap: "Composizione per specie di ciascuna isola, con percentuali e dimensioni dei gruppi."
+island_species <- penguins |>
+  count(island, species) |>
+  mutate(prop = n / sum(n), .by = island)
+
+island_n <- count(penguins, island)
+
+ggplot(island_species, aes(x = island, y = prop, fill = species)) +
+  geom_col(position = "fill") +
+  geom_text(aes(label = scales::percent(prop, accuracy = 1)),
+            position = position_fill(vjust = 0.5), colour = "white") +
+  geom_text(data = island_n, aes(x = island, y = 1.04,
+                                 label = paste0("n = ", n)),
+            inherit.aes = FALSE) +
+  labs(x = NULL, y = "Proporzione", fill = "Specie")
+```
+
+Scrivere $n$ sopra ogni barra corregge il principale punto debole delle barre proporzionali: il 100% di Adelie a Torgersen si basa su `r island_n$n[island_n$island == "Torgersen"]` pinguini, i valori di Biscoe su `r island_n$n[island_n$island == "Biscoe"]`.
+
+### Grafici a mosaico
+
+Un **grafico a mosaico** fa un passo in più: le *larghezze* delle barre sono proporzionali alla dimensione di ciascun gruppo, quindi l'**area** di ogni rettangolo è proporzionale al conteggio in quella cella. R base ne disegna uno direttamente da una tabella:
+
+```{r}
+#| label: fig-mosaic
+#| fig-cap: "Grafico a mosaico di isola per specie: le larghezze delle colonne riflettono il numero di pinguini per isola."
+mosaicplot(table(penguins$island, penguins$species),
+           main = "", xlab = "Isola", ylab = "Specie",
+           color = c("#E69F00", "#56B4E9", "#009E73"))
+```
+
+(Per una versione ggplot2, vedi il pacchetto `ggmosaic`.)
+
+## 7. Perché i grafici a torta sono di solito peggiori
+
+Un grafico a torta mostra le proporzioni come **angoli e aree** delle fette. Gli esseri umani giudicano angoli e aree in modo molto meno accurato delle lunghezze su una scala comune. Confronta gli stessi sei conteggi:
+
+```{r}
+#| label: fig-pie
+#| fig-cap: "Il numero di pulcini per tipo di mangime come grafico a torta e come grafico a barre. Quale mangime ha più pulcini?"
+#| fig-subcap:
+#|   - "Grafico a torta"
+#|   - "Grafico a barre"
+#| layout-ncol: 2
+#| fig-asp: 0.9
+ggplot(chickwts, aes(x = "", fill = feed)) +
+  geom_bar(width = 1) +
+  coord_polar(theta = "y") +
+  theme_void() +
+  labs(fill = "Mangime")
+
+ggplot(chickwts, aes(y = fct_rev(fct_infreq(feed)))) +
+  geom_bar() +
+  labs(x = "Numero di pulcini", y = NULL)
+```
+
+Nella torta è quasi impossibile dire se sia più grande soybean o casein, o quali fette siano uguali; nel grafico a barre è immediato (`r max(table(chickwts$feed))` pulcini con soybean, tre mangimi con `r sort(table(chickwts$feed))[[3]]` ciascuno). Le torte richiedono anche una legenda dei colori e falliscono del tutto quando si devono confrontare due gruppi fianco a fianco. Una torta può essere accettabile per **due o tre** parti di un intero con dimensioni molto diverse; altrimenti usa le barre. Non usare mai torte 3D: la prospettiva distorce le fette.
+
+Anche la torta si costruisce con la grammatica dei grafici: è una singola barra sovrapposta (`x = ""`) disegnata in coordinate polari (`coord_polar(theta = "y")`).
+
+## 8. Barre per le medie: il problema del "dynamite plot"
+
+Un grafico molto comune negli articoli scientifici mostra la **media** di ciascun gruppo come una barra con una **barra d'errore** sopra, di solito la media ± un **errore standard** (ES). L'ES misura con quale precisione una media campionaria stima la media della popolazione: $\text{ES} = s / \sqrt{n}$ (imparerai esattamente perché in [Distribuzioni campionarie](../07-probability/30-sampling-distributions.qmd)).
+
+```{r}
+#| label: feed-summary
+feed_summary <- chickwts |>
+  summarise(n = n(),
+            mean = mean(weight),
+            se = sd(weight) / sqrt(n),
+            .by = feed)
+feed_summary
+```
+
+```{r}
+#| label: fig-dynamite
+#| fig-cap: "A sinistra: il classico 'dynamite plot' (barra = media, baffo = ± 1 ES). A destra: le stesse medie ed ES disegnati sopra i singoli pulcini."
+#| fig-subcap:
+#|   - "Dynamite plot"
+#|   - "Dati, media e ± 1 ES"
+#| layout-ncol: 2
+#| fig-asp: 0.9
+ggplot(feed_summary, aes(feed, mean)) +
+  geom_col(fill = "grey70") +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width = 0.3) +
+  labs(x = NULL, y = "Peso (g)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(chickwts, aes(feed, weight)) +
+  geom_jitter(width = 0.15, height = 0, alpha = 0.4) +
+  stat_summary(fun.data = mean_se, geom = "pointrange",
+               colour = "#D55E00") +
+  labs(x = NULL, y = "Peso (g)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Che cosa c'è di sbagliato nel dynamite plot?
+
+1. **Nasconde i dati.** Con 10–14 pulcini per gruppo, tutti i dati stanno nel grafico. Le barre non dicono nulla su variabilità, asimmetria, valori anomali o $n$; dataset molto diversi producono dynamite plot identici.
+2. **La barra suggerisce che i dati vadano da 0 alla media.** Per i conteggi una barra che parte da zero è naturale; per una media fa pensare che tutti i valori siano dentro la barra, mentre in realtà circa la metà sta sopra.
+3. **La barra d'errore è ambigua.** I lettori raramente sanno se si tratta di ± 1 DS, ± 1 ES o di un intervallo di confidenza al 95%: tre cose molto diverse. Dichiaralo sempre nella didascalia.
+4. **± 1 ES non è un intervallo per i dati.** Descrive l'incertezza della *media*, non dove si trovano le singole osservazioni (nel pannello di destra la maggior parte dei pulcini è ben fuori dalle barre d'errore).
+
+Alternative migliori: punti con jitter più media ± ES (pannello di destra), boxplot con punti, o violini (vedi [Grafici per le distribuzioni](25-distribution-plots.qmd)). `mean_se()` è una funzione ausiliaria di ggplot2 che restituisce la media e la media ± 1 ES per `stat_summary()`.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: DS, ES e intervalli di confidenza
+
+Per un gruppo con $n$ osservazioni, media $\bar x$ e deviazione standard $s$:
+
+- $\bar x \pm s$ descrive la **variabilità delle osservazioni**;
+- $\bar x \pm s/\sqrt n$ (± 1 ES) descrive l'**incertezza della media**; si riduce al crescere di $n$;
+- $\bar x \pm t_{0.975,\,n-1} \cdot s/\sqrt n$ è un **intervallo di confidenza al 95%** per la media della popolazione (circa $\bar x \pm 2\,\text{ES}$ per $n$ moderato); vedi [Intervalli di confidenza](../08-inference/32-confidence-intervals.qmd).
+
+In `stat_summary()`, `fun.data = mean_cl_normal` (che richiede il pacchetto `Hmisc`) fornisce intervalli al 95% basati sulla t, e `mean_se(mult = 2)` fornisce media ± 2 ES.
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **`geom_bar()` su una tabella di sintesi.** Conta le righe (tutte le barre di altezza 1). Usa `geom_col()` quando hai già le altezze.
+2. **Ordine alfabetico per categorie nominali.** Ordina per frequenza (`fct_infreq()`) o per valore (`fct_reorder()`); mantieni l'ordine naturale per le variabili ordinali.
+3. **Barre che non partono da zero.** La lunghezza di una barra *è* il valore; tagliare l'asse esagera le differenze. (Se lo zero è irrilevante, usa punti invece di barre.)
+4. **Barre sovrapposte per confrontare sottogruppi.** Solo il segmento inferiore ha una linea di base comune; usa barre affiancate o riempite.
+5. **Barre proporzionali senza $n$.** Il 100% di 3 non è il 100% di 300.
+6. **Dynamite plot.** Le barre delle medie con barre d'errore nascondono i dati; mostra i punti, e dichiara che cosa rappresentano le barre d'errore.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Hai un data frame con una riga per paese e una colonna `population`. Quale geom disegna una barra per paese con altezza pari alla popolazione?
+
+`geom_col()` con `aes(x = country, y = population)`: le altezze sono già nei dati. `geom_bar()` conterebbe le righe (una per paese) e disegnerebbe barre di altezza 1.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Vuoi mostrare se la proporzione di fumatori differisce tra cinque classi di età. Barre sovrapposte, affiancate o riempite?
+
+Barre riempite (`position = "fill"`) con la classe di età sull'asse x e l'abitudine al fumo come riempimento: mostrano direttamente le proporzioni condizionate. Mantieni le classi di età nel loro ordine naturale e scrivi $n$ su ogni barra.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Dai due motivi per cui un grafico dei dati a punti con media ± ES è migliore di una barra della media con barra d'errore.
+
+Mostra la distribuzione e il numero di osservazioni (variabilità, asimmetria e valori anomali sono visibili), e non suggerisce che i valori stiano tra zero e la media. (Rende anche chiaro che ± ES descrive la media, non i dati.)
+:::
+
+## 10. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — barre orizzontali ordinate.** Disegna un grafico a barre orizzontali del numero di pulcini per `feed` in `chickwts`, con il mangime più frequente in cima.
+
+```{webr}
+#| exercise: ex_26_1
+library(ggplot2)
+library(forcats)
+ggplot(chickwts, aes(y = ______(______(feed)))) +
+  geom_bar() +
+  labs(x = "Numero di pulcini", y = NULL)
+```
+
+::: {.hint exercise="ex_26_1"}
+`fct_infreq()` ordina per frequenza; `fct_rev()` inverte l'ordine in modo che la barra più lunga sia in cima.
+:::
+
+::: {.solution exercise="ex_26_1"}
+```r
+ggplot(chickwts, aes(y = fct_rev(fct_infreq(feed)))) +
+  geom_bar() +
+  labs(x = "Numero di pulcini", y = NULL)
+```
+Soybean ha il maggior numero di pulcini (14); horsebean il minore (10).
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — trova l'errore.** Questo codice dovrebbe disegnare la media di `len` per tipo di integratore in `ToothGrowth`, ma tutte le barre hanno altezza 1. Correggilo.
+
+```{webr}
+#| exercise: ex_26_2
+library(ggplot2)
+library(dplyr)
+tg_means <- ToothGrowth |>
+  summarise(mean_len = mean(len), .by = supp)
+
+ggplot(tg_means, aes(x = supp)) +
+  geom_bar()
+```
+
+::: {.hint exercise="ex_26_2"}
+Le altezze sono già calcolate in `mean_len`. Quale geom usa altezze precalcolate, e che cosa va associato a `y`?
+:::
+
+::: {.solution exercise="ex_26_2"}
+```r
+ggplot(tg_means, aes(x = supp, y = mean_len)) +
+  geom_col() +
+  labs(x = "Integratore", y = "Lunghezza media dei denti")
+```
+`geom_bar()` contava le righe di `tg_means` (una per integratore). Con `geom_col()` e `y = mean_len` le barre mostrano le medie (circa 20.7 per il succo d'arancia, `OJ`, e 17.0 per l'acido ascorbico, `VC`). Ancora meglio: mostra le 30 osservazioni per gruppo con dei punti, come nella Sezione 8.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — proporzioni condizionate.** Usando `penguins`, disegna barre riempite che mostrino la proporzione di femmine e maschi all'interno di ciascuna specie (escludi i pinguini di sesso ignoto). Il rapporto tra i sessi è bilanciato?
+
+```{webr}
+#| exercise: ex_26_3
+library(ggplot2)
+library(dplyr)
+penguins |>
+  filter(______) |>
+  ggplot(aes(x = species, fill = sex)) +
+  geom_bar(position = ______) +
+  labs(x = NULL, y = "Proporzione", fill = "Sesso")
+```
+
+::: {.hint exercise="ex_26_3"}
+Filtra con `!is.na(sex)` e usa `position = "fill"`.
+:::
+
+::: {.solution exercise="ex_26_3"}
+```r
+penguins |>
+  filter(!is.na(sex)) |>
+  ggplot(aes(x = species, fill = sex)) +
+  geom_bar(position = "fill") +
+  labs(x = NULL, y = "Proporzione", fill = "Sesso")
+```
+In ogni specie la suddivisione è molto vicina a 50/50: i ricercatori hanno campionato coppie di pinguini.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — sostituisci un dynamite plot.** Per `PlantGrowth` (peso delle piante `weight` per `group`), disegna punti con jitter con sopra la media di gruppo ± 1 ES. Poi rispondi: le barre d'errore mostrano dove si trova la maggior parte delle piante?
+
+```{webr}
+#| exercise: ex_26_4
+library(ggplot2)
+ggplot(PlantGrowth, aes(group, weight)) +
+  geom_jitter(width = 0.1, height = 0, alpha = 0.5) +
+  stat_summary(fun.data = ______, geom = "pointrange", colour = "#D55E00") +
+  labs(x = NULL, y = "Peso secco (g)",
+       caption = "Arancione: media ± 1 errore standard")
+```
+
+::: {.hint exercise="ex_26_4"}
+La funzione ausiliaria di ggplot2 che restituisce la media e la media ± 1 ES è `mean_se`.
+:::
+
+::: {.solution exercise="ex_26_4"}
+```r
+ggplot(PlantGrowth, aes(group, weight)) +
+  geom_jitter(width = 0.1, height = 0, alpha = 0.5) +
+  stat_summary(fun.data = mean_se, geom = "pointrange", colour = "#D55E00") +
+  labs(x = NULL, y = "Peso secco (g)",
+       caption = "Arancione: media ± 1 errore standard")
+```
+No: molte piante si trovano ben fuori dalle barre d'errore. L'ES descrive la precisione di ciascuna **media** (con 10 piante per gruppo), non la variabilità delle piante. La didascalia che dichiara che cosa sono le barre d'errore è essenziale.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — colore di capelli e occhi.** Converti `HairEyeColor` in un data frame con `as.data.frame()` (colonne `Hair`, `Eye`, `Sex`, `Freq`). Disegna (a) barre affiancate dei conteggi del colore degli occhi per ciascun colore di capelli, (b) barre riempite delle proporzioni, con etichette percentuali. Usa `geom_col()` perché i conteggi sono in `Freq`. Quale grafico mostra meglio che le persone bionde hanno per lo più gli occhi azzurri?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+hec <- as.data.frame(HairEyeColor) |>
+  summarise(n = sum(Freq), .by = c(Hair, Eye)) |>
+  mutate(prop = n / sum(n), .by = Hair)
+
+ggplot(hec, aes(Hair, n, fill = Eye)) +
+  geom_col(position = "dodge") +
+  labs(y = "Numero di studenti")
+
+ggplot(hec, aes(Hair, prop, fill = Eye)) +
+  geom_col(position = "fill") +
+  geom_text(aes(label = scales::percent(prop, accuracy = 1)),
+            position = position_fill(vjust = 0.5), size = 3) +
+  labs(y = "Proporzione per colore dei capelli")
+```
+Il grafico riempito mostra direttamente la distribuzione condizionata: circa il 74% degli studenti biondi ha gli occhi azzurri. I colori di riempimento qui sono quelli della tavolozza Okabe–Ito del corso; per i colori degli occhi potresti preferire `scale_fill_manual()` con colori intuitivi (mantenendoli distinguibili).
+:::
+:::
+
+## Riepilogo
+
+| Obiettivo | ggplot2 |
+|---|---|
+| Conteggi dai dati grezzi | `geom_bar()` |
+| Altezze precalcolate | `geom_col()` |
+| Ordinare per frequenza / per valore | `fct_infreq(x)`, `fct_reorder(x, value)`; `fct_rev()` per invertire |
+| Barre orizzontali | associa la categoria a `y` (oppure `coord_flip()`) |
+| Sovrapposte / affiancate / riempite | `position = "stack"` / `position_dodge(preserve = "single")` / `"fill"` |
+| Etichette dei valori | `geom_text(aes(label = n), vjust = -0.4)`; con `geom_bar()`: `stat = "count", aes(label = after_stat(count))` |
+| Etichette nelle barre riempite | `geom_text(..., position = position_fill(vjust = 0.5))` |
+| Grafico a mosaico | `mosaicplot(table(a, b))` |
+| Media ± ES sopra i dati | `geom_jitter()` + `stat_summary(fun.data = mean_se, geom = "pointrange")` |
+
+- Le barre confrontano **lunghezze a partire da zero**: devono partire da zero.
+- **Ordina** le barre nominali per grandezza; mantieni le categorie ordinali nel loro ordine naturale.
+- Per due variabili, le **barre riempite** mostrano le proporzioni condizionate: aggiungi $n$.
+- Preferisci le barre ai **grafici a torta**.
+- Non nascondere i dati dietro **barre delle medie**: mostra le osservazioni e dichiara che cosa rappresentano le barre d'errore.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wilke, C. O., *Fundamentals of Data Visualization*, capitoli "Visualizing amounts" e "Visualizing proportions", <https://clauswilke.com/dataviz/>
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitolo "Factors", <https://r4ds.hadley.nz>
+- Weissgerber, T. L. et al. (2015). Beyond bar and line graphs: time for a new data presentation paradigm. *PLOS Biology*, 13(4), e1002128.
+:::

@@ -1,0 +1,601 @@
+---
+title: "Importare i dati"
+subtitle: "Leggi in R file CSV, Excel, SPSS, Stata e SAS, correttamente fin dalla prima volta"
+description: "Lavora con percorsi relativi al progetto, leggi file delimitati con readr (tipi di colonna, codici per i valori mancanti, righe da saltare, virgola decimale), ripulisci i nomi delle colonne e importa file Excel, SPSS, Stata e SAS con readxl e haven."
+format:
+  live-html:
+    webr:
+      packages: ["readr"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(readr)
+```
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Data frame](../02-data/08-data-frames.qmd), [Tipi di dati](../01-foundations/03-data-types.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- scrivere percorsi dei file **relativi al progetto** con `here::here()` invece di usare `setwd()`;
+- importare file di testo delimitati con `readr::read_csv()`, controllando i tipi delle colonne, i codici dei valori mancanti, le righe da saltare e il separatore decimale;
+- ripulire nomi di colonna disordinati con `janitor::clean_names()`;
+- importare fogli Excel con `readxl` e file SPSS, Stata e SAS con `haven`, comprese le variabili con etichette;
+- verificare che un'importazione sia andata a buon fine prima di analizzare i dati.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(readr)
+library(dplyr)
+library(readxl)
+library(haven)
+```
+
+## 1. Perché preoccuparsi dell'importazione?
+
+I dati reali raramente nascono dentro R. Arrivano come CSV esportato da un database, come cartella di lavoro Excel di un collega, come file SPSS di un ufficio che gestisce un'indagine. Importare sembra banale, ma molti errori di analisi nascono proprio qui:
+
+- una colonna di numeri letta come **testo** perché una cella contiene `"n/a"`;
+- `-99` usato come codice di valore mancante e poi **incluso nella media** come se fosse un valore reale;
+- **virgole** decimali (`3,14`) che spezzano un numero in due colonne;
+- codici prodotto come `00123` che perdono gli zeri iniziali.
+
+L'obiettivo di questa lezione non è solo *leggere* un file, ma leggerlo **correttamente** e **verificare** di averlo fatto.
+
+## 2. File e percorsi {#files-and-paths}
+
+Un **percorso** (*path*) dice a R dove si trova un file. Un percorso *assoluto* parte dalla radice del disco (`C:/Users/anna/Desktop/thesis/data/mtcars.csv`) e funziona solo sul computer di Anna. Un percorso *relativo* parte dalla **directory di lavoro**, la cartella in cui R "si trova" in quel momento:
+
+```{r}
+#| label: getwd
+#| eval: false
+getwd()   # dove mi trovo?
+```
+
+L'approccio robusto consiste nell'organizzare ogni analisi come **progetto** (un progetto RStudio/Positron, o semplicemente una cartella con un file `.Rproj` o `.here`) e nello scrivere ogni percorso **relativo alla radice del progetto**. Il pacchetto `here` trova per te quella radice, da qualunque posizione venga eseguito lo script:
+
+```{r}
+#| label: here
+#| eval: false
+here::here("data", "mtcars.csv")
+#> "/…/An-R-Tutorial-for-Beginners/data/mtcars.csv"
+```
+
+In questo corso la scorciatoia `data_path("mtcars.csv")` (definita nel file `_common.R` del corso) equivale a `here::here("data", "mtcars.csv")`. Nei tuoi progetti scrivi `here::here("data", "file.csv")`.
+
+```{r}
+#| label: list-files
+file.exists(data_path("mtcars.csv"))
+head(list.files(data_path()), 8)
+```
+
+::: {.callout-warning}
+## Non usare `setwd()`
+`setwd("C:/Users/anna/Desktop/thesis")` all'inizio di uno script rende lo script inutilizzabile per chiunque altro (e anche per Anna sul suo nuovo portatile). Usa i progetti e `here::here()`. Su Windows scrivi i percorsi con la barra `/`, oppure raddoppia le barre rovesciate `\\`: una singola `\` in una stringa R inizia una *sequenza di escape*.
+:::
+
+## 3. Leggere file CSV con `readr`
+
+Un file **CSV** (*comma-separated values*, valori separati da virgole) è testo semplice: una riga per ogni riga della tabella, valori separati da virgole, di solito con una prima riga che contiene i nomi delle colonne. Se apri `data/mtcars.csv` con un editor di testo vedrai:
+
+```
+"","mpg","cyl","disp","hp","drat","wt","qsec","vs","am","gear","carb"
+"Mazda RX4",21,6,160,110,3.9,2.62,16.46,0,1,4,4
+```
+
+`readr::read_csv()` lo legge in un **tibble** (un data frame moderno):
+
+```{r}
+#| label: read-mtcars
+cars_raw <- read_csv(data_path("mtcars.csv"))
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+`read_csv()` ti racconta che cosa ha fatto. La prima colonna aveva un nome vuoto (`""`), quindi readr ha inventato il nome `...1` (*"New names"*). Poi mostra la **specifica delle colonne** (*column specification*): quante righe e colonne, quali colonne ha interpretato come `chr` (caratteri) e quali come `dbl` (double, cioè numeri). Leggi sempre questo messaggio: un `chr` inatteso di solito segnala un problema nei dati.
+:::
+
+```{r}
+#| label: rename-mtcars
+cars_df <- cars_raw |>
+  rename(model = ...1)
+glimpse(cars_df)
+```
+
+### Tipi di colonna: prima indovina, poi rendi esplicito
+
+readr *indovina* il tipo di ogni colonna dalle prime 1000 righe. Una volta che conosci i dati, è buona pratica dichiarare esplicitamente i tipi importanti con `col_types`. Le colonne che non elenchi vengono comunque indovinate, perché il valore predefinito è `.default = col_guess()`:
+
+```{r}
+#| label: col-types
+cars_df <- read_csv(
+  data_path("mtcars.csv"),
+  col_types = cols(
+    cyl = col_integer(),
+    am  = col_factor(levels = c("0", "1"))
+  )
+) |>
+  rename(model = ...1)
+
+cars_df |> select(model, cyl, am) |> head(3)
+```
+
+Le funzioni `col_*()`: `col_character()`, `col_double()`, `col_integer()`, `col_logical()`, `col_factor()`, `col_date(format = "...")`, `col_skip()` (scarta la colonna). Esiste anche una forma compatta come stringa: `col_types = "cddi"` significa carattere, double, double, intero.
+
+### Un file più grande: `prison.csv`
+
+```{r}
+#| label: prison
+prison <- read_csv(data_path("prison.csv"), show_col_types = FALSE)
+dim(prison)
+prison |> select(1:6) |> head(3)
+```
+
+La prima colonna `x` è solo un numero di riga scritto dal software che ha salvato il file: eliminala con `select(-x)`. `show_col_types = FALSE` nasconde il messaggio con la specifica, una volta che l'hai controllata.
+
+### Codici per i valori mancanti: `na =`
+
+Per impostazione predefinita `read_csv()` considera mancanti le celle vuote e il testo `NA`. Molti file usano altri codici. Ecco un piccolo file scritto direttamente nel codice (racchiudere il testo in `I()` dice a readr che si tratta di **dati letterali**, non del nome di un file):
+
+```{r}
+#| label: na-codes
+txt <- "id,age,income
+1,34,52000
+2,-99,48000
+3,41,n/a
+4,29,"
+
+read_csv(I(txt), show_col_types = FALSE)                      # predefinito
+read_csv(I(txt), na = c("", "NA", "-99", "n/a"), show_col_types = FALSE)
+```
+
+Nella prima versione `age` contiene `-99` come numero reale e `income` viene letta come **testo**, a causa di `"n/a"`. Nella seconda versione entrambe le colonne sono numeriche, con `NA` corretti. I dati mancanti meritano una lezione a sé: vedi [Dati mancanti](20-missing-data.qmd).
+
+### Saltare righe: `skip` e `comment`
+
+Alcuni file iniziano con righe di note prima dell'intestazione:
+
+```{r}
+#| label: skip
+txt <- "Esportato dal database del laboratorio
+Data: 2025-11-03
+sample,value
+A,1.2
+B,3.4"
+
+read_csv(I(txt), skip = 2, show_col_types = FALSE)
+```
+
+`n_max = 100` legge solo le prime 100 righe (utile per dare un'occhiata a file enormi) e `comment = "#"` ignora tutto ciò che segue un `#`.
+
+### Virgola decimale e punto e virgola
+
+In gran parte dell'Europa continentale il separatore decimale è la virgola, quindi i file CSV usano il **punto e virgola** per separare i valori. È esattamente il caso dell'Italia: un file salvato come "CSV" da Excel con le impostazioni italiane usa `;` tra i valori e `,` per i decimali, ed è quindi il formato che incontrerai più spesso. `read_csv2()` gestisce questa convenzione; `read_delim()` ti permette di impostare qualsiasi separatore e qualsiasi *locale* (impostazioni locali):
+
+```{r}
+#| label: csv2
+txt <- "city;temperature;rain
+Palermo;18,5;2,1
+Milano;13,2;8,4"
+
+read_csv2(I(txt), show_col_types = FALSE)
+
+read_delim(I(txt), delim = ";",
+           locale = locale(decimal_mark = ","), show_col_types = FALSE)
+```
+
+In entrambi i casi `temperature` e `rain` vengono lette come numeri (`18.5`, `2.1`, …): nell'output R mostra sempre il punto come separatore decimale, qualunque fosse la convenzione nel file. Se invece usassi `read_csv()` su questo file, ogni riga finirebbe in un'unica colonna di testo.
+
+Usa `read_tsv()` per i file separati da tabulazioni e `read_delim(delim = "|")` per qualsiasi altro separatore.
+
+## 4. R base: `read.csv()`
+
+R ha anche funzioni di lettura incorporate. Non richiedono pacchetti ed è bene saperle riconoscere nel codice più vecchio:
+
+```{r}
+#| label: base-read
+cars_base <- read.csv(data_path("mtcars.csv"), row.names = 1)
+head(cars_base, 3)
+```
+
+| | `read.csv()` (base) | `readr::read_csv()` |
+|---|---|---|
+| Risultato | `data.frame` | tibble |
+| Nomi di colonna insoliti | modificati (`"Age (y)"` → `Age..y.`) | mantenuti così come sono |
+| Colonne di testo | carattere (da R 4.0) | carattere |
+| Riporta i tipi indovinati | no | sì |
+| Velocità su file grandi | più lenta | più veloce |
+| Virgola decimale | `read.csv2()` o `dec = ","` | `read_csv2()` o `locale()` |
+| Dati letterali | `text = "..."` | `I("...")` |
+
+Per compiti rapidi vanno bene entrambe. In questo corso usiamo `readr` perché è più veloce, più coerente e ti dice che cosa ha indovinato.
+
+## 5. Ripulire i nomi delle colonne: `janitor::clean_names()`
+
+I file hanno spesso nomi di colonna con spazi, maiuscole, simboli o lettere accentate. Sono scomodi da scrivere (servono gli apici inversi: `` df$`Età (anni)` ``). `janitor::clean_names()` li trasforma in `snake_case`:
+
+```{r}
+#| label: clean-names
+messy <- read_csv(I("ID Passeggero,Età (anni),Tariffa Biglietto £,%Sopravvissuto
+1,22,7.25,0
+2,38,71.28,1"), show_col_types = FALSE)
+names(messy)
+
+messy |> janitor::clean_names() |> names()
+```
+
+Esegui `clean_names()` subito dopo l'importazione, e il resto del codice sarà più facile da scrivere e da leggere.
+
+## 6. File Excel con `readxl`
+
+`readxl` legge sia i file `.xls` sia i `.xlsx`, senza bisogno di software esterni. Include alcune cartelle di lavoro di esempio:
+
+```{r}
+#| label: readxl-examples
+readxl_example()                       # elenca i file di esempio
+path_xl <- readxl_example("datasets.xlsx")
+excel_sheets(path_xl)                  # nomi dei fogli
+```
+
+```{r}
+#| label: read-excel
+iris_xl   <- read_excel(path_xl)                     # primo foglio
+quakes_a  <- read_excel(path_xl, sheet = "quakes")   # per nome
+pos <- match("quakes", excel_sheets(path_xl))         # la sua posizione
+quakes_b  <- read_excel(path_xl, sheet = pos)        # per posizione
+identical(quakes_a, quakes_b)
+```
+
+Argomenti utili:
+
+```{r}
+#| label: read-excel-args
+read_excel(path_xl, n_max = 3)                        # solo le prime righe
+read_excel(path_xl, range = "B1:D4")                  # un intervallo Excel
+read_excel(path_xl, sheet = "mtcars", range = cell_cols("A:C")) |> dim()
+read_excel(path_xl, range = cell_rows(1:4))           # righe 1–4 (intestazione inclusa)
+```
+
+```{r}
+#| label: read-excel-na
+iris_na <- read_excel(path_xl, na = "setosa")   # tratta "setosa" come mancante
+sum(is.na(iris_na$Species))
+```
+
+I file Excel contengono spesso più tabelle in un solo foglio, celle unite, colori che hanno un significato e note a margine. `range =` e `skip =` aiutano, ma la soluzione più pulita è spesso chiedere un file più ordinato.
+
+## 7. File SPSS, Stata e SAS con `haven`
+
+`haven` legge (e scrive) i formati dei tre pacchetti statistici classici. La cartella `data/` contiene lo stesso piccolo insieme di dati (ammissione a una scuola di specializzazione: `admit`, `gre`, `gpa`, `rank`) in tutti e tre i formati:
+
+```{r}
+#| label: haven-read
+df_sas   <- read_sas(data_path("binary.sas7bdat"))   # SAS
+df_stata <- read_dta(data_path("binary.dta"))        # Stata
+df_spss  <- read_sav(data_path("binary.sav"))        # SPSS
+head(df_spss, 3)
+```
+
+```{r}
+#| label: haven-compare
+sapply(list(sas = df_sas, stata = df_stata, spss = df_spss), dim)
+```
+
+Ogni chiamata restituisce un tibble. I nomi delle colonne possono differire tra i formati per maiuscole e minuscole (SAS e SPSS spesso li salvano in maiuscolo), quindi anche qui `janitor::clean_names()` è utile.
+
+### Dati con etichette e `as_factor()`
+
+I file SPSS e Stata spesso memorizzano le variabili categoriali come **numeri con etichette di valore**, per esempio `1 = "maschio"`, `2 = "femmina"`. `haven` conserva entrambe le informazioni in una classe speciale, `haven_labelled`. Ecco un piccolo esempio costruito a mano:
+
+```{r}
+#| label: labelled
+survey <- tibble(
+  id  = 1:4,
+  sex = labelled(c(1, 2, 2, 1), labels = c(maschio = 1, femmina = 2)),
+  satisfaction = labelled(c(3, 5, 4, 9),
+                          labels = c(bassa = 1, alta = 5, "non risponde" = 9))
+)
+survey$sex
+```
+
+Prima di analizzarle, converti le variabili con etichette in ciò che sono davvero:
+
+```{r}
+#| label: as-factor
+survey |>
+  mutate(
+    sex = as_factor(sex),                                   # categoriale
+    satisfaction = zap_labels(satisfaction),                # numerica
+    satisfaction = if_else(satisfaction == 9, NA, satisfaction)
+  )
+```
+
+- `as_factor()` trasforma i codici in un fattore usando le etichette;
+- `zap_labels()` elimina le etichette e conserva i numeri (utile per una scala numerica);
+- codici come `9 = "non risponde"` vanno trasformati in `NA` **prima** di calcolare una media: è esattamente il problema del `-99` visto nella Sezione 3.
+
+## 8. Altre fonti
+
+### Leggere da un URL
+
+`read_csv()` accetta un indirizzo web al posto del nome di un file. Il file viene scaricato e letto in un solo passaggio:
+
+```{r}
+#| label: url
+#| eval: false
+url <- "https://raw.githubusercontent.com/tidyverse/readr/main/inst/extdata/mtcars.csv"
+mtcars_web <- read_csv(url)
+```
+
+Per la riproducibilità è spesso meglio scaricare il file una volta sola in `data/` (con `download.file(url, here::here("data", "mtcars_web.csv"))`) e leggere la copia locale: i file sul web possono cambiare o sparire.
+
+### Il formato nativo di R: `.rds`
+
+Un file `.rds` conserva **un oggetto R esattamente com'è**, compresi i tipi delle colonne e i livelli dei fattori. È il formato migliore per i risultati intermedi che leggerà solo R:
+
+```{r}
+#| label: rds
+#| eval: false
+penguins_clean <- readRDS(here::here("output", "penguins_clean.rds"))
+```
+
+Come creare questi file è spiegato in [Esportare i dati](19-export.qmd).
+
+## 9. Controlla sempre l'importazione
+
+Dopo ogni importazione, dedica un minuto a questi controlli:
+
+```{r}
+#| label: check-import
+dim(prison)                         # numero di righe e colonne atteso?
+prison |> select(state, year, pris, criv) |> glimpse()  # tipi sensati?
+prison |> select(state, year, pris) |> summary()        # intervalli sensati?
+sum(is.na(prison))                  # valori mancanti dove te li aspetti?
+```
+
+Con `readr`, `problems(df)` elenca le celle che non è stato possibile interpretare secondo il tipo della colonna, e `spec(df)` mostra la specifica delle colonne usata, pronta da incollare in `col_types`.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Percorsi assoluti e `setwd()`.** Non funzionano su nessun altro computer. Usa un progetto e `here::here()`.
+2. **Non leggere la specifica delle colonne.** Una colonna numerica mostrata come `chr` significa che da qualche parte c'è un valore non numerico (`"n/a"`, `"12,5"`, `"<0.01"`).
+3. **Codici di valore mancante trattati come dati.** Dichiara `-99`, `999`, `"."` ecc. in `na =` (oppure ricodificali subito dopo l'importazione).
+4. **Zeri iniziali persi.** CAP e identificativi come `00123` vanno letti come testo: `col_types = cols(id = col_character())`.
+5. **Separatore o simbolo decimale sbagliati.** Se tutto finisce in un'unica colonna, o i numeri vengono spezzati, prova `read_csv2()` oppure `read_delim()` con i `delim` e `locale` corretti.
+6. **Dimenticare le variabili con etichette.** Calcolare una media sui codici SPSS `1/2` del sesso non ha senso; converti prima con `as_factor()`.
+:::
+
+## 10. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Lo script di un collega inizia con `setwd("C:/Users/marco/stats")`. Perché non funzionerà sul tuo computer, e che cosa dovrebbe usare invece?
+
+La cartella non esiste sul tuo computer. Lo script dovrebbe stare in un progetto e riferirsi ai file con percorsi relativi al progetto, per esempio `here::here("data", "survey.csv")`.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Dopo `read_csv()`, la colonna `weight` viene mostrata come `<chr>`. Qual è la causa più probabile?
+
+Almeno un valore della colonna non è un numero: un codice di valore mancante come `"n/a"`, un'unità di misura (`"72 kg"`) o una virgola decimale. Esamina la colonna con `unique()` o `problems()`, poi correggi con `na =`, `locale()` o ripulendo il testo.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Quale funzione useresti per un file le cui prime righe sono `name;height` e `Anna;1,68`?
+
+`read_csv2()` (separatore punto e virgola, virgola decimale), oppure `read_delim(delim = ";", locale = locale(decimal_mark = ","))`. In R base: `read.csv2()`.
+:::
+
+## 11. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+Il browser non può vedere i file nella cartella `data/`, quindi questi esercizi usano piccoli file scritti direttamente nel codice.
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — punto e virgola e virgola decimale (R base).** Il testo qui sotto usa `;` come separatore e `,` come separatore decimale. Leggilo con R base in modo che `height` sia numerica, poi calcola l'altezza media.
+
+```{webr}
+#| exercise: ex_18_1
+txt <- "name;height;age
+Anna;1,68;23
+Luca;1,82;25
+Sara;1,75;22"
+people <- read.csv(text = txt, sep = ______, dec = ______)
+str(people)
+mean(people$height)
+```
+
+::: {.hint exercise="ex_18_1"}
+`sep = ";"` e `dec = ","`. In alternativa, `read.csv2(text = txt)` usa proprio questi valori predefiniti.
+:::
+
+::: {.solution exercise="ex_18_1"}
+```r
+people <- read.csv(text = txt, sep = ";", dec = ",")
+str(people)
+mean(people$height)   # 1.75
+```
+Con il valore predefinito `sep = ","` l'intera riga finirebbe in un'unica colonna, e `"1,68"` non diventerebbe mai un numero.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — codici di valore mancante con readr.** In questo file i valori mancanti sono codificati come `-99` e `"."`. Leggilo con `read_csv()` in modo che entrambi diventino `NA`, poi calcola la media di `score` ignorando i valori mancanti.
+
+```{webr}
+#| exercise: ex_18_2
+library(readr)
+txt <- "student,score,hours
+s1,28,10
+s2,-99,4
+s3,24,.
+s4,30,12
+s5,.,7"
+grades <- read_csv(I(txt), na = ______, show_col_types = FALSE)
+grades
+mean(grades$score, na.rm = TRUE)
+```
+
+::: {.hint exercise="ex_18_2"}
+`na` accetta un vettore di caratteri con tutti i codici, per esempio `c("", "NA", "-99", ".")`.
+:::
+
+::: {.solution exercise="ex_18_2"}
+```r
+grades <- read_csv(I(txt), na = c("", "NA", "-99", "."),
+                   show_col_types = FALSE)
+mean(grades$score, na.rm = TRUE)   # (28 + 24 + 30) / 3, circa 27.3
+```
+Senza `na =`, `score` e `hours` vengono lette come testo (a causa di `"."`), e se le convertissi con `as.numeric()` il `-99` trascinerebbe la media fino a circa −4.3.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — trova il bug: zeri iniziali persi.** I codici prodotto qui sotto devono conservare gli zeri iniziali, ma dopo l'importazione `code` è un numero. Correggi la chiamata con `col_types`.
+
+```{webr}
+#| exercise: ex_18_3
+library(readr)
+txt <- "code,product,price
+00123,penna,1.5
+00456,quaderno,3.2
+10001,spillatrice,7.9"
+shop <- read_csv(I(txt), show_col_types = FALSE)
+shop
+```
+
+::: {.hint exercise="ex_18_3"}
+Aggiungi `col_types = cols(code = col_character())`; le altre colonne vengono comunque indovinate.
+:::
+
+::: {.solution exercise="ex_18_3"}
+```r
+shop <- read_csv(I(txt), col_types = cols(code = col_character()))
+shop
+```
+Ora `code` mostra `"00123"`, `"00456"`, `"10001"`. Gli identificativi sono etichette, non quantità: leggili come testo anche se sembrano numeri. In R base l'equivalente è `read.csv(text = txt, colClasses = c(code = "character"))`.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — salta le note iniziali.** Questa esportazione ha due righe di note prima dei nomi delle colonne e una riga di commento in mezzo ai dati. Leggila correttamente.
+
+```{webr}
+#| exercise: ex_18_4
+library(readr)
+txt <- "Stazione: Palermo
+Unità: mm
+month,rain
+jan,68
+# feb mancante: sensore guasto
+mar,52"
+read_csv(I(txt), skip = ______, comment = ______, show_col_types = FALSE)
+```
+
+::: {.hint exercise="ex_18_4"}
+Salta le prime 2 righe; le righe che iniziano con `"#"` sono commenti.
+:::
+
+::: {.solution exercise="ex_18_4"}
+```r
+read_csv(I(txt), skip = 2, comment = "#", show_col_types = FALSE)
+```
+Il risultato ha due righe (`jan`, `mar`) e due colonne, con `rain` numerica.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — tre formati, un solo insieme di dati.** Leggi `binary.sas7bdat`, `binary.dta` e `binary.sav` dalla cartella `data/` del corso, ripulisci i nomi delle colonne e verifica se i tre data frame contengono gli stessi valori. Poi converti `rank` in un fattore e conta i candidati per ciascun `rank`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+library(haven)
+library(dplyr)
+
+sas   <- read_sas(here::here("data", "binary.sas7bdat")) |>
+  janitor::clean_names()
+stata <- read_dta(here::here("data", "binary.dta")) |>
+  janitor::clean_names()
+spss  <- read_sav(here::here("data", "binary.sav")) |>
+  janitor::clean_names()
+
+names(sas); names(stata); names(spss)
+
+# confronta solo i valori (formati ed etichette salvati come attributi possono differire)
+all.equal(zap_formats(zap_labels(sas)), zap_formats(zap_labels(stata)),
+          check.attributes = FALSE)
+all.equal(zap_formats(zap_labels(sas)), zap_formats(zap_labels(spss)),
+          check.attributes = FALSE)
+
+sas |> mutate(rank = factor(rank)) |> count(rank)
+```
+I tre file contengono gli stessi 400 candidati. Differiscono solo nei metadati (formati di visualizzazione, etichette delle variabili), ed è per questo che li confrontiamo dopo `zap_formats()`/`zap_labels()` e con `check.attributes = FALSE`.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 6 — un'intera cartella di lavoro Excel.** Leggi **ogni** foglio di `readxl_example("datasets.xlsx")` in una lista di tibble con nomi, un elemento per foglio, e stampa le dimensioni di ciascuno. (Suggerimento: itera su `excel_sheets()` con `purrr::map()` o `lapply()`; vedi [Iterazione](../03-programming/17-iteration.qmd).)
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+library(readxl)
+path_xl <- readxl_example("datasets.xlsx")
+sheets  <- excel_sheets(path_xl)
+
+all_sheets <- purrr::map(sheets, \(s) read_excel(path_xl, sheet = s))
+names(all_sheets) <- sheets
+
+purrr::map(all_sheets, dim)
+```
+`purrr::set_names(sheets)` prima di `map()` è un'elegante alternativa all'assegnare i nomi alla lista in un secondo momento.
+:::
+:::
+
+## Riepilogo
+
+| Compito | Funzione | Argomenti principali |
+|---|---|---|
+| Percorso relativo al progetto | `here::here("data", "f.csv")` | — |
+| CSV (virgola) | `readr::read_csv()` | `col_types`, `na`, `skip`, `n_max`, `comment` |
+| CSV (punto e virgola, virgola decimale) | `readr::read_csv2()` | come sopra |
+| Qualsiasi separatore / locale | `readr::read_delim()` | `delim`, `locale = locale(decimal_mark = ",")` |
+| CSV in R base | `read.csv()`, `read.csv2()` | `sep`, `dec`, `na.strings`, `colClasses`, `text` |
+| Ripulire i nomi | `janitor::clean_names()` | — |
+| Excel | `readxl::read_excel()`, `excel_sheets()` | `sheet`, `range`, `n_max`, `na`, `skip` |
+| SAS / Stata / SPSS | `haven::read_sas()`, `read_dta()`, `read_sav()` | — |
+| Valori con etichette | `haven::as_factor()`, `zap_labels()` | — |
+| Un oggetto R | `readRDS()` | — |
+
+- Organizza il lavoro in **progetti** e usa **percorsi relativi**; mai `setwd()`.
+- **Leggi la specifica delle colonne**: colonne di testo inattese segnalano un problema.
+- Dichiara esplicitamente i **codici dei valori mancanti** e i **tipi delle colonne**.
+- **Controlla ogni importazione**: dimensioni, tipi, intervalli, valori mancanti.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitoli "Data import" e "Spreadsheets", <https://r4ds.hadley.nz/data-import.html>
+- Documentazione di readr, <https://readr.tidyverse.org>
+- Documentazione di readxl, <https://readxl.tidyverse.org>
+- Documentazione di haven, <https://haven.tidyverse.org>
+:::

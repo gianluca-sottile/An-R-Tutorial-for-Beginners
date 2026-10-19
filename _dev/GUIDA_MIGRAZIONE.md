@@ -117,3 +117,12 @@ Ogni vecchia pagina `R-course_lesson-N.html` reindirizza automaticamente alla nu
 
 - Nella riorganizzazione dei file è stato eliminato per errore `R_logo.png` (il logo ufficiale di R): non è usato dal nuovo sito, che ha un logo proprio (`images/logo.svg`), ma se ti serve è recuperabile dalla cronologia Git del repository.
 - Il piano didattico completo e l'elenco degli errori corretti sono in `_UPGRADE_PLAN.md`.
+
+## Versione italiana (fase 1)
+
+- I sorgenti italiani sono in `it/` con **gli stessi nomi di file** dell'inglese (`it/lessons/08-inference/34-t-tests.qmd`, …). Oggi sono tradotti la home, le pagine generali e i livelli 1–3 (lezioni 1–37); il livello 4 e il deep learning restano in inglese.
+- `it/_metadata.yml` imposta `lang: it`: Quarto traduce da solo i testi dell'interfaccia ("In questa pagina", "Cerca", "Copia" …).
+- Il pulsante **Italiano / English** nella barra in alto è gestito da `assets/lang-switch.html`: porta alla stessa pagina nell'altra lingua (se la pagina italiana non esiste ancora, alla home italiana). Quando traduci nuove lezioni, aggiorna l'espressione `TRANSLATED` in quel file e aggiungi le pagine alla sidebar `id: it` in `_quarto.yml`.
+- Terminologia: `_dev/GLOSSARIO_EN_IT.md`; regole di traduzione: `_dev/TRANSLATION_GUIDE.md`.
+- **Manutenzione:** l'inglese è la versione di riferimento. Quando correggi una lezione inglese, applica la stessa correzione al file corrispondente in `it/` (il codice è identico, cambiano solo testi e commenti).
+- Il primo `quarto render` dopo l'aggiunta dell'italiano esegue anche il codice delle 37 lezioni italiane (circa il doppio del tempo); poi `freeze` lo rende di nuovo rapido.

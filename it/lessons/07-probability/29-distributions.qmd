@@ -1,0 +1,660 @@
+---
+title: "Distribuzioni di probabilità"
+subtitle: "Binomiale, Poisson, normale e compagnia — e le quattro funzioni di R che valgono per tutte"
+description: "Impara la famiglia di funzioni d/p/q/r di R, le distribuzioni binomiale, di Poisson, uniforme e normale, conosci le famiglie t, chi-quadrato e F e usa i QQ-plot per confrontare i dati con una distribuzione."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 3 · Inferenza]{.level-3} [⏱ ~80 min]{} [Prerequisiti: [Casualità e simulazione](28-randomness-simulation.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- usare le quattro funzioni `d*()`, `p*()`, `q*()` e `r*()` per qualsiasi distribuzione in R, e spiegare che cosa restituisce ciascuna;
+- riconoscere le situazioni descritte dalle distribuzioni **di Bernoulli**, **binomiale**, **di Poisson**, **uniforme** e **normale**, e calcolare probabilità con esse;
+- standardizzare un valore (punteggio z) e usare `pnorm()`/`qnorm()` per trovare probabilità e valori soglia;
+- riconoscere le forme delle distribuzioni **t**, **chi-quadrato** e **F** usate nei test delle lezioni successive;
+- leggere un **QQ-plot** e giudicare se un modello normale è una descrizione ragionevole di una variabile.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(ggplot2)
+```
+
+## 1. Perché ci servono le distribuzioni?
+
+Nella [lezione precedente](28-randomness-simulation.qmd) abbiamo simulato dadi e monete elencando ogni esito e la sua probabilità. Le domande reali sono spesso più complesse:
+
+- *Uno studente risponde a caso a tutte le 20 domande di un quiz a scelta multipla. Quanto è probabile che superi la prova?*
+- *Un pronto soccorso riceve in media 3 pazienti all'ora. Quanto spesso ne arriveranno 6 o più in un'ora?*
+- *Quanto è insolito un pinguino Gentoo che pesa più di 6 kg?*
+
+Ogni domanda riguarda una variabile casuale e, in ciascun caso, una **distribuzione di probabilità** — un modello matematico che dice quali valori sono possibili e con quale probabilità — risponde in una riga di R. Un piccolo insieme di distribuzioni ricorre continuamente perché descrive modi comuni in cui i dati vengono generati: contare successi, contare eventi, sommare molti piccoli effetti.
+
+## 2. La famiglia `d`/`p`/`q`/`r`
+
+Ogni distribuzione in R è accompagnata da quattro funzioni. I loro nomi sono formati da un **prefisso** più il nome abbreviato della distribuzione (`binom`, `pois`, `unif`, `norm`, `t`, `chisq`, `f`, …):
+
+| Prefisso | Domanda a cui risponde | Esempio con la normale | Restituisce |
+|---|---|---|---|
+| `d` | Quanto è probabile *questo* valore? (altezza della curva) | `dnorm(1)` | densità (continua) o probabilità (discreta) |
+| `p` | Quanto è probabile un valore **≤ x**? | `pnorm(1)` | probabilità cumulata, tra 0 e 1 |
+| `q` | Quale valore ha probabilità `p` al di sotto? | `qnorm(0.9)` | un quantile (l'inversa di `p`) |
+| `r` | Dammi dei valori casuali | `rnorm(1000)` | dati simulati |
+
+```{r}
+#| label: dpqr-standard-normal
+dnorm(1)        # altezza della curva normale standard in x = 1
+pnorm(1)        # P(X <= 1)
+qnorm(0.9)      # il valore con il 90% della distribuzione al di sotto
+set.seed(1)
+rnorm(5)        # cinque valori casuali
+```
+
+```{r}
+#| label: fig-dpqr
+#| fig-cap: "Le quattro funzioni per la distribuzione normale standard."
+#| fig-subcap:
+#|   - "d: l'altezza della curva in x = 1"
+#|   - "p: l'area a sinistra di x = 1"
+#|   - "q: il valore x con il 90% dell'area alla sua sinistra"
+#|   - "r: le estrazioni casuali (istogramma) seguono la curva"
+#| layout-ncol: 2
+grid <- data.frame(x = seq(-4, 4, length.out = 400))
+grid$density <- dnorm(grid$x)
+base <- ggplot(grid, aes(x, density)) + labs(x = "x", y = "Densità")
+
+base + geom_line(linewidth = 1) +
+  annotate("segment", x = 1, xend = 1, y = 0, yend = dnorm(1),
+           colour = "#D55E00", linewidth = 1) +
+  annotate("point", x = 1, y = dnorm(1), colour = "#D55E00", size = 3)
+
+base + geom_area(data = subset(grid, x <= 1), fill = "#56B4E9") +
+  geom_line(linewidth = 1)
+
+base + geom_area(data = subset(grid, x <= qnorm(0.9)), fill = "#009E73") +
+  geom_line(linewidth = 1) +
+  geom_vline(xintercept = qnorm(0.9), colour = "#D55E00", linewidth = 1)
+
+set.seed(1)
+ggplot(data.frame(x = rnorm(1000)), aes(x)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30,
+                 fill = "grey75", colour = "white") +
+  geom_line(data = grid, aes(x, density), linewidth = 1) +
+  labs(x = "x", y = "Densità")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere i quattro pannelli
+
+- **(a)** `dnorm(1)` = `r round(dnorm(1), 3)` è un'*altezza*, non una probabilità. Per le variabili continue solo le *aree* sono probabilità.
+- **(b)** `pnorm(1)` = `r round(pnorm(1), 3)`: l'area ombreggiata — circa il `r round(100 * pnorm(1))`% dei valori è inferiore a 1.
+- **(c)** `qnorm(0.9)` = `r round(qnorm(0.9), 3)` va nella direzione opposta: da un'area (0.9) a un valore. `p` e `q` si annullano a vicenda: `pnorm(qnorm(0.9))` vale 0.9.
+- **(d)** `rnorm()` produce dati il cui istogramma segue la curva. È così che simuliamo.
+:::
+
+Due trucchi che userai di continuo:
+
+- **Coda superiore.** $P(X > x) = 1 - P(X \le x)$, quindi usa `1 - pnorm(x)` oppure, in modo più accurato per probabilità molto piccole, `pnorm(x, lower.tail = FALSE)`.
+- **Intervalli.** $P(a < X \le b) =$ `pnorm(b) - pnorm(a)`.
+
+## 3. Bernoulli e binomiale: contare i successi
+
+Una prova **di Bernoulli** ha due esiti: successo (1) con probabilità $p$, insuccesso (0) con probabilità $1-p$. Il lancio di una moneta, un paziente che guarisce o no, un cliente che acquista o no.
+
+La distribuzione **binomiale** conta il **numero di successi in $n$ prove di Bernoulli indipendenti** con la stessa $p$. Scriviamo $X \sim \text{Binomiale}(n, p)$. Una variabile di Bernoulli è semplicemente una binomiale con $n = 1$.
+
+*Uno studente risponde a caso a tutte le 20 domande di un quiz; ogni domanda ha 4 opzioni, quindi $p = 0.25$.* Il numero di risposte corrette è $\text{Binomiale}(20, 0.25)$.
+
+```{r}
+#| label: binom-quiz
+dbinom(5, size = 20, prob = 0.25)                     # P(X = 5)
+pbinom(7, size = 20, prob = 0.25)                     # P(X <= 7)
+pbinom(9, size = 20, prob = 0.25, lower.tail = FALSE) # P(X >= 10)
+```
+
+Nota l'ultima riga: per una variabile discreta $P(X \ge 10) = 1 - P(X \le 9)$, quindi la soglia è **9**, non 10. Rispondendo a caso si raggiunge la sufficienza di 10/20 con probabilità `r round(pbinom(9, 20, 0.25, lower.tail = FALSE), 3)`: improbabile ma non impossibile.
+
+```{r}
+#| label: fig-binom
+#| fig-cap: "Binomiale(20, 0.25): probabilità di ciascun numero di risposte corrette rispondendo a caso. Le barre arancioni corrispondono a 10 o più risposte corrette (prova superata)."
+quiz <- data.frame(correct = 0:20,
+                   prob = dbinom(0:20, size = 20, prob = 0.25))
+quiz$pass <- quiz$correct >= 10
+
+ggplot(quiz, aes(correct, prob, fill = pass)) +
+  geom_col() +
+  scale_fill_manual(values = c(`FALSE` = "#0072B2", `TRUE` = "#E69F00")) +
+  labs(x = "Numero di risposte corrette", y = "Probabilità", fill = "Superata")
+```
+
+Per una distribuzione discreta la funzione `d` fornisce vere probabilità (le altezze delle barre), e la loro somma è 1. Confrontiamo il modello con una simulazione:
+
+```{r}
+#| label: binom-sim
+set.seed(28)
+guesses <- rbinom(10000, size = 20, prob = 0.25)  # 10.000 studenti simulati
+mean(guesses >= 10)
+mean(guesses)                                     # da confrontare con n * p = 5
+```
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la formula della binomiale
+
+$$
+P(X = k) = \binom{n}{k} p^k (1-p)^{n-k}, \qquad k = 0, 1, \ldots, n,
+$$
+
+dove $\binom{n}{k}$ = `choose(n, k)` conta i modi di collocare $k$ successi tra $n$ prove. Verifica: `choose(20, 5) * 0.25^5 * 0.75^15` è uguale a `dbinom(5, 20, 0.25)`. Media e varianza sono $E(X) = np$ e $\operatorname{Var}(X) = np(1-p)$. La binomiale presuppone un numero **fissato** di prove, prove **indipendenti** e la **stessa** $p$ per ogni prova.
+:::
+
+## 4. Poisson: contare gli eventi
+
+La distribuzione **di Poisson** descrive il **numero di eventi in un intervallo fissato** di tempo o di spazio quando gli eventi si verificano in modo indipendente con un tasso medio costante $\lambda$ ("lambda"): chiamate all'ora, refusi per pagina, casi di una malattia rara all'anno. A differenza della binomiale, il conteggio non ha un limite superiore.
+
+*Un pronto soccorso riceve in media 3 pazienti all'ora.*
+
+```{r}
+#| label: pois-er
+dpois(0, lambda = 3)                     # P(nessun paziente in un'ora)
+ppois(5, lambda = 3, lower.tail = FALSE) # P(6 o più)
+```
+
+```{r}
+#| label: fig-pois
+#| fig-cap: "Distribuzioni di Poisson con tassi medi 1, 3 e 8. Al crescere del tasso la distribuzione si sposta a destra, si allarga e diventa più simmetrica."
+pois_df <- expand.grid(k = 0:18, lambda = c(1, 3, 8))
+pois_df$prob <- dpois(pois_df$k, pois_df$lambda)
+
+ggplot(pois_df, aes(k, prob)) +
+  geom_col(fill = "#009E73") +
+  facet_wrap(~ lambda, ncol = 3, labeller = label_both) +
+  labs(x = "Numero di eventi", y = "Probabilità")
+```
+
+Una proprietà caratteristica: per una variabile di Poisson la **media è uguale alla varianza**, ed entrambe valgono $\lambda$.
+
+```{r}
+#| label: pois-mean-var
+set.seed(3)
+arrivals <- rpois(10000, lambda = 3)
+c(media = mean(arrivals), varianza = var(arrivals))
+```
+
+I dati di conteggio reali hanno spesso una varianza *maggiore* della media (*sovradispersione*), un aspetto che verificheremo in [Regressione di Poisson](../../../lessons/09-regression/42-poisson-regression.qmd).
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la Poisson come limite della binomiale
+
+$P(X = k) = e^{-\lambda}\lambda^k / k!$. Se $n$ è grande e $p$ piccola, $\text{Binomiale}(n, p)$ è quasi identica a $\text{Poisson}(\lambda = np)$: molte occasioni, ciascuna con una probabilità minima. Confronta `dbinom(0:5, 1000, 0.003)` con `dpois(0:5, 3)`: coincidono fino a circa la terza cifra decimale.
+:::
+
+## 5. Uniforme: tutti i valori equiprobabili
+
+La distribuzione **uniforme** continua su $[a, b]$ assegna a ogni valore dell'intervallo la stessa densità; la sua curva è piatta. `runif()` (usata nella lezione precedente) estrae valori da questa distribuzione.
+
+*Un autobus passa ogni 10 minuti e tu arrivi in un momento casuale.* La tua attesa è $\text{Uniforme}(0, 10)$.
+
+```{r}
+#| label: unif-bus
+punif(7, min = 0, max = 10, lower.tail = FALSE)  # P(attesa > 7 minuti)
+qunif(0.5, min = 0, max = 10)                    # attesa mediana
+```
+
+Per un'uniforme la probabilità di un intervallo è semplicemente la sua lunghezza divisa per $b - a$: un'attesa superiore a 7 minuti ha probabilità $3/10$.
+
+## 6. La distribuzione normale
+
+La distribuzione **normale** (o *gaussiana*) è la celebre curva a campana simmetrica. È descritta da due numeri: la media $\mu$ (il suo centro) e la deviazione standard $\sigma$ (la sua dispersione). Scriviamo $X \sim N(\mu, \sigma)$; in R: `dnorm(x, mean = mu, sd = sigma)`.
+
+Perché è ovunque? Le variabili che risultano dalla **somma di molti piccoli effetti indipendenti** (geni, ambiente, errore di misura…) tendono a essere approssimativamente normali. E, aspetto cruciale per questo corso, le **medie campionarie** sono approssimativamente normali anche quando i dati non lo sono — è il teorema del limite centrale della [prossima lezione](30-sampling-distributions.qmd).
+
+### La regola 68–95–99.7
+
+Qualunque siano $\mu$ e $\sigma$, le stesse proporzioni di una distribuzione normale cadono entro 1, 2 e 3 deviazioni standard dalla media:
+
+```{r}
+#| label: rule-689599
+k <- 1:3
+pnorm(k) - pnorm(-k)
+```
+
+```{r}
+#| label: fig-689599
+#| fig-cap: "La regola 68–95–99.7: circa il 68% dei valori cade entro 1 DS dalla media, il 95% entro 2 DS e il 99.7% entro 3 DS."
+bands <- data.frame(x = seq(-4, 4, length.out = 800))
+bands$density <- dnorm(bands$x)
+bands$band <- cut(abs(bands$x), breaks = c(0, 1, 2, 3, Inf),
+                  labels = c("entro 1 DS", "1-2 DS", "2-3 DS", "oltre 3 DS"),
+                  include.lowest = TRUE)
+
+ggplot(bands, aes(x, density)) +
+  geom_ribbon(aes(ymin = 0, ymax = density, fill = band,
+                  group = interaction(band, x > 0))) +
+  geom_line(linewidth = 1) +
+  scale_x_continuous(breaks = -3:3,
+                     labels = c("-3 DS", "-2 DS", "-1 DS", "media",
+                                "+1 DS", "+2 DS", "+3 DS")) +
+  labs(x = NULL, y = "Densità", fill = NULL)
+```
+
+### Standardizzazione e punteggi z
+
+Per confrontare un valore con una distribuzione normale misuriamo a quante deviazioni standard si trova dalla media: il **punteggio z**
+
+$$
+z = \frac{x - \mu}{\sigma}.
+$$
+
+Se $X \sim N(\mu, \sigma)$, allora $Z = (X-\mu)/\sigma \sim N(0, 1)$, la **normale standard**. Qualsiasi probabilità normale può quindi essere calcolata sulla scala standard — è esattamente ciò che facevano le tavole in fondo ai vecchi libri di statistica. In R puoi saltare questo passaggio e passare direttamente `mean` e `sd`.
+
+### Esempio: pinguini Gentoo pesanti
+
+La massa corporea dei pinguini Gentoo è approssimativamente simmetrica. Modelliamola con una distribuzione normale con media e DS stimate dai dati:
+
+```{r}
+#| label: gentoo-fit
+gentoo <- penguins$body_mass[penguins$species == "Gentoo"]
+gentoo <- gentoo[!is.na(gentoo)]
+mu    <- mean(gentoo)
+sigma <- sd(gentoo)
+c(media = mu, ds = sigma)
+```
+
+**Trovare una probabilità.** Quanto è probabile che un Gentoo pesi più di 5.500 g?
+
+```{r}
+#| label: gentoo-prob
+z <- (5500 - mu) / sigma
+z
+pnorm(z, lower.tail = FALSE)                          # tramite il punteggio z
+pnorm(5500, mean = mu, sd = sigma, lower.tail = FALSE) # lo stesso, direttamente
+mean(gentoo > 5500)                                    # proporzione osservata
+```
+
+Un pinguino di 5.500 g si trova `r round(z, 2)` deviazioni standard sopra la media. Il modello dice che circa il `r round(100 * pnorm(5500, mu, sigma, lower.tail = FALSE))`% dei Gentoo è più pesante; nel nostro campione la proporzione è del `r round(100 * mean(gentoo > 5500))`%. Un modello è una semplificazione: ciò che speriamo è un buon accordo, non l'uguaglianza esatta.
+
+**Trovare una soglia.** Al di sopra di quale massa si trova il 10% dei Gentoo più pesanti? Ora conosciamo la probabilità e vogliamo il valore, quindi usiamo `qnorm()`:
+
+```{r}
+#| label: gentoo-cutoff
+qnorm(0.90, mean = mu, sd = sigma)                 # modello
+quantile(gentoo, 0.90)                             # dati
+qnorm(c(0.025, 0.975), mean = mu, sd = sigma)      # il 95% centrale
+```
+
+```{r}
+#| label: fig-gentoo-tail
+#| fig-cap: "Modello normale per la massa corporea dei Gentoo. L'area ombreggiata è la probabilità, secondo il modello, di una massa superiore a 5.500 g."
+g_grid <- data.frame(
+  mass = seq(mu - 4 * sigma, mu + 4 * sigma, length.out = 400)
+)
+g_grid$density <- dnorm(g_grid$mass, mean = mu, sd = sigma)
+
+ggplot(g_grid, aes(mass, density)) +
+  geom_area(data = subset(g_grid, mass >= 5500), fill = "#E69F00") +
+  geom_line(linewidth = 1) +
+  geom_vline(xintercept = 5500, linetype = "dashed") +
+  labs(x = "Massa corporea (g)", y = "Densità")
+```
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la densità normale
+
+$$
+f(x) = \frac{1}{\sigma\sqrt{2\pi}} \exp\!\left(-\frac{(x-\mu)^2}{2\sigma^2}\right).
+$$
+
+$P(a < X \le b) = \int_a^b f(x)\,dx$, che non ha una forma chiusa; `pnorm()` la calcola numericamente. L'importante quantile `qnorm(0.975)` = `r round(qnorm(0.975), 3)` ≈ 1.96 è l'origine del "± 1.96 errori standard" degli intervalli di confidenza al 95% (vedi [Intervalli di confidenza](../08-inference/32-confidence-intervals.qmd)).
+:::
+
+## 7. Famiglie che incontreremo nei test: t, chi-quadrato, F
+
+Altre tre distribuzioni continue compaiono come **distribuzioni di riferimento** per le statistiche test. Non ti servono le loro formule, solo le loro forme e dove compaiono. Hanno tutte uno o due parametri chiamati **gradi di libertà** (gl; in inglese *df*), che dipendono dalla dimensione del campione.
+
+```{r}
+#| label: fig-t
+#| fig-cap: "Distribuzioni t con 1, 3, 10 e 30 gradi di libertà a confronto con la normale standard (in nero). Pochi gradi di libertà significano code più pesanti; con 30 gl la t è quasi normale."
+x_t <- seq(-5, 5, length.out = 400)
+t_df <- do.call(rbind, lapply(c(1, 3, 10, 30), \(k) {
+  data.frame(x = x_t, density = dt(x_t, df = k), dist = paste0("t, gl = ", k))
+}))
+t_df$dist <- factor(t_df$dist, levels = unique(t_df$dist))
+
+ggplot(t_df, aes(x, density, colour = dist)) +
+  geom_line(linewidth = 0.9) +
+  geom_line(data = data.frame(x = x_t, density = dnorm(x_t)),
+            colour = "black", linewidth = 1, linetype = "dashed") +
+  labs(x = "x", y = "Densità", colour = NULL)
+```
+
+- **t** — simmetrica come la normale ma con code più pesanti, perché tiene conto dell'incertezza aggiuntiva dovuta alla stima di $\sigma$ dai dati. Si usa per le medie: [test t](../08-inference/34-t-tests.qmd), intervalli di confidenza per una media, coefficienti di regressione.
+
+```{r}
+#| label: fig-chisq-f
+#| fig-cap: "Distribuzioni chi-quadrato (a sinistra) e F (a destra) per alcuni valori dei gradi di libertà. Entrambe assumono solo valori positivi e sono asimmetriche a destra."
+#| layout-ncol: 2
+x_c <- seq(0.05, 20, length.out = 400)
+c_df <- do.call(rbind, lapply(c(1, 3, 5, 10), \(k) {
+  data.frame(x = x_c, density = dchisq(x_c, df = k), df = factor(k))
+}))
+ggplot(c_df, aes(x, density, colour = df)) +
+  geom_line(linewidth = 0.9) +
+  coord_cartesian(ylim = c(0, 0.5)) +
+  labs(x = "x", y = "Densità", colour = "gl", title = "Chi-quadrato")
+
+x_f <- seq(0.01, 5, length.out = 400)
+f_pars <- list(c(2, 10), c(5, 20), c(10, 50))
+f_df <- do.call(rbind, lapply(f_pars, \(d) {
+  data.frame(x = x_f, density = df(x_f, d[1], d[2]),
+             df = paste0("(", d[1], ", ", d[2], ")"))
+}))
+ggplot(f_df, aes(x, density, colour = df)) +
+  geom_line(linewidth = 0.9) +
+  labs(x = "x", y = "Densità", colour = "gl", title = "F")
+```
+
+- **Chi-quadrato** ($\chi^2$) — positiva e asimmetrica a destra; è una somma di quadrati di valori normali standard. Si usa per i test sulle [tabelle di frequenze](../08-inference/35-proportions-chisq.qmd).
+- **F** — positiva e asimmetrica a destra, è il rapporto tra due varianze, con due parametri di gradi di libertà. Si usa nell'[ANOVA](../08-inference/37-anova.qmd) e per confrontare modelli di regressione.
+
+Hanno le proprie funzioni `d/p/q/r`: `dt()`, `pt()`, `qt()`, `rt()`; `dchisq()`, `pchisq()`, …; `df()`, `pf()`, … Per esempio `qt(0.975, df = 10)` = `r round(qt(0.975, 10), 3)` sostituisce 1.96 quando una media è stimata da 11 osservazioni.
+
+## 8. QQ-plot: una distribuzione si adatta ai miei dati?
+
+Un istogramma con una curva sovrapposta è un buon primo sguardo, ma l'occhio giudica male le code. Un **grafico quantile-quantile (QQ-plot)** è più preciso. L'idea:
+
+1. ordina i dati dal più piccolo al più grande;
+2. calcola dove *si troverebbero* quei valori se i dati provenissero da una normale standard (i quantili teorici, `qnorm(ppoints(n))`);
+3. rappresenta gli uni contro gli altri.
+
+Se i dati sono normali, i punti giacciono su una **retta**. Costruirne uno a mano mostra che non c'è nulla di magico:
+
+```{r}
+#| label: qq-by-hand
+set.seed(4)
+x <- rnorm(50, mean = 10, sd = 2)
+theoretical <- qnorm(ppoints(length(x)))
+head(cbind(theoretical, sample = sort(x)))
+```
+
+In pratica usiamo `qqnorm()` + `qqline()` in R base, oppure `stat_qq()` + `stat_qq_line()` in ggplot2. Lo *schema* degli scostamenti dalla retta ti dice in che modo i dati differiscono da una normale:
+
+```{r}
+#| label: fig-qq-shapes
+#| fig-cap: "QQ-plot di 200 valori simulati da tre distribuzioni. I dati normali aderiscono alla retta; i dati asimmetrici a destra si incurvano verso l'alto all'estremità destra; i dati a code pesanti si allontanano dalla retta a entrambe le estremità."
+set.seed(5)
+qq_df <- data.frame(
+  value = c(rnorm(200), rexp(200), rt(200, df = 3)),
+  shape = rep(c("Normale", "Asimmetrica a destra (esponenziale)",
+                "Code pesanti (t, 3 gl)"), each = 200)
+)
+qq_df$shape <- factor(qq_df$shape, levels = unique(qq_df$shape))
+
+ggplot(qq_df, aes(sample = value)) +
+  stat_qq(alpha = 0.6) +
+  stat_qq_line(colour = "#D55E00", linewidth = 1) +
+  facet_wrap(~ shape, scales = "free_y") +
+  labs(x = "Quantili teorici della normale", y = "Quantili campionari")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere un QQ-plot
+
+- **Punti sulla retta:** il modello normale si adatta.
+- **Una curva che si piega verso l'alto a destra (una "banana"):** asimmetria a destra — i valori più grandi sono maggiori di quelli che produrrebbe una normale.
+- **Una forma a S con entrambe le estremità che si allontanano dalla retta:** code pesanti — più valori estremi di una normale su entrambi i lati.
+- **Qualche oscillazione alle estremità** è normale nei campioni piccoli; concentrati sugli schemi sistematici.
+:::
+
+## 9. Adattare un modello normale alla massa corporea dei pinguini
+
+La massa corporea dei pinguini ha una distribuzione normale? Proviamo prima con tutti i pinguini insieme, poi con ciascuna specie separatamente.
+
+```{r}
+#| label: fig-mass-hist
+#| fig-cap: "Massa corporea per specie: istogrammi (su scala di densità) con una curva normale basata sulla media e sulla DS di ciascuna specie."
+peng <- penguins[!is.na(penguins$body_mass), ]
+
+curves <- do.call(rbind, lapply(levels(peng$species), \(sp) {
+  m <- peng$body_mass[peng$species == sp]
+  mass_grid <- seq(2500, 6500, by = 10)
+  data.frame(species = sp, body_mass = mass_grid,
+             density = dnorm(mass_grid, mean = mean(m), sd = sd(m)))
+}))
+curves$species <- factor(curves$species, levels = levels(peng$species))
+
+ggplot(peng, aes(body_mass)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 20,
+                 fill = "grey75", colour = "white") +
+  geom_line(data = curves, aes(y = density), colour = "#D55E00",
+            linewidth = 1) +
+  facet_wrap(~ species, ncol = 1) +
+  labs(x = "Massa corporea (g)", y = "Densità")
+```
+
+```{r}
+#| label: fig-mass-qq
+#| fig-cap: "QQ-plot della massa corporea: tutti i pinguini insieme (a sinistra) e per specie (a destra)."
+#| layout-ncol: 2
+ggplot(peng, aes(sample = body_mass)) +
+  stat_qq(alpha = 0.5) +
+  stat_qq_line(colour = "#D55E00", linewidth = 1) +
+  labs(x = "Quantili teorici", y = "Massa corporea (g)", title = "Tutte le specie")
+
+ggplot(peng, aes(sample = body_mass, colour = species)) +
+  stat_qq(alpha = 0.6) +
+  stat_qq_line(linewidth = 1) +
+  labs(x = "Quantili teorici", y = "Massa corporea (g)",
+       title = "Per specie", colour = NULL)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questi grafici
+
+- **Considerando tutti i pinguini insieme**, i punti si allontanano dalla retta: mescolare una specie pesante (Gentoo) con due più leggere produce una distribuzione asimmetrica a destra (media `r round(mean(peng$body_mass))` g contro mediana `r round(median(peng$body_mass))` g) che una singola normale descrive male.
+- **All'interno di ciascuna specie** gli istogrammi sono vicini alle curve normali e i punti dei QQ-plot sono vicini a rette. Un modello normale *per specie* è una semplificazione ragionevole.
+- La lezione è generale: una variabile può essere non normale nel complesso semplicemente perché **mescola gruppi diversi**. Cerca una struttura prima di dare la colpa alla distribuzione.
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Trattare `dnorm()` come una probabilità.** Per una variabile continua è una densità (può persino superare 1). Le probabilità sono aree: usa `pnorm()`.
+2. **Errori di uno nelle code discrete.** $P(X \ge 10)$ è `pbinom(9, ...)` con `lower.tail = FALSE`, non `pbinom(10, ...)`.
+3. **Passare la varianza al posto della DS.** `pnorm(x, mean, sd)` vuole la **deviazione standard**: `sd = 2`, non `sd = 4`, per una varianza pari a 4.
+4. **Confondere `p` e `q`.** `p*()` riceve un valore e restituisce una probabilità; `q*()` riceve una probabilità e restituisce un valore.
+5. **Aspettarsi che i dati reali siano esattamente normali.** Nessuna variabile reale lo è. La domanda è se la normale sia un'*approssimazione utile* per lo scopo che hai; i QQ-plot aiutano, mentre i test formali di normalità su campioni grandi segnalano scostamenti irrilevanti.
+:::
+
+## 10. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Quale distribuzione useresti per (a) il numero di teste in 50 lanci di una moneta, (b) il numero di email che ricevi in un'ora, (c) la statura degli adulti?
+
+(a) Binomiale(50, 0.5): un numero fissato di prove indipendenti. (b) Poisson: un conteggio di eventi in un intervallo di tempo senza un massimo prefissato. (c) Approssimativamente normale: la somma di molti piccoli effetti genetici e ambientali.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Che cosa hanno in comune `pnorm(1.96)` e `qnorm(0.975)`?
+
+Sono l'una l'inversa dell'altra: `pnorm(1.96)` ≈ 0.975 e `qnorm(0.975)` ≈ 1.96. Poiché la normale è simmetrica, il 95% della sua area si trova tra −1.96 e 1.96.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Un QQ-plot mostra punti che seguono la retta nella parte centrale ma salgono bruscamente sopra di essa all'estremità destra. Che cosa suggerisce?
+
+Asimmetria a destra: i valori più grandi sono maggiori di quanto prevedrebbe una distribuzione normale. Può essere appropriata una trasformazione logaritmica o un metodo che non presuppone la normalità.
+:::
+
+## 11. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — lo studente che tira a indovinare.** Un quiz ha 20 domande con 4 opzioni ciascuna. Uno studente risponde a caso a ogni domanda. Calcola (a) la probabilità di esattamente 5 risposte corrette, (b) la probabilità di 10 o più e (c) verifica (b) con 10.000 studenti simulati.
+
+```{webr}
+#| exercise: ex_29_1
+dbinom(______, size = 20, prob = 0.25)
+pbinom(______, size = 20, prob = 0.25, lower.tail = FALSE)
+
+set.seed(1)
+sim <- rbinom(10000, size = ______, prob = ______)
+mean(sim >= 10)
+```
+
+::: {.hint exercise="ex_29_1"}
+Per "10 o più" usa `pbinom(9, ...)` con `lower.tail = FALSE`, perché $P(X \ge 10) = 1 - P(X \le 9)$.
+:::
+
+::: {.solution exercise="ex_29_1"}
+```r
+dbinom(5, size = 20, prob = 0.25)                      # circa 0.202
+pbinom(9, size = 20, prob = 0.25, lower.tail = FALSE)  # circa 0.014
+set.seed(1)
+sim <- rbinom(10000, size = 20, prob = 0.25)
+mean(sim >= 10)                                        # vicino a 0.014
+```
+Cinque risposte corrette è il singolo risultato più probabile (è la media, $20 \times 0.25$). Superare la prova tirando a indovinare capita solo a circa l'1.4% degli studenti.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — probabilità e soglie per la normale.** I punteggi di un test standardizzato sono approssimativamente $N(100, 15)$. Trova (a) la proporzione di persone con punteggio superiore a 130, (b) la proporzione tra 85 e 115, (c) il punteggio necessario per rientrare nel 5% migliore.
+
+```{webr}
+#| exercise: ex_29_2
+pnorm(______, mean = 100, sd = 15, lower.tail = FALSE)
+pnorm(115, mean = 100, sd = 15) - pnorm(______, mean = 100, sd = 15)
+q______(0.95, mean = 100, sd = 15)
+```
+
+::: {.hint exercise="ex_29_2"}
+(b) è un intervallo: `pnorm(b) - pnorm(a)`. (c) va da una probabilità a un valore, quindi serve `qnorm()`.
+:::
+
+::: {.solution exercise="ex_29_2"}
+```r
+pnorm(130, mean = 100, sd = 15, lower.tail = FALSE)              # circa 0.023
+pnorm(115, mean = 100, sd = 15) - pnorm(85, mean = 100, sd = 15) # circa 0.683
+qnorm(0.95, mean = 100, sd = 15)                                 # circa 124.7
+```
+130 è 2 DS sopra la media, quindi circa il 2.3% ottiene un punteggio superiore (metà del 5% che sta fuori da ±2 DS). 85–115 corrisponde a ±1 DS: il familiare 68%.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — un call center.** Un call center riceve in media 4 chiamate ogni 10 minuti. Usando un modello di Poisson, trova la probabilità di (a) nessuna chiamata in una finestra di 10 minuti e (b) più di 8 chiamate. (c) Simula 10.000 finestre con `rpois()` e confronta media e varianza dei conteggi.
+
+```{webr}
+#| exercise: ex_29_3
+dpois(______, lambda = 4)
+ppois(______, lambda = 4, lower.tail = FALSE)
+
+set.seed(1)
+calls <- r______(10000, lambda = 4)
+c(media = mean(calls), varianza = var(calls))
+```
+
+::: {.hint exercise="ex_29_3"}
+"Più di 8" è $P(X > 8) = 1 - P(X \le 8)$, quindi la soglia è 8. Il generatore casuale è `rpois()`.
+:::
+
+::: {.solution exercise="ex_29_3"}
+```r
+dpois(0, lambda = 4)                        # circa 0.018
+ppois(8, lambda = 4, lower.tail = FALSE)    # circa 0.021
+set.seed(1)
+calls <- rpois(10000, lambda = 4)
+c(media = mean(calls), varianza = var(calls))   # entrambe vicine a 4
+```
+Media e varianza sono entrambe vicine a $\lambda = 4$, il segno distintivo di una distribuzione di Poisson.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — leggi il QQ-plot.** Disegna i QQ-plot normali dei dataset predefiniti `rivers` (lunghezze di 141 fiumi nordamericani) e `faithful$waiting` (tempi di attesa tra le eruzioni del geyser Old Faithful). Prima di eseguire il codice, prevedi quale dei due è asimmetrico a destra. Che altro noti?
+
+```{webr}
+#| exercise: ex_29_4
+par(mfrow = c(1, 2))
+qqnorm(______, main = "rivers"); qqline(rivers)
+qqnorm(______, main = "faithful$waiting"); qqline(faithful$waiting)
+par(mfrow = c(1, 1))
+```
+
+::: {.hint exercise="ex_29_4"}
+Inserisci `rivers` e `faithful$waiting`. Poi osserva le estremità di ciascun grafico e, se lo schema non è chiaro, fai un `hist()` di ciascuna variabile.
+:::
+
+::: {.solution exercise="ex_29_4"}
+```r
+par(mfrow = c(1, 2))
+qqnorm(rivers, main = "rivers"); qqline(rivers)
+qqnorm(faithful$waiting, main = "faithful$waiting"); qqline(faithful$waiting)
+par(mfrow = c(1, 1))
+```
+`rivers` mostra la "banana" di una forte asimmetria a destra: pochi fiumi molto lunghi. `faithful$waiting` non è asimmetrica ma mostra un gradino (due tratti piatti uniti da un salto): i dati sono **bimodali**, con un gruppo di attese brevi e un gruppo di attese lunghe — `hist(faithful$waiting)` lo conferma. Nessuna delle due variabili è ben descritta da una singola distribuzione normale.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — verificare la regola del 68% su dati reali.** Per ciascuna specie di pinguini, calcola la proporzione di esemplari la cui lunghezza della pinna (`flipper_len`) cade entro una deviazione standard dalla media della specie. Confronta con il valore della normale `pnorm(1) - pnorm(-1)` e disegna i QQ-plot per specie. Il modello normale è ragionevole?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+within_1sd <- function(x) {
+  x <- x[!is.na(x)]
+  mean(abs(x - mean(x)) < sd(x))
+}
+tapply(penguins$flipper_len, penguins$species, within_1sd)
+pnorm(1) - pnorm(-1)
+
+ggplot(penguins, aes(sample = flipper_len)) +
+  stat_qq() +
+  stat_qq_line(colour = "#D55E00") +
+  facet_wrap(~ species) +
+  labs(x = "Quantili teorici", y = "Lunghezza della pinna (mm)")
+```
+Le proporzioni sono all'incirca 0.71 (Adelie), 0.68 (Chinstrap) e 0.63 (Gentoo), tutte vicine a 0.68. I QQ-plot sono vicini a rette; compaiono piccoli "gradini" perché le lunghezze delle pinne sono registrate in millimetri interi. Un modello normale per specie è un'approssimazione ragionevole. (ggplot2 elimina le righe con valori mancanti emettendo un avviso.)
+:::
+:::
+
+## Riepilogo
+
+| Distribuzione | Descrive | `d` / `p` / `q` / `r` | Media |
+|---|---|---|---|
+| Binomiale$(n, p)$ | successi in $n$ prove | `dbinom()`, `pbinom()`, `qbinom()`, `rbinom()` | $np$ |
+| Poisson$(\lambda)$ | eventi in un intervallo | `dpois()`, `ppois()`, `qpois()`, `rpois()` | $\lambda$ |
+| Uniforme$(a, b)$ | valori equiprobabili | `dunif()`, `punif()`, `qunif()`, `runif()` | $(a+b)/2$ |
+| Normale$(\mu, \sigma)$ | somme di molti piccoli effetti | `dnorm()`, `pnorm()`, `qnorm()`, `rnorm()` | $\mu$ |
+| t, $\chi^2$, F | distribuzioni di riferimento per i test | `dt()`/`pt()`/…, `dchisq()`/…, `df()`/… | — |
+| QQ-plot | confrontare i dati con la normale | `qqnorm()` + `qqline()`, `stat_qq()` + `stat_qq_line()` | — |
+
+- `d` = altezza/probabilità di un valore, `p` = probabilità fino a un valore, `q` = valore corrispondente a una probabilità, `r` = estrazioni casuali.
+- Per le variabili continue, **le probabilità sono aree**; usa `lower.tail = FALSE` per le code superiori.
+- In una distribuzione normale il 68%, il 95% e il 99.7% dei valori cadono entro 1, 2 e 3 DS dalla media; i punteggi z riportano tutto sulla scala standard.
+- I QQ-plot rivelano asimmetria, code pesanti e mescolanze molto meglio degli istogrammi; la non normalità è spesso il segno di gruppi nascosti.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), <https://openintro-ims.netlify.app>
+- Diez, Çetinkaya-Rundel & Barr, *OpenIntro Statistics* (PDF gratuito, capitoli sulle distribuzioni), <https://www.openintro.org/book/os/>
+- Documentazione di R: `?Distributions` elenca tutte le distribuzioni disponibili in R base.
+:::

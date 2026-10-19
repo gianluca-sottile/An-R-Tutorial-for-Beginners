@@ -1,0 +1,536 @@
+---
+title: "Il bootstrap"
+subtitle: "Un campione, molti ricampionamenti: stimare l'incertezza quando non c'è una formula"
+description: "Impara il bootstrap passo per passo in R base: ricampiona i tuoi dati con reinserimento per stimare errori standard e intervalli di confidenza percentili per una media, una mediana e una correlazione, scopri quando il metodo fallisce e conosci rsample::bootstraps() e il legame con il bagging."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 3 · Inferenza]{.level-3} [⏱ ~75 min]{} [Prerequisiti: [Distribuzioni campionarie](30-sampling-distributions.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare l'idea del bootstrap: **ricampionare il campione** per approssimare una distribuzione campionaria;
+- implementare il bootstrap in R base con `sample(x, replace = TRUE)` e `replicate()`;
+- calcolare un **errore standard bootstrap** e un **intervallo di confidenza percentile** per una media, una mediana e una correlazione;
+- confrontare un intervallo bootstrap con il classico intervallo basato sulla t;
+- riconoscere le situazioni in cui il bootstrap è inaffidabile (campioni molto piccoli, valori estremi, dati dipendenti).
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(ggplot2)
+library(rsample)
+```
+
+## 1. Il problema: abbiamo un solo campione
+
+Nella [lezione precedente](30-sampling-distributions.qmd) abbiamo imparato che l'incertezza di una stima è descritta dalla sua **distribuzione campionaria**, e l'abbiamo osservata estraendo migliaia di campioni da una popolazione costruita da noi.
+
+Nella ricerca reale non possiamo farlo. Abbiamo **un solo** campione. Per la media siamo fortunati: la teoria fornisce l'errore standard $s/\sqrt n$ e la distribuzione t fornisce un intervallo di confidenza. Ma che dire di
+
+- la **mediana** di una variabile asimmetrica?
+- una **correlazione**?
+- il rapporto tra due medie, una media troncata, il 90° percentile, l'errore di previsione di un modello…?
+
+Per molte statistiche non esiste una formula semplice, oppure la formula si basa su ipotesi (normalità, $n$ grande) che non siamo disposti ad assumere. Il **bootstrap**, proposto da Bradley Efron nel 1979, offre una risposta generale basata sul calcolo al computer.
+
+## 2. L'idea: ricampionare il campione
+
+Se potessimo campionare ripetutamente dalla popolazione, lo faremmo. Non possiamo, ma abbiamo la cosa che più le si avvicina: il campione stesso, che è la nostra migliore immagine della popolazione. Il bootstrap **tratta il campione come se fosse la popolazione** ed estrae nuovi campioni da esso:
+
+| | Mondo reale (impossibile) | Mondo bootstrap (possibile) |
+|---|---|---|
+| "Popolazione" | la vera popolazione | il nostro campione di dimensione $n$ |
+| Campioni | nuovi campioni di dimensione $n$ dalla popolazione | **ricampioni** di dimensione $n$ estratti *con reinserimento* dal nostro campione |
+| Statistica | $\hat\theta$ in ogni nuovo campione | $\hat\theta^*$ in ogni ricampione |
+| Variabilità | distribuzione campionaria di $\hat\theta$ | distribuzione bootstrap di $\hat\theta^*$ |
+
+L'ipotesi chiave: **la variabilità di $\hat\theta^*$ attorno a $\hat\theta$ imita la variabilità di $\hat\theta$ attorno al vero parametro $\theta$.**
+
+Perché *con reinserimento*? Un ricampione di dimensione $n$ estratto *senza* reinserimento da $n$ valori è semplicemente gli stessi dati rimescolati. Con il reinserimento, alcune osservazioni compaiono due o tre volte e altre per niente, esattamente come un nuovo campione casuale dalla popolazione conterrebbe alcuni tipi di unità più spesso e altri meno.
+
+## 3. L'algoritmo passo per passo
+
+Usiamo le misure di ozono nel dataset predefinito `airquality` (New York, estate 1973). L'ozono è asimmetrico a destra, quindi media e mediana differiscono.
+
+```{r}
+#| label: ozone
+ozone <- airquality$Ozone[!is.na(airquality$Ozone)]
+n <- length(ozone)
+c(n = n, media = mean(ozone), mediana = median(ozone))
+```
+
+**Passo 1 — estrai un ricampione** di dimensione $n$ con reinserimento e calcola la statistica:
+
+```{r}
+#| label: one-resample
+set.seed(1)
+resample <- sample(ozone, size = n, replace = TRUE)
+mean(resample)
+```
+
+Alcuni giorni compaiono più volte nel ricampione, altri per niente:
+
+```{r}
+#| label: resample-counts
+set.seed(1)
+table(table(resample_id = sample(1:n, n, replace = TRUE)))
+```
+
+(L'output si legge così: tante osservazioni sono state estratte una volta, tante due volte, e così via. In media solo circa il 63% delle osservazioni originali compare in un ricampione; vedi il riquadro "Per approfondire" nella Sezione 7.)
+
+**Passo 2 — ripeti molte volte** (qui B = 5.000 è più che sufficiente) e conserva ogni statistica:
+
+```{r}
+#| label: boot-mean
+set.seed(1)
+boot_means <- replicate(5000, mean(sample(ozone, replace = TRUE)))
+```
+
+`sample(x, replace = TRUE)` usa per impostazione predefinita `size = length(x)`: esattamente ciò che serve al bootstrap.
+
+**Passo 3 — osserva la distribuzione bootstrap:**
+
+```{r}
+#| label: fig-boot-mean
+#| fig-cap: "Distribuzione bootstrap del livello medio di ozono (5.000 ricampioni). La linea continua è la media campionaria; le linee tratteggiate delimitano il 95% centrale delle medie bootstrap."
+ci_mean <- quantile(boot_means, c(0.025, 0.975))
+
+ggplot(data.frame(mean = boot_means), aes(mean)) +
+  geom_histogram(bins = 50, fill = "#0072B2", colour = "white") +
+  geom_vline(xintercept = mean(ozone), linewidth = 1) +
+  geom_vline(xintercept = ci_mean, linetype = "dashed", linewidth = 0.8) +
+  labs(x = "Media bootstrap dell'ozono (ppb)", y = "Numero di ricampioni")
+```
+
+**Passo 4 — sintetizza l'incertezza.**
+
+- L'**errore standard bootstrap** è la DS delle statistiche bootstrap.
+- L'**intervallo di confidenza percentile** prende i quantili 2.5% e 97.5% delle statistiche bootstrap.
+
+```{r}
+#| label: boot-mean-summary
+sd(boot_means)              # ES bootstrap
+sd(ozone) / sqrt(n)         # ES classico, per confronto
+ci_mean                     # IC percentile al 95%
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questi risultati
+
+- L'ES bootstrap, `r round(sd(boot_means), 2)`, è molto vicino alla formula $s/\sqrt n =$ `r round(sd(ozone) / sqrt(n), 2)`. Per la media il bootstrap si limita a riscoprire ciò che la teoria sapeva già — una verifica rassicurante.
+- L'intervallo percentile al 95% va da `r round(ci_mean[1], 1)` a `r round(ci_mean[2], 1)` ppb: l'insieme dei livelli medi di ozono compatibili con i dati. [Intervalli di confidenza](../08-inference/32-confidence-intervals.qmd) spiega esattamente che cosa significa "95%".
+- I tuoi numeri differiranno leggermente con un seme diverso; aumenta `B` se la seconda cifra decimale è importante.
+:::
+
+### Confronto con l'intervallo basato sulla t
+
+```{r}
+#| label: t-vs-boot
+t_ci <- t.test(ozone)$conf.int
+rbind(basato_su_t = t_ci[1:2], bootstrap = ci_mean)
+```
+
+I due intervalli sono simili. L'intervallo bootstrap è leggermente **asimmetrico** attorno alla media, perché la distribuzione bootstrap riflette l'asimmetria a destra dei dati; l'intervallo t è simmetrico per costruzione. Con $n =$ `r n` il TLC rende entrambi ragionevoli per la media.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: il principio plug-in
+
+Sia $F$ la distribuzione ignota della popolazione e $\hat F$ la **distribuzione empirica** del campione, che assegna probabilità $1/n$ a ciascuna osservazione. Campionare con reinserimento dai dati *equivale* a campionare da $\hat F$. Il bootstrap stima la distribuzione campionaria di $\hat\theta = t(X_1,\ldots,X_n)$, $X_i \sim F$, con la distribuzione di $\hat\theta^* = t(X^*_1, \ldots, X^*_n)$, $X^*_i \sim \hat F$. Poiché $\hat F \to F$ al crescere di $n$, l'approssimazione migliora con $n$.
+
+L'intervallo percentile è l'IC bootstrap più semplice. Versioni più raffinate come l'intervallo **BCa** (*bias-corrected and accelerated*, corretto per distorsione e accelerazione) correggono per distorsione e asimmetria e sono disponibili nel pacchetto `boot` (`boot::boot.ci(type = "bca")`). L'errore Monte Carlo dovuto all'uso di un B finito è una questione separata e controllabile: B ≈ 1.000 di solito basta per un ES, mentre per gli IC percentili sono consigliabili alcune migliaia di ricampioni.
+:::
+
+## 4. La vera forza: statistiche senza formula
+
+### La mediana
+
+La mediana è una sintesi naturale per dati asimmetrici, ma il suo errore standard non ha una formula semplice e libera da ipotesi. Per il bootstrap non fa alcuna differenza: sostituisci `mean` con `median`.
+
+```{r}
+#| label: boot-median
+set.seed(2)
+boot_medians <- replicate(5000, median(sample(ozone, replace = TRUE)))
+sd(boot_medians)
+quantile(boot_medians, c(0.025, 0.975))
+```
+
+```{r}
+#| label: fig-boot-median
+#| fig-cap: "Distribuzione bootstrap del livello mediano di ozono. È irregolare, \"a grumi\", perché la mediana di un ricampione può essere solo uno dei valori osservati (o il punto medio tra due di essi)."
+ggplot(data.frame(median = boot_medians), aes(median)) +
+  geom_histogram(binwidth = 0.5, fill = "#009E73") +
+  geom_vline(xintercept = median(ozone), linewidth = 1) +
+  labs(x = "Mediana bootstrap dell'ozono (ppb)", y = "Numero di ricampioni")
+```
+
+La mediana dell'ozono è `r median(ozone)` ppb, con un intervallo bootstrap al 95% da `r round(quantile(boot_medians, 0.025), 1)` a `r round(quantile(boot_medians, 0.975), 1)` ppb. Qui l'ES della mediana (`r round(sd(boot_medians), 2)`) è più grande dell'ES della media; la mediana guadagna robustezza al prezzo di un po' di precisione.
+
+### Una correlazione
+
+Per una statistica calcolata su **coppie** di valori, dobbiamo ricampionare **righe** intere (unità), mantenendo unita ciascuna coppia. Lo facciamo ricampionando gli *indici* di riga. Esempio: la correlazione tra lunghezza e profondità del becco nei pinguini Gentoo.
+
+```{r}
+#| label: gentoo-cor
+gentoo <- penguins[penguins$species == "Gentoo",
+                   c("bill_len", "bill_dep")]
+gentoo <- gentoo[complete.cases(gentoo), ]
+r_obs <- cor(gentoo$bill_len, gentoo$bill_dep)
+r_obs
+```
+
+```{r}
+#| label: boot-cor
+set.seed(3)
+boot_cor <- replicate(5000, {
+  idx <- sample(nrow(gentoo), replace = TRUE)   # ricampiona le righe
+  cor(gentoo$bill_len[idx], gentoo$bill_dep[idx])
+})
+sd(boot_cor)
+quantile(boot_cor, c(0.025, 0.975))
+```
+
+```{r}
+#| label: fig-boot-cor
+#| fig-cap: "Distribuzione bootstrap della correlazione tra lunghezza e profondità del becco nei pinguini Gentoo. Le correlazioni non possono superare 1, quindi la distribuzione è leggermente asimmetrica a sinistra."
+ggplot(data.frame(r = boot_cor), aes(r)) +
+  geom_histogram(bins = 50, fill = "#CC79A7", colour = "white") +
+  geom_vline(xintercept = r_obs, linewidth = 1) +
+  geom_vline(xintercept = quantile(boot_cor, c(0.025, 0.975)),
+             linetype = "dashed") +
+  labs(x = "Correlazione bootstrap", y = "Numero di ricampioni")
+```
+
+L'intervallo da `r round(quantile(boot_cor, 0.025), 2)` a `r round(quantile(boot_cor, 0.975), 2)` esclude 0 con ampio margine: i becchi più lunghi dei Gentoo tendono a essere più profondi. Confronta con l'intervallo classico di `cor.test()`, che si basa su un'approssimazione normale (la trasformazione di Fisher):
+
+```{r}
+#| label: cor-test
+cor.test(gentoo$bill_len, gentoo$bill_dep)$conf.int
+```
+
+### Riepilogo dei tre intervalli
+
+```{r}
+#| label: ci-table
+data.frame(
+  statistic = c("media ozono", "mediana ozono", "correlazione (Gentoo)"),
+  estimate  = c(mean(ozone), median(ozone), r_obs),
+  boot_se   = c(sd(boot_means), sd(boot_medians), sd(boot_cor)),
+  lower     = c(ci_mean[1], quantile(boot_medians, 0.025),
+                quantile(boot_cor, 0.025)),
+  upper     = c(ci_mean[2], quantile(boot_medians, 0.975),
+                quantile(boot_cor, 0.975)),
+  row.names = NULL
+)
+```
+
+Ogni volta le stesse tre righe di codice: ricampiona, calcola, sintetizza. È questa generalità il motivo per cui il bootstrap si usa ovunque, dalle mediane alle metriche di prestazione del machine learning.
+
+## 5. Quando il bootstrap fallisce o è rischioso
+
+Il bootstrap non è magia: può riprodurre solo la variabilità visibile **nel campione**.
+
+### Campioni molto piccoli
+
+Con 5 osservazioni, un ricampione può contenere solo quei 5 valori, e la distribuzione bootstrap sottostima quanto potrebbe essere diverso un nuovo campione. Verifichiamo quanto spesso un intervallo al 95% contiene effettivamente la vera media (la sua **copertura**) quando $n = 5$ e i dati sono normali:
+
+```{r}
+#| label: small-n-coverage
+set.seed(4)
+covers <- replicate(1000, {
+  x <- rnorm(5)                                    # la vera media è 0
+  boot <- colMeans(matrix(sample(x, 5 * 1000, replace = TRUE), nrow = 5))
+  pct <- quantile(boot, c(0.025, 0.975))
+  tci <- t.test(x)$conf.int
+  c(bootstrap = pct[[1]] < 0 & pct[[2]] > 0,
+    t_based   = tci[1] < 0 & tci[2] > 0)
+})
+rowMeans(covers)
+```
+
+(`matrix(sample(...), nrow = 5)` estrae 1.000 ricampioni in un colpo solo come colonne di una matrice, e `colMeans()` ne restituisce le medie — un'alternativa veloce a `replicate()`.)
+
+L'intervallo percentile "al 95%" contiene la vera media solo nel `r round(100 * rowMeans(covers)[["bootstrap"]])`% circa dei casi: è **troppo stretto**. L'intervallo t (`t_based`), che incorpora nella distribuzione t l'incertezza aggiuntiva dei campioni piccoli, mantiene la sua promessa (circa il `r round(100 * rowMeans(covers)[["t_based"]])`%). Con campioni piccoli, preferisci metodi con una buona teoria per piccoli campioni, o almeno non fidarti ciecamente degli intervalli bootstrap.
+
+### Valori estremi: il massimo
+
+Il bootstrap ha difficoltà con le statistiche che dipendono da una o due osservazioni estreme. Considera il massimo di 30 valori da una $\text{Uniforme}(0, 1)$; il vero massimo della popolazione è 1.
+
+```{r}
+#| label: boot-max
+set.seed(5)
+x <- runif(30)
+boot_max <- replicate(5000, max(sample(x, replace = TRUE)))
+max(x)
+mean(boot_max == max(x))   # quota di ricampioni il cui massimo è il massimo campionario
+max(boot_max) > max(x)     # un ricampione può mai superare il massimo campionario?
+```
+
+Circa il `r round(100 * mean(boot_max == max(x)))`% dei ricampioni ha esattamente lo stesso massimo del campione, e nessun ricampione può mai superarlo. La distribuzione bootstrap è un picco, per nulla simile alla vera distribuzione campionaria (continua) del massimo, e non dà alcun indizio che il vero valore 1 si trovi al di sopra di tutte le osservazioni.
+
+### Dati dipendenti
+
+Il bootstrap di base ricampiona le osservazioni **in modo indipendente**, quindi presuppone che le osservazioni *siano* indipendenti. In una serie storica, oggi somiglia a ieri; rimescolare i giorni distrugge questa struttura e il bootstrap sottostima l'incertezza. Una rapida simulazione con una serie autocorrelata:
+
+```{r}
+#| label: boot-dependent
+set.seed(6)
+series <- as.numeric(arima.sim(model = list(ar = 0.7), n = 100))
+naive_se <- sd(replicate(2000, mean(sample(series, replace = TRUE))))
+
+# il vero ES, da molte serie indipendenti generate allo stesso modo
+true_se <- sd(replicate(2000, mean(arima.sim(model = list(ar = 0.7), n = 100))))
+c(bootstrap_ingenuo = naive_se, vero = true_se)
+```
+
+`arima.sim()` genera una serie in cui ogni valore dipende dal precedente. L'ES del bootstrap ingenuo è meno della metà del vero ES: gli intervalli sarebbero di gran lunga troppo ottimistici. Per serie storiche, dati raggruppati (cluster) o misure ripetute, ricampiona **blocchi** di osservazioni consecutive o interi **cluster** (ad es. tutte le misure di un paziente) anziché singole righe.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Ricampionare senza reinserimento.** `sample(x)` si limita a rimescolare i dati: ogni ricampione ha la stessa media e l'"ES" è 0. Usa sempre `replace = TRUE`.
+2. **Ricampionare le colonne separatamente.** Per correlazioni, regressioni o qualsiasi statistica multivariata, ricampiona le **righe** (tramite gli indici), non ciascuna variabile per conto suo — così distruggeresti proprio la relazione che stai studiando (Esercizio 3).
+3. **Pensare che il bootstrap crei informazione.** Non aggiunge dati; riutilizza soltanto il campione. Se il campione è piccolo o non rappresentativo, lo è anche il bootstrap.
+4. **Applicare il bootstrap a dati dipendenti come se fossero indipendenti** (serie storiche, misure ripetute, cluster). Ricampiona le unità indipendenti.
+5. **Troppo pochi ricampioni o nessun seme.** Usa almeno 1.000 ricampioni (di più per gli IC percentili) e `set.seed()` perché i risultati siano riproducibili.
+:::
+
+## 6. Un'alternativa tidy: `rsample::bootstraps()`
+
+Il pacchetto **rsample** di [tidymodels](https://www.tidymodels.org), che useremo per il machine learning, offre lo stesso ricampionamento in forma di data frame. `bootstraps(data, times = B)` restituisce una tabella con una riga per ricampione; ogni riga contiene un oggetto `split`, e `analysis(split)` estrae i dati ricampionati.
+
+```{r}
+#| label: rsample-boot
+set.seed(3)
+boots <- bootstraps(gentoo, times = 1000)
+boots
+
+boot_cor_tidy <- vapply(boots$splits, \(s) {
+  d <- analysis(s)
+  cor(d$bill_len, d$bill_dep)
+}, numeric(1))
+
+quantile(boot_cor_tidy, c(0.025, 0.975))
+```
+
+`vapply(..., numeric(1))` applica la funzione a ogni split e controlla che ciascun risultato sia un singolo numero (vedi [Iterazione](../03-programming/17-iteration.qmd)). L'intervallo concorda con la nostra versione in R base, a meno del rumore Monte Carlo. Il vantaggio di `rsample` non è il bootstrap in sé — bastano tre righe di R base — ma il fatto che gli stessi oggetti si collegano direttamente agli strumenti di modellazione di [Il flusso di lavoro del machine learning](../../../lessons/10-ml/44-ml-workflow.qmd).
+
+## 7. Uno sguardo avanti: bootstrap aggregating ("bagging")
+
+Il bootstrap ricompare nel machine learning con un ruolo diverso. Un singolo albero decisionale è molto sensibile ai dati esatti su cui viene stimato: cambia qualche riga e l'albero può cambiare completamente. Il **bagging** (*bootstrap aggregating*) stima un albero su **ciascun ricampione bootstrap** e ne **media** le previsioni. Fare la media di molti modelli rumorosi ma diversi riduce la varianza, proprio come fare la media di molte osservazioni riduce l'ES di una media. Le **random forest** aggiungono un ulteriore accorgimento (ogni suddivisione considera solo un sottoinsieme casuale delle variabili) e sono tra i metodi di previsione più usati; vedi [Random forest](../../../lessons/10-ml/46-random-forests.qmd).
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la regola del 63.2% e le osservazioni out-of-bag
+
+La probabilità che una data osservazione **non** venga scelta in nessuna delle $n$ estrazioni di un ricampione è $(1 - 1/n)^n \to e^{-1} \approx 0.368$. Quindi ogni ricampione contiene in media circa il 63.2% delle osservazioni originali distinte, e il restante ≈ 36.8% è "fuori dal sacco" (*out of bag*). Le random forest usano queste osservazioni escluse come un insieme di test gratuito (l'*errore out-of-bag*). Una verifica in una riga:
+
+```{r}
+#| label: oob
+set.seed(7)
+mean(replicate(2000, mean(!(1:100 %in% sample(100, replace = TRUE)))))
+```
+:::
+
+## 8. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Perché i ricampioni bootstrap devono essere estratti *con* reinserimento e avere la stessa dimensione del campione originale?
+
+Senza reinserimento, un ricampione di dimensione $n$ è solo una permutazione dei dati e ogni statistica resta la stessa. La stessa dimensione $n$, perché la variabilità di una statistica dipende dalla dimensione del campione: vogliamo imitare campioni della dimensione che abbiamo effettivamente.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. L'ES bootstrap della media e $s/\sqrt n$ sono quasi identici. Perché allora preoccuparsi del bootstrap?
+
+Per la media non serve — ma il bootstrap funziona esattamente allo stesso modo per statistiche che non hanno una formula semplice per l'ES (mediana, correlazione, rapporti, quantili, metriche dei modelli). L'accordo per la media è un utile controllo del fatto che il metodo funziona.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Hai le temperature giornaliere di un anno e vuoi un intervallo per la media annuale. Il bootstrap ordinario è appropriato?
+
+No. I giorni consecutivi sono correlati, e ricampionare singoli giorni in modo indipendente ignora questa dipendenza, quindi l'ES bootstrap sarebbe troppo piccolo. Serve un bootstrap a blocchi (che ricampiona sequenze di giorni consecutivi) o un modello per serie storiche.
+:::
+
+## 9. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — bootstrap di una media.** Applica il bootstrap al consumo medio di carburante `mpg` in `mtcars` con 5.000 ricampioni. Riporta l'ES bootstrap e l'intervallo percentile al 95%, e confrontali con l'intervallo basato sulla t ottenuto da `t.test()`.
+
+```{webr}
+#| exercise: ex_31_1
+x <- mtcars$mpg
+set.seed(1)
+boot <- replicate(5000, mean(sample(x, replace = ______)))
+sd(______)
+quantile(boot, c(______, ______))
+t.test(x)$conf.int
+```
+
+::: {.hint exercise="ex_31_1"}
+Ricampiona con `replace = TRUE`; l'ES è `sd(boot)`; l'intervallo percentile al 95% usa i quantili 0.025 e 0.975.
+:::
+
+::: {.solution exercise="ex_31_1"}
+```r
+x <- mtcars$mpg
+set.seed(1)
+boot <- replicate(5000, mean(sample(x, replace = TRUE)))
+sd(boot)                          # circa 1.04
+quantile(boot, c(0.025, 0.975))   # circa da 18.1 a 22.2
+t.test(x)$conf.int                # circa da 17.9 a 22.3
+```
+L'intervallo bootstrap è un po' più stretto dell'intervallo t: con solo 32 automobili il bootstrap percentile tende a essere leggermente ottimistico (Sezione 5), mentre la distribuzione t tiene conto della stima della DS.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — bootstrap di una mediana.** Il vettore predefinito `rivers` contiene le lunghezze (in miglia) di 141 grandi fiumi nordamericani; è fortemente asimmetrico a destra. Calcola la mediana e un intervallo bootstrap percentile al 95% per essa. Poi disegna un istogramma delle mediane bootstrap: perché appare irregolare, "a grumi"?
+
+```{webr}
+#| exercise: ex_31_2
+median(rivers)
+set.seed(2)
+boot_med <- replicate(5000, ______(sample(rivers, replace = TRUE)))
+quantile(boot_med, c(0.025, 0.975))
+hist(boot_med, breaks = 40, main = "Mediane bootstrap", xlab = "Miglia")
+```
+
+::: {.hint exercise="ex_31_2"}
+Sostituisci lo spazio vuoto con la statistica su cui vuoi applicare il bootstrap: `median`.
+:::
+
+::: {.solution exercise="ex_31_2"}
+```r
+median(rivers)                                   # 425
+set.seed(2)
+boot_med <- replicate(5000, median(sample(rivers, replace = TRUE)))
+quantile(boot_med, c(0.025, 0.975))              # all'incirca da 380 a 490
+hist(boot_med, breaks = 40, main = "Mediane bootstrap", xlab = "Miglia")
+```
+Con $n = 141$ (dispari), la mediana di ogni ricampione è sempre una delle lunghezze osservate, quindi la distribuzione bootstrap può assumere solo un insieme limitato di valori — da qui i vuoti e i picchi. L'intervallo è asimmetrico attorno a 425, a riflettere l'asimmetria dei dati.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — trova l'errore nel bootstrap.** Uno studente vuole un intervallo bootstrap per la correlazione tra `speed` e `dist` nel dataset predefinito `cars` ($r$ osservato $\approx 0.81$) e scrive il codice qui sotto. L'intervallo è centrato vicino a 0! Trova e correggi l'errore.
+
+```{webr}
+#| exercise: ex_31_3
+cor(cars$speed, cars$dist)
+set.seed(3)
+boot_r <- replicate(5000, {
+  s <- sample(cars$speed, replace = TRUE)
+  d <- sample(cars$dist, replace = TRUE)
+  cor(s, d)
+})
+quantile(boot_r, c(0.025, 0.975))
+```
+
+::: {.hint exercise="ex_31_3"}
+Le due variabili vengono ricampionate in modo indipendente, quindi la velocità di un'auto viene accoppiata allo spazio di frenata di *un'altra* auto. Ricampiona gli indici di riga con `idx <- sample(nrow(cars), replace = TRUE)` e usa `cars$speed[idx]` e `cars$dist[idx]`.
+:::
+
+::: {.solution exercise="ex_31_3"}
+```r
+set.seed(3)
+boot_r <- replicate(5000, {
+  idx <- sample(nrow(cars), replace = TRUE)
+  cor(cars$speed[idx], cars$dist[idx])
+})
+quantile(boot_r, c(0.025, 0.975))   # circa da 0.70 a 0.88
+```
+Ricampionare le colonne separatamente spezza le coppie e simula un mondo senza alcuna relazione, quindi l'"intervallo" era centrato su 0. Ricampionare righe intere mantiene insieme velocità e spazio di frenata di ciascuna auto.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — prevedi il fallimento.** Estrai un campione di 50 valori da una $\text{Uniforme}(0, 10)$, per cui il vero massimo della popolazione è 10. Prima di eseguire il codice, prevedi: (a) approssimativamente quale quota di massimi bootstrap sarà uguale al massimo campionario? (b) L'intervallo percentile al 95% per il massimo conterrà 10?
+
+```{webr}
+#| exercise: ex_31_4
+set.seed(4)
+x <- runif(50, min = 0, max = 10)
+max(x)
+boot_max <- replicate(5000, max(sample(x, replace = TRUE)))
+mean(boot_max == ______)
+quantile(boot_max, c(0.025, 0.975))
+```
+
+::: {.hint exercise="ex_31_4"}
+Confronta ciascun massimo bootstrap con `max(x)`. La probabilità che l'osservazione più grande venga estratta almeno una volta in 50 estrazioni è $1 - (1 - 1/50)^{50}$.
+:::
+
+::: {.solution exercise="ex_31_4"}
+```r
+mean(boot_max == max(x))              # circa 0.64
+1 - (1 - 1/50)^50                     # teoria: 0.636
+quantile(boot_max, c(0.025, 0.975))   # limite superiore = max(x) < 10
+```
+Circa il 64% dei ricampioni contiene l'osservazione più grande, quindi il loro massimo è uguale al massimo campionario. Nessun ricampione può superare `max(x)`, quindi l'intervallo non raggiunge mai il vero valore 10. Per i valori estremi, il bootstrap è lo strumento sbagliato.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — una differenza tra due gruppi.** Per i pinguini Adelie, stima la differenza di massa corporea media tra maschi e femmine con un IC bootstrap. Ricampiona **separatamente all'interno di ciascun sesso** (perché?) e confronta il tuo intervallo con l'intervallo di Welch di `t.test(body_mass ~ sex, data = adelie)`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+adelie <- penguins[penguins$species == "Adelie" & !is.na(penguins$sex) &
+                     !is.na(penguins$body_mass), ]
+m <- adelie$body_mass[adelie$sex == "male"]
+f <- adelie$body_mass[adelie$sex == "female"]
+mean(m) - mean(f)
+
+set.seed(5)
+boot_diff <- replicate(5000, {
+  mean(sample(m, replace = TRUE)) - mean(sample(f, replace = TRUE))
+})
+quantile(boot_diff, c(0.025, 0.975))
+t.test(body_mass ~ sex, data = adelie)$conf.int   # femmine - maschi: segni invertiti
+```
+I maschi sono in media circa 675 g più pesanti, ed entrambi gli intervalli vanno all'incirca da 575 a 775 g (l'intervallo di `t.test()` riguarda femmine − maschi, quindi i suoi segni sono invertiti). Ricampionare all'interno di ciascun gruppo mantiene fisse le dimensioni dei gruppi, come nel disegno originale.
+:::
+:::
+
+## Riepilogo
+
+| Passo / funzione | Codice | Scopo |
+|---|---|---|
+| Un ricampione | `sample(x, replace = TRUE)` | Nuovo campione di dimensione $n$ dai dati |
+| Ricampionare le righe | `idx <- sample(nrow(df), replace = TRUE)`; `df[idx, ]` | Mantenere le variabili accoppiate |
+| Distribuzione bootstrap | `replicate(B, stat(sample(x, replace = TRUE)))` | Approssimare la distribuzione campionaria |
+| ES bootstrap | `sd(boot)` | Precisione della stima |
+| IC percentile | `quantile(boot, c(0.025, 0.975))` | Intervallo al 95% |
+| Ricampionamento tidy | `rsample::bootstraps(df, times = B)`, `analysis(split)` | La stessa idea in forma di data frame |
+
+- Il bootstrap **ricampiona il campione** con reinserimento per imitare l'estrazione di nuovi campioni dalla popolazione.
+- Gli stessi tre passi — ricampiona, calcola, sintetizza — forniscono ES e IC per statistiche **senza formula**.
+- Per la media, i risultati del bootstrap e quelli basati sulla t concordano strettamente quando $n$ è moderato.
+- È inaffidabile per **campioni molto piccoli**, **valori estremi** e **dati dipendenti**; ricampiona le unità indipendenti.
+- Bootstrap + media delle previsioni = **bagging**, il cuore delle random forest.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), capitolo sugli intervalli di confidenza bootstrap, <https://openintro-ims.netlify.app>
+- Kuhn & Silge, *Tidy Modeling with R*, capitolo sul ricampionamento, <https://www.tmwr.org>
+- Documentazione di rsample, <https://rsample.tidymodels.org>
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2e), sezione sul bootstrap, <https://www.statlearning.com>
+:::

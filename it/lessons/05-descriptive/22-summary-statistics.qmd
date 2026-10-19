@@ -1,0 +1,624 @@
+---
+title: "Indici di sintesi"
+subtitle: "Posizione, variabilità, posizione relativa e forma: una distribuzione in pochi numeri"
+description: "Sintetizzare una variabile numerica con indici di posizione (media, mediana, media troncata), di variabilità (campo di variazione, IQR, varianza, DS), quantili, forma (asimmetria), punteggi z e coefficiente di variazione, sia complessivamente sia per gruppi."
+format:
+  live-html:
+    webr:
+      packages: ["dplyr"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+```
+
+::: {.lesson-meta}
+[Livello 2 · Descrivere ed esplorare]{.level-2} [⏱ ~75 min]{} [Prerequisiti: [Tabelle di frequenza](21-frequency-tables.qmd), [Riepiloghi per gruppi](../02-data/10-grouped-summaries.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- calcolare e interpretare **media, mediana, moda e media troncata**, e spiegare quali sono robuste rispetto ai valori anomali;
+- misurare la **variabilità** con il campo di variazione, l'IQR, la varianza e la deviazione standard, e spiegare che cosa misura la DS;
+- usare **quantili** e **punteggi z** per descrivere la posizione di un valore;
+- descrivere la **forma** di una distribuzione (asimmetria) e usare il confronto tra media e mediana come indicatore rapido;
+- produrre sintesi **per gruppi** e la **sintesi a cinque numeri** alla base del boxplot.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+```
+
+## 1. Perché sintetizzare?
+
+Una tabella di frequenza o un istogramma mostrano un'intera distribuzione. Spesso, però, dobbiamo **comprimerla** in pochi numeri: per confrontare le specie, per scrivere un report o per alimentare un'analisi successiva. Una buona sintesi risponde a quattro domande:
+
+| Domanda | Famiglia di indici | Esempi |
+|---|---|---|
+| Dov'è il **centro**? | Posizione (tendenza centrale) | media, mediana, moda |
+| Quanto sono **dispersi** i valori? | Variabilità (dispersione) | campo di variazione, IQR, varianza, deviazione standard |
+| Dove si colloca un **valore particolare**? | Posizione relativa | quantili, percentili, punteggi z |
+| Che **forma** ha la distribuzione? | Forma | asimmetria |
+
+Nessun numero da solo risponde a tutte e quattro. In tutta la lezione usiamo la massa corporea (in grammi) dei pinguini. Molte funzioni richiedono `na.rm = TRUE`, perché `body_mass` ha `r sum(is.na(penguins$body_mass))` valori mancanti; per mantenere il codice breve creiamo un vettore senza di essi:
+
+```{r}
+#| label: mass
+mass <- penguins$body_mass[!is.na(penguins$body_mass)]
+length(mass)
+```
+
+## 2. Posizione: dov'è il centro?
+
+### Media e mediana
+
+La **media** somma tutti i valori e divide per il loro numero. La **mediana** è il valore centrale una volta ordinati i dati: metà delle osservazioni sta sotto e metà sopra.
+
+```{r}
+#| label: mean-median
+mean(mass)
+median(mass)
+```
+
+La media è il **punto di equilibrio** dei dati: se ogni pinguino fosse un peso appoggiato su un righello in corrispondenza della sua massa corporea, il righello resterebbe in equilibrio sulla media. La mediana è il **punto a metà** in termini di conteggio. Qui la media (`r round(mean(mass))` g) è un po' più grande della mediana (`r median(mass)` g); la Sezione 5 spiega perché.
+
+### Robustezza: che cosa succede con un valore anomalo?
+
+Supponi che, inserendo i dati, qualcuno digiti 37500 invece di 3750 per il primo pinguino: un solo errore di battitura su `r length(mass)` valori.
+
+```{r}
+#| label: outlier-demo
+mass_typo <- mass
+mass_typo[1] <- 37500
+
+c(mean_clean = mean(mass), mean_typo = mean(mass_typo))
+c(median_clean = median(mass), median_typo = median(mass_typo))
+```
+
+Un solo valore errato ha spostato la media di circa `r round(mean(mass_typo) - mean(mass))` g, mentre la mediana non si è mossa affatto. Un indice che risente poco di pochi valori estremi si dice **robusto**. La mediana è robusta; la media no.
+
+### Media troncata
+
+La **media troncata** è un compromesso: elimina una percentuale fissata dei valori più piccoli e più grandi e calcola la media dei restanti.
+
+```{r}
+#| label: trimmed
+c(trim10_clean = mean(mass, trim = 0.1),
+  trim10_typo  = mean(mass_typo, trim = 0.1))
+```
+
+`trim = 0.1` scarta il 10% più basso e il 10% più alto. Ora l'errore di battitura cambia il risultato di pochi grammi soltanto.
+
+### Moda
+
+Per dati numerici la **moda** (il valore più frequente) è utile solo per variabili **discrete** con pochi valori distinti, come il numero di marce in `mtcars` (vedi [Tabelle di frequenza](21-frequency-tables.qmd)). Per una variabile continua quasi ogni valore è unico, quindi la moda dipende dall'arrotondamento e viene riportata raramente.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: che cosa minimizza ciascun "centro"
+
+Per i dati $x_1, \dots, x_n$:
+
+- la media $\bar x = \frac1n\sum_i x_i$ è il valore $c$ che minimizza la somma delle distanze **al quadrato** $\sum_i (x_i - c)^2$;
+- la mediana è il valore $c$ che minimizza la somma delle distanze **assolute** $\sum_i |x_i - c|$.
+
+Elevare al quadrato dà un grande peso alle distanze grandi: ecco perché un solo valore lontano può trascinare la media. Il **punto di rottura** (*breakdown point*) formalizza la robustezza: è la frazione di osservazioni che si possono rendere arbitrariamente cattive prima che l'indice diventi arbitrariamente cattivo. Vale $0$ per la media (basta un valore), il 50% per la mediana ed è pari alla frazione di troncamento per una media troncata.
+:::
+
+## 3. Variabilità: quanto sono diversi i valori?
+
+Due gruppi possono avere lo stesso centro ed essere comunque molto diversi. La variabilità misura quanto i valori sono tipicamente lontani gli uni dagli altri.
+
+### Campo di variazione e IQR
+
+```{r}
+#| label: range-iqr
+range(mass)                 # minimo e massimo
+diff(range(mass))           # il campo di variazione come singolo numero
+IQR(mass)                   # scarto interquartile = Q3 - Q1
+```
+
+Il **campo di variazione** dipende solo dai due valori più estremi, quindi è molto sensibile ai valori anomali e tende a crescere con la numerosità del campione. Lo **scarto interquartile (IQR)** è l'ampiezza del 50% centrale dei dati (dal primo quartile Q1 al terzo quartile Q3, vedi Sezione 4). È robusto.
+
+### Varianza e deviazione standard: l'intuizione
+
+La misura di variabilità più usata è la **deviazione standard (DS)**. Pensala come "**la distanza tipica di un'osservazione dalla media**". Costruiamola su cinque piccoli numeri:
+
+```{r}
+#| label: sd-by-hand
+x <- c(2, 4, 4, 5, 9)
+dev <- x - mean(x)          # scarti dalla media
+dev
+sum(dev)                    # sempre 0: positivi e negativi si compensano
+sum(dev^2) / (length(x) - 1)  # varianza
+var(x)
+sqrt(var(x))                # deviazione standard
+sd(x)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+1. Gli **scarti** dicono quanto ciascun valore dista dalla media (`r mean(x)`), con segno.
+2. Sommano sempre a 0, quindi la loro media semplice è inutile. Elevandoli al quadrato diventano tutti positivi.
+3. La **varianza** è (quasi) la media degli scarti al quadrato. La sua unità di misura è il quadrato dell'unità originale (g² per la massa corporea), il che la rende difficile da interpretare.
+4. La **deviazione standard** è la radice quadrata della varianza, quindi torna nell'unità di misura originale. Qui un valore tipico dista circa `r round(sd(x), 1)` dalla media.
+:::
+
+Per i pinguini:
+
+```{r}
+#| label: sd-mass
+c(var = var(mass), sd = sd(mass))
+c(sd_clean = sd(mass), sd_typo = sd(mass_typo))
+```
+
+La massa di un pinguino tipico dista circa `r round(sd(mass))` g dalla media. Ma la DS **non è robusta**: il singolo errore di battitura la fa più che raddoppiare, mentre l'IQR cambia appena (`r IQR(mass)` contro `r IQR(mass_typo)`). Un'alternativa robusta alla DS è la **deviazione assoluta mediana** (*median absolute deviation*), `mad()`.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: perché dividere per $n-1$?
+
+La varianza campionaria è
+
+$$
+s^2 = \frac{1}{n-1}\sum_{i=1}^n (x_i - \bar x)^2 .
+$$
+
+Vorremmo conoscere la variabilità attorno alla media **vera** della popolazione $\mu$, ma conosciamo solo la media campionaria $\bar x$. Poiché $\bar x$ è calcolata sugli stessi dati, è sempre "più vicina" ai dati di quanto lo sia $\mu$ (minimizza la somma dei quadrati). Quindi $\sum (x_i - \bar x)^2$ è in media un po' troppo piccola, e dividere per $n - 1$ invece che per $n$ corregge esattamente questo effetto. In modo equivalente, una volta fissata $\bar x$, solo $n-1$ scarti sono liberi (devono sommare a 0): abbiamo $n - 1$ **gradi di libertà**.
+
+Una simulazione mostra l'effetto. Estraiamo molti campioni di numerosità 5 da una popolazione con DS $= 10$ (varianza $= 100$):
+
+```{r}
+#| label: n-minus-1
+set.seed(2026)
+sims <- replicate(10000, {
+  x <- rnorm(5, mean = 0, sd = 10)
+  c(divide_n = sum((x - mean(x))^2) / 5, divide_n1 = var(x))
+})
+rowMeans(sims)
+```
+
+Dividendo per $n$ si ottiene in media circa `r round(rowMeans(sims)[["divide_n"]])`: si **sottostima** 100 del fattore $(n-1)/n = 0.8$. Dividendo per $n - 1$ il risultato è corretto in media (lo stimatore è *non distorto*). Con $n$ grande la differenza è trascurabile.
+:::
+
+## 4. Posizione relativa: quantili, percentili e punteggi z
+
+### Quantili
+
+Il **quantile di ordine $p$** è il valore al di sotto del quale si trova una proporzione $p$ dei dati. I percentili sono quantili espressi in percentuale; i **quartili** dividono i dati in quattro parti (Q1 = 25° percentile, Q2 = mediana, Q3 = 75° percentile).
+
+```{r}
+#| label: quantiles
+quantile(mass)                        # min, Q1, mediana, Q3, max
+quantile(mass, probs = c(0.1, 0.9))   # 10° e 90° percentile
+```
+
+Il 10% dei pinguini pesa `r quantile(mass, 0.1)` g o meno; il 90% pesa `r quantile(mass, 0.9)` g o meno. Alla domanda opposta, "quale percentuale di pinguini pesa al massimo 5000 g?", si risponde con una proporzione:
+
+```{r}
+#| label: percentile-rank
+mean(mass <= 5000)
+```
+
+(`mass <= 5000` è un vettore logico e la media di valori `TRUE`/`FALSE` è la proporzione di `TRUE`.)
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: esistono nove modi di calcolare un quantile
+
+Con un campione finito, il 25° percentile cade spesso *tra* due osservazioni, e ci sono diverse regole ragionevoli per interpolare. `quantile()` ne implementa nove tramite l'argomento `type`; il valore predefinito di R è `type = 7`, SAS e SPSS usano `type = 6`, e Hyndman & Fan (1996) raccomandano `type = 8`. Con sei numeri le differenze sono reali:
+
+```{r}
+#| label: quantile-types
+small <- c(1, 3, 4, 8, 10, 15)
+sapply(c(6, 7, 8), \(t) quantile(small, 0.25, type = t))
+```
+
+Con centinaia di osservazioni le differenze sono minime, ma spiegano perché due programmi possono riportare quartili leggermente diversi per gli stessi dati.
+:::
+
+### Punteggi z e standardizzazione
+
+Un pinguino di 4500 g è pesante? Dipende dalla specie. Il **punteggio z** esprime un valore come *il numero di deviazioni standard sopra (+) o sotto (−) la media*:
+
+$$
+z = \frac{x - \bar x}{s}.
+$$
+
+```{r}
+#| label: zscore-species
+penguins |>
+  filter(!is.na(body_mass)) |>
+  mutate(z = (body_mass - mean(body_mass)) / sd(body_mass),
+         .by = species) |>
+  filter(body_mass == 4500) |>
+  select(species, body_mass, z)
+```
+
+Gli stessi 4500 g sono molto **sopra** la media per un pinguino Adelie o Chinstrap, e ben **sotto** la media per un Gentoo. Grazie a `.by = species`, ogni pinguino viene standardizzato rispetto alla propria specie. Dopo la standardizzazione ogni variabile ha media 0 e DS 1, qualunque sia la sua unità di misura originale: i punteggi z permettono di confrontare grandezze misurate su scale diverse.
+
+Anche la funzione `scale()` standardizza, ma restituisce una **matrice**, scomoda dentro un data frame. Usa `as.numeric(scale(x))`, oppure scrivi la formula come sopra.
+
+```{r}
+#| label: scale
+z_mass <- as.numeric(scale(mass))
+c(mean = mean(z_mass), sd = sd(z_mass))
+mean(abs(z_mass) <= 2)
+```
+
+Per dati con distribuzione approssimativamente a campana circa il 95% dei valori ha $|z| \le 2$; qui la proporzione è `r round(mean(abs(z_mass) <= 2), 3)`. Un valore con $|z| > 3$ è insolito e merita un controllo. (Il "95%" è una proprietà della distribuzione normale, vedi [Distribuzioni](../07-probability/29-distributions.qmd); per dati fortemente asimmetrici non vale.)
+
+## 5. Forma: simmetrica o asimmetrica?
+
+La **forma** di una distribuzione descrive come i valori si dispongono attorno al centro. Una distribuzione è **simmetrica** se la metà sinistra e quella destra sono l'una l'immagine speculare dell'altra. È **asimmetrica a destra** (asimmetria positiva) se ha una lunga coda verso i valori grandi, e **asimmetrica a sinistra** (asimmetria negativa) se la lunga coda punta verso i valori piccoli.
+
+```{r}
+#| label: fig-shapes
+#| fig-cap: "Tre forme. Linea tratteggiata: media; linea continua: mediana. La massa corporea dei Gentoo è approssimativamente simmetrica, l'ozono ha una lunga coda a destra, la radiazione solare una coda più lunga a sinistra."
+shape_df <- bind_rows(
+  tibble(variable = "Massa corporea Gentoo (g)",
+         value = penguins$body_mass[penguins$species == "Gentoo"]),
+  tibble(variable = "Ozono (ppb)", value = airquality$Ozone),
+  tibble(variable = "Radiazione solare (lang)", value = airquality$Solar.R)
+) |>
+  filter(!is.na(value))
+
+centres <- shape_df |>
+  summarise(mean = mean(value), median = median(value), .by = variable)
+
+ggplot(shape_df, aes(value)) +
+  geom_histogram(bins = 20, fill = "grey70", colour = "white") +
+  geom_vline(data = centres, aes(xintercept = mean), linetype = "dashed") +
+  geom_vline(data = centres, aes(xintercept = median)) +
+  facet_wrap(~ variable, scales = "free") +
+  labs(x = NULL, y = "Conteggio")
+```
+
+### Media contro mediana come indicatore rapido
+
+La media viene attratta verso la coda lunga; la mediana no. Quindi:
+
+- media ≈ mediana → distribuzione approssimativamente simmetrica;
+- media > mediana → asimmetrica a destra (tipico per redditi, tempi di attesa, concentrazioni);
+- media < mediana → asimmetrica a sinistra.
+
+```{r}
+#| label: mean-vs-median
+centres
+```
+
+Per l'ozono la media è `r round(mean(airquality$Ozone, na.rm = TRUE), 1)` e la mediana solo `r median(airquality$Ozone, na.rm = TRUE)`: pochi giorni molto inquinati spingono la media verso l'alto. Per una variabile asimmetrica la mediana di solito descrive meglio un valore "tipico".
+
+### Un numero per l'asimmetria
+
+L'**indice di asimmetria campionario** è la media dei punteggi z elevati al *cubo*. Il cubo conserva il segno, quindi le lunghe code a destra danno valori positivi grandi e le lunghe code a sinistra valori negativi grandi; in una distribuzione simmetrica si compensano.
+
+```{r}
+#| label: skewness
+skewness <- function(x) {
+  x <- x[!is.na(x)]
+  m <- mean(x)
+  mean((x - m)^3) / mean((x - m)^2)^(3 / 2)
+}
+
+c(gentoo_mass = skewness(penguins$body_mass[penguins$species == "Gentoo"]),
+  ozone       = skewness(airquality$Ozone),
+  solar       = skewness(airquality$Solar.R))
+```
+
+Come indicazione di massima, valori tra −0.5 e 0.5 indicano una simmetria approssimativa e valori oltre ±1 una forte asimmetria. Guarda sempre anche il grafico: un singolo numero non può dirti, per esempio, che una distribuzione ha due picchi.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: momenti, asimmetria e curtosi
+
+La funzione sopra calcola
+
+$$
+g_1 = \frac{\frac1n\sum_i (x_i - \bar x)^3}{\left(\frac1n\sum_i (x_i - \bar x)^2\right)^{3/2}} ,
+$$
+
+il terzo **momento centrale** diviso per il secondo elevato a $3/2$. Pacchetti come `e1071` o `moments` offrono questo indice e versioni leggermente diverse, corrette per la distorsione (differiscono in modo apprezzabile solo per $n$ piccolo). Il quarto momento standardizzato, la **curtosi**, descrive quanto sono pesanti le code rispetto a una distribuzione normale (la cui curtosi è 3; l'"eccesso di curtosi" sottrae 3).
+:::
+
+## 6. Variabilità relativa: il coefficiente di variazione
+
+La massa corporea è più variabile della lunghezza del becco? Le loro DS (`r round(sd(mass))` g contro `r round(sd(penguins$bill_len, na.rm = TRUE), 1)` mm) non sono confrontabili: hanno unità di misura diverse. Il **coefficiente di variazione** (CV) divide la DS per la media, ottenendo una variabilità relativa senza unità di misura:
+
+```{r}
+#| label: cv
+cv <- function(x) sd(x, na.rm = TRUE) / mean(x, na.rm = TRUE)
+c(body_mass = cv(penguins$body_mass), bill_len = cv(penguins$bill_len),
+  flipper_len = cv(penguins$flipper_len))
+```
+
+La massa corporea varia di circa il `r round(100 * cv(penguins$body_mass))`% attorno alla sua media, la lunghezza delle pinne solo di circa il `r round(100 * cv(penguins$flipper_len))`%. Il CV ha senso solo per variabili misurate su una **scala di rapporti** (con uno zero vero e solo valori positivi, come massa o lunghezza). Non ha significato per temperature in °C o per punteggi z, la cui media può essere 0 o negativa.
+
+## 7. Tutto insieme: `summary()` e sintesi per gruppi
+
+`summary()` fornisce minimo, quartili, media, massimo e numero di `NA` per ogni colonna numerica (e i conteggi per i fattori):
+
+```{r}
+#| label: summary
+summary(penguins[, c("species", "bill_len", "body_mass")])
+```
+
+Le sintesi complessive possono nascondere gruppi molto diversi. Combina `summarise()` con `.by` (vedi [Riepiloghi per gruppi](../02-data/10-grouped-summaries.qmd)):
+
+```{r}
+#| label: grouped
+penguins |>
+  filter(!is.na(body_mass)) |>
+  summarise(
+    n      = n(),
+    mean   = mean(body_mass),
+    median = median(body_mass),
+    sd     = sd(body_mass),
+    iqr    = IQR(body_mass),
+    cv     = sd / mean,
+    .by = species
+  )
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- I pinguini Gentoo sono circa 1.3–1.4 kg più pesanti delle altre due specie, che hanno centri simili.
+- All'interno di ciascuna specie media e mediana sono vicine: i gruppi sono approssimativamente simmetrici. L'asimmetria a destra complessiva di `body_mass` deriva soprattutto dal **mescolare** una specie pesante con due più leggere.
+- Le DS hanno grandezza simile, e così pure i CV (intorno al 10–12%).
+- Riporta sempre `n` con le sintesi per gruppi: una media basata su 5 pinguini merita meno fiducia di una basata su 150.
+:::
+
+## 8. La sintesi a cinque numeri: un ponte verso i boxplot
+
+La **sintesi a cinque numeri** (minimo, Q1, mediana, Q3, massimo) descrive centro, variabilità e (grossolanamente) forma in cinque numeri. `fivenum()` la calcola con la definizione di Tukey dei quartili (*hinges*, "cardini"), che può differire leggermente da `quantile()`:
+
+```{r}
+#| label: fivenum
+fivenum(airquality$Ozone)
+quantile(airquality$Ozone, na.rm = TRUE)
+```
+
+(Q3 vale `r fivenum(airquality$Ozone)[4]` con `fivenum()` e `r quantile(airquality$Ozone, 0.75, na.rm = TRUE)` con `quantile()`: due convenzioni, come nel riquadro sui quantili visto sopra.)
+
+Il **boxplot** (diagramma a scatola) è un disegno della sintesi a cinque numeri, con una regola per segnalare i valori insoliti: i punti che distano più di 1.5 × IQR dalla scatola vengono mostrati singolarmente.
+
+```{r}
+#| label: fig-box-preview
+#| fig-cap: "Un boxplot dell'ozono: la scatola va da Q1 a Q3, la linea al suo interno è la mediana, i baffi raggiungono i valori più estremi entro 1.5 × IQR dalla scatola; i punti oltre vengono segnalati come potenziali valori anomali."
+#| fig-asp: 0.35
+ggplot(airquality, aes(x = Ozone, y = "")) +
+  geom_boxplot(na.rm = TRUE) +
+  labs(x = "Ozono (ppb)", y = NULL)
+```
+
+Imparerai a leggerne ogni parte in [Grafici per le distribuzioni](../06-visualization/25-distribution-plots.qmd).
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Dimenticare `na.rm = TRUE`.** `mean(penguins$body_mass)` restituisce `NA`. I valori mancanti non vengono ignorati automaticamente, e questo è voluto: R ti obbliga ad accorgertene.
+2. **Riportare solo la media per dati asimmetrici.** Per redditi, tempi di attesa o concentrazioni, riporta anche (o invece) la mediana e l'IQR.
+3. **Leggere la DS come "distanza massima" o come "campo di variazione".** È una distanza tipica dalla media; molti valori distano più di una DS.
+4. **Usare `scale()` dentro `mutate()` senza `as.numeric()`.** Restituisce una matrice a una colonna con attributi, che più avanti può causare comportamenti inattesi.
+5. **Confrontare le DS di variabili misurate in unità diverse.** Usa i punteggi z o il coefficiente di variazione (per variabili su scala di rapporti).
+6. **Fidarsi di una sintesi senza un grafico.** Distribuzioni molto diverse possono avere la stessa media e la stessa DS (ne vedrai un esempio clamoroso in [Correlazione](../06-visualization/27-correlation.qmd)).
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. In un'azienda lo stipendio medio è 52.000 € e lo stipendio mediano è 38.000 €. Che cosa ti dice questo sulla forma della distribuzione degli stipendi?
+
+La media è molto più grande della mediana: la distribuzione è **asimmetrica a destra**, con pochi stipendi molto alti che spingono la media verso l'alto. La mediana descrive meglio un dipendente "tipico".
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Un pinguino ha un punteggio z di −1.5 per la massa corporea all'interno della sua specie. Interpretalo.
+
+Pesa 1.5 deviazioni standard **in meno** del pinguino medio della sua specie: è leggero, ma non in modo straordinario.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Aggiungi un valore enorme a un dataset. Quali di questi indici cambiano molto: media, mediana, DS, IQR, campo di variazione?
+
+La media, la DS e il campo di variazione (non robusti). La mediana e l'IQR cambiano poco o per nulla (robusti).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Perché la varianza è difficile da interpretare direttamente, e come risolve il problema la DS?
+
+La varianza si misura in unità al quadrato (g², mm²). La DS ne è la radice quadrata, quindi è nella stessa unità di misura dei dati e si può leggere come una distanza tipica dalla media.
+:::
+
+## 10. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — centro e variabilità di `mpg`.** Calcola media, mediana, DS e IQR del consumo di carburante (`mpg`, miglia per gallone) in `mtcars`. La distribuzione è simmetrica o asimmetrica?
+
+```{webr}
+#| exercise: ex_22_1
+x <- mtcars$mpg
+c(mean = ______, median = ______, sd = ______, iqr = ______)
+```
+
+::: {.hint exercise="ex_22_1"}
+Le funzioni sono `mean()`, `median()`, `sd()` e `IQR()`.
+:::
+
+::: {.solution exercise="ex_22_1"}
+```r
+x <- mtcars$mpg
+c(mean = mean(x), median = median(x), sd = sd(x), iqr = IQR(x))
+```
+La media (circa 20.1) è maggiore della mediana (19.2): una lieve asimmetria a destra, perché poche auto molto economiche allungano la coda destra.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — prevedi, poi verifica.** Prima di eseguire il codice, prevedi quali numeri cambieranno quando il valore più grande di `hp` in `mtcars` viene moltiplicato per 10. Poi eseguilo.
+
+```{webr}
+#| exercise: ex_22_2
+hp  <- mtcars$hp
+hp2 <- hp
+hp2[which.max(hp2)] <- 10 * max(hp2)
+
+stats <- function(v) c(mean = mean(v), median = median(v),
+                       sd = sd(v), iqr = IQR(v), trim = mean(v, trim = 0.1))
+rbind(original = stats(hp), changed = stats(______))
+```
+
+::: {.hint exercise="ex_22_2"}
+Passa `hp2` a `stats()`. Quali indici usano i valori degli estremi, e quali solo la loro posizione nei dati ordinati?
+:::
+
+::: {.solution exercise="ex_22_2"}
+```r
+rbind(original = stats(hp), changed = stats(hp2))
+```
+La media e soprattutto la DS cambiano molto; la mediana, l'IQR e la media troncata al 10% non cambiano affatto, perché l'auto modificata è nel 10% più alto che viene eliminato e resta comunque il valore più grande.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — sintesi per gruppi.** Usando `dplyr`, calcola per ciascuna specie il numero di pinguini con lunghezza delle pinne nota, la media, la mediana e la DS di `flipper_len`. Quale specie ha in media le pinne più lunghe?
+
+```{webr}
+#| exercise: ex_22_3
+library(dplyr)
+penguins |>
+  filter(!is.na(flipper_len)) |>
+  summarise(
+    n      = ______,
+    mean   = ______,
+    median = ______,
+    sd     = ______,
+    .by = ______
+  )
+```
+
+::: {.hint exercise="ex_22_3"}
+Usa `n()`, `mean(flipper_len)`, `median(flipper_len)`, `sd(flipper_len)` e `.by = species`.
+:::
+
+::: {.solution exercise="ex_22_3"}
+```r
+penguins |>
+  filter(!is.na(flipper_len)) |>
+  summarise(n = n(), mean = mean(flipper_len),
+            median = median(flipper_len), sd = sd(flipper_len),
+            .by = species)
+```
+I pinguini Gentoo hanno di gran lunga le pinne più lunghe (media circa 217 mm, contro circa 190 mm per gli Adelie e 196 mm per i Chinstrap). All'interno di ciascuna specie media e mediana sono vicine.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — punteggi z tra variabili diverse.** L'auto `"Maserati Bora"` in `mtcars` è più estrema per potenza (`hp`) o per peso (`wt`)? Confronta i punteggi z.
+
+```{webr}
+#| exercise: ex_22_4
+z <- function(v) (v - mean(v)) / sd(v)
+z_hp <- z(mtcars$hp)
+z_wt <- z(mtcars$wt)
+i <- which(rownames(mtcars) == "Maserati Bora")
+c(hp = ______, wt = ______)
+```
+
+::: {.hint exercise="ex_22_4"}
+Indicizza i vettori dei punteggi z con `i`: `z_hp[i]`.
+:::
+
+::: {.solution exercise="ex_22_4"}
+```r
+c(hp = z_hp[i], wt = z_wt[i])
+```
+La sua potenza è circa 2.7 DS sopra la media, il suo peso solo circa 0.4 DS sopra: è molto più insolita per potenza che per peso. I punteggi z rendono confrontabili variabili misurate in unità diverse.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — forma delle variabili di `airquality`.** Usando la funzione `skewness()` della Sezione 5, calcola l'asimmetria di `Ozone`, `Solar.R`, `Wind` e `Temp`. Per ciascuna, confronta la media con la mediana e disegna un istogramma. I tre indicatori (numero, media contro mediana, grafico) sono concordi?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+vars <- c("Ozone", "Solar.R", "Wind", "Temp")
+sapply(airquality[vars], skewness)
+sapply(airquality[vars], \(v) c(mean = mean(v, na.rm = TRUE),
+                                median = median(v, na.rm = TRUE)))
+
+ggplot(airquality, aes(Temp)) +
+  geom_histogram(bins = 15) +
+  labs(x = "Temperatura (°F)", y = "Conteggio")
+```
+L'ozono è fortemente asimmetrico a destra (asimmetria circa 1.2, media ≈ 42 > mediana 31.5). Solar.R è moderatamente asimmetrico a sinistra (circa −0.4, media < mediana). Wind (circa 0.3) e Temp (circa −0.4) sono lievemente asimmetrici. I tre indicatori concordano sulla direzione.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 6 — la tua funzione di sintesi.** Scrivi una funzione `describe(x)` che restituisca, come vettore con nomi, `n` (valori non mancanti), `mean`, `sd`, `min`, `q1`, `median`, `q3`, `max` e `skew`. Applicala a ogni colonna numerica di `penguins` con `sapply()`, e a `body_mass` per ciascuna specie con `tapply()`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+describe <- function(x) {
+  x <- x[!is.na(x)]
+  q <- quantile(x, c(0.25, 0.5, 0.75))
+  c(n = length(x), mean = mean(x), sd = sd(x), min = min(x),
+    q1 = q[[1]], median = q[[2]], q3 = q[[3]], max = max(x),
+    skew = skewness(x))
+}
+
+num_cols <- c("bill_len", "bill_dep", "flipper_len", "body_mass")
+round(sapply(penguins[num_cols], describe), 2)
+tapply(penguins$body_mass, penguins$species, describe)
+```
+:::
+:::
+
+## Riepilogo
+
+| Concetto | R | Robusto? |
+|---|---|---|
+| Media / media troncata | `mean(x)`, `mean(x, trim = 0.1)` | No / in parte |
+| Mediana | `median(x)` | Sì |
+| Campo di variazione, IQR | `range(x)`, `IQR(x)` | No, Sì |
+| Varianza, DS, MAD | `var(x)`, `sd(x)`, `mad(x)` | No, No, Sì |
+| Quantili | `quantile(x, probs = )`; proporzione sotto una soglia: `mean(x <= v)` | Sì |
+| Punteggi z | `(x - mean(x)) / sd(x)`, `as.numeric(scale(x))` | — |
+| Coefficiente di variazione | `sd(x) / mean(x)` | No |
+| Asimmetria | `mean((x - m)^3) / mean((x - m)^2)^1.5` | No |
+| Sintesi a cinque numeri | `fivenum(x)`, `summary(x)` | Sì |
+| Per gruppi | `summarise(..., .by = g)` | — |
+
+- Descrivi **centro, variabilità, posizione relativa e forma**: nessun numero da solo fa tutto.
+- **Mediana e IQR** sono robusti; **media e DS** sono sensibili ai valori anomali, ma sono alla base di gran parte della statistica.
+- La DS è la **distanza tipica dalla media**; dividiamo per $n - 1$ per correggere il fatto di aver stimato la media.
+- **Media > mediana** suggerisce asimmetria a destra; **media < mediana** asimmetria a sinistra. Conferma sempre con un grafico.
+- Le sintesi **per gruppi** rivelano spesso ciò che la sintesi complessiva nasconde.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2a ed.), capitolo "Exploring numerical data", <https://openintro-ims.netlify.app>
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitolo "Exploratory data analysis", <https://r4ds.hadley.nz>
+- Hyndman, R. J. & Fan, Y. (1996). Sample quantiles in statistical packages. *The American Statistician*, 50(4), 361–365.
+:::

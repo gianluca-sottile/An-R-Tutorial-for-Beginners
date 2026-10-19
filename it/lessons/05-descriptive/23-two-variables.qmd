@@ -1,0 +1,509 @@
+---
+title: "Descrivere due variabili"
+subtitle: "Tabelle di contingenza, sintesi condizionate e un paradosso famoso"
+description: "Descrivere la relazione tra due variabili: distribuzioni congiunte, marginali e condizionate di due variabili categoriali, sintesi per gruppi di una variabile numerica, un primo sguardo alla covarianza e il paradosso di Simpson con i dati sulle ammissioni a UC Berkeley."
+format:
+  live-html:
+    webr:
+      packages: ["dplyr"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+```
+
+::: {.lesson-meta}
+[Livello 2 · Descrivere ed esplorare]{.level-2} [⏱ ~75 min]{} [Prerequisiti: [Tabelle di frequenza](21-frequency-tables.qmd), [Indici di sintesi](22-summary-statistics.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- costruire una **tabella di contingenza** e calcolare le distribuzioni **congiunta**, **marginali** e **condizionate**;
+- scegliere tra percentuali **di riga** e **di colonna** in base alla domanda;
+- confrontare una variabile numerica tra gruppi con **medie e mediane condizionate**;
+- spiegare che cosa misura la **covarianza** tra due variabili numeriche, e perché dipende dalle unità di misura;
+- riconoscere il **paradosso di Simpson** e spiegarlo in termini di una terza variabile.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+```
+
+## 1. Perché guardare due variabili insieme?
+
+Le domande più interessanti riguardano le **relazioni**: pinguini maschi e femmine hanno masse diverse? Certe specie vivono su certe isole? Le donne avevano meno probabilità degli uomini di essere ammesse a un'università? Una sintesi di una sola variabile non può rispondere. Dobbiamo descrivere come una variabile **cambia al variare dei valori di un'altra**.
+
+Lo strumento da usare dipende dal tipo delle due variabili:
+
+| Variabile 1 | Variabile 2 | Descrizione | Grafico (Modulo 6) |
+|---|---|---|---|
+| categoriale | categoriale | tabella di contingenza, percentuali condizionate | barre sovrapposte / proporzionali |
+| categoriale | numerica | sintesi (media, mediana, DS) per gruppo | boxplot, grafici a violino per gruppo |
+| numerica | numerica | covarianza, correlazione | grafico a dispersione |
+
+Spesso una variabile viene considerata **esplicativa** (quella che potrebbe *spiegare* l'altra o che viene prima, per esempio specie o genere) e l'altra **risposta** (l'esito, per esempio isola o ammissione). Questa distinzione guiderà quasi ogni scelta in questa lezione.
+
+## 2. Due variabili categoriali: la tabella di contingenza
+
+Una **tabella di contingenza** (o tabella a doppia entrata) conta le osservazioni per ogni combinazione di due variabili categoriali.
+
+```{r}
+#| label: contingency
+tab <- table(island = penguins$island, species = penguins$species)
+tab
+```
+
+Ogni cella è una **frequenza congiunta**: per esempio `r tab["Dream", "Chinstrap"]` pinguini sono Chinstrap che vivono su Dream. Gli zeri sono informativi: i pinguini Gentoo sono stati trovati solo su Biscoe, i Chinstrap solo su Dream, e su Torgersen c'erano solo pinguini Adelie.
+
+### Marginali
+
+I totali di riga e di colonna sono le frequenze **marginali**: la distribuzione di ciascuna variabile presa da sola (si scrivono "ai margini" della tabella):
+
+```{r}
+#| label: margins
+addmargins(tab)
+margin.table(tab, 1)   # totali per isola (righe)
+margin.table(tab, 2)   # totali per specie (colonne)
+```
+
+La distribuzione marginale di `species` è esattamente la tabella a una via vista in [Tabelle di frequenza](21-frequency-tables.qmd). Le marginali non dicono nulla sulla relazione; per quella servono le distribuzioni **condizionate**.
+
+## 3. Distribuzioni congiunta, marginali e condizionate
+
+Ci sono tre modi di trasformare i conteggi in proporzioni. Rispondono a **domande diverse**:
+
+```{r}
+#| label: prop-joint
+round(prop.table(tab), 3)              # congiunta: divide per il totale generale
+```
+
+**Proporzioni congiunte**: quale frazione di *tutti* i pinguini si trova in ciascuna cella? (Tutte le celle sommano a 1.)
+
+```{r}
+#| label: prop-rows
+round(prop.table(tab, margin = 1), 3)  # proporzioni di riga: ogni riga somma a 1
+```
+
+**Proporzioni di riga** = la distribuzione della specie **condizionata** all'isola (data l'isola). Domanda: *"Tra i pinguini di Dream, quale frazione è Chinstrap?"* Risposta: il `r round(100 * prop.table(tab, 1)["Dream", "Chinstrap"])`%.
+
+```{r}
+#| label: prop-cols
+round(prop.table(tab, margin = 2), 3)  # proporzioni di colonna: ogni colonna somma a 1
+```
+
+**Proporzioni di colonna** = la distribuzione dell'isola **condizionata** alla specie. Domanda: *"Tra i pinguini Adelie, quale frazione vive su Dream?"* Risposta: il `r round(100 * prop.table(tab, 2)["Dream", "Adelie"])`%.
+
+::: {.callout-tip .read-output}
+## Come leggere questo output, e come scegliere
+
+- `margin = 1` significa "condiziona alle **righe**" (le righe sommano a 1); `margin = 2` "condiziona alle **colonne**".
+- Una regola utile: **calcola le percentuali all'interno delle categorie della variabile esplicativa**, e confrontale tra quelle categorie. Se pensi che la specie spieghi dove vivono i pinguini, qui usa le proporzioni di colonna (ogni specie somma al 100%) e confronta le isole tra le specie.
+- Le due tabelle condizionate **non** sono intercambiabili. "Il 37% dei pinguini Adelie vive su Dream" e "il 45% dei pinguini di Dream è Adelie" sono entrambe vere e dicono cose diverse. Confonderle è uno degli errori più comuni nella lettura dei report (e dei giornali).
+:::
+
+### Associazione e indipendenza
+
+Se specie e isola fossero **non legate** (statisticamente *indipendenti*), la distribuzione delle specie sarebbe la stessa su ogni isola: ogni riga della tabella delle proporzioni di riga somiglierebbe alla distribuzione complessiva delle specie (`r paste0(round(100 * prop.table(margin.table(tab, 2))), "%", collapse = " / ")`). Qui le righe sono completamente diverse: un'**associazione** molto forte.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: frequenze attese sotto indipendenza
+
+Indica con $n_{ij}$ il conteggio nella riga $i$ e nella colonna $j$, con $n_{i\cdot}$ e $n_{\cdot j}$ i totali di riga e di colonna, e con $n$ il totale generale. Sotto indipendenza la proporzione congiunta è il prodotto delle proporzioni marginali, quindi la **frequenza attesa** è
+
+$$
+E_{ij} = n \cdot \frac{n_{i\cdot}}{n} \cdot \frac{n_{\cdot j}}{n} = \frac{n_{i\cdot}\, n_{\cdot j}}{n}.
+$$
+
+```{r}
+#| label: expected
+expected <- outer(margin.table(tab, 1), margin.table(tab, 2)) / sum(tab)
+round(expected, 1)
+```
+
+Più grandi sono le differenze tra le frequenze osservate $n_{ij}$ e le frequenze attese $E_{ij}$, più forte è l'evidenza di associazione. Il **test chi-quadrato** trasforma questo confronto in un test formale: vedi [Proporzioni e test chi-quadrato](../08-inference/35-proportions-chisq.qmd).
+:::
+
+### L'approccio tidy
+
+Con `dplyr`, applica `count()` a due variabili e calcola le proporzioni **all'interno** dei gruppi della variabile condizionante con `.by`:
+
+```{r}
+#| label: tidy-conditional
+penguins |>
+  count(species, island) |>
+  mutate(prop = n / sum(n), .by = species)
+```
+
+Qui `.by = species` significa "dividi per il totale di ciascuna specie": le proporzioni sommano a 1 all'interno di ogni specie, esattamente come `prop.table(tab, margin = 2)`. Le combinazioni con zero pinguini semplicemente non compaiono come righe.
+
+## 4. Una variabile categoriale e una numerica: sintesi condizionate
+
+Per mettere in relazione una variabile numerica con una categoriale, calcola gli indici visti in [Indici di sintesi](22-summary-statistics.qmd) **separatamente per ciascun gruppo**: le medie, mediane e DS **condizionate**.
+
+```{r}
+#| label: conditional-means
+penguins |>
+  filter(!is.na(body_mass), !is.na(sex)) |>
+  summarise(n = n(),
+            mean = mean(body_mass),
+            median = median(body_mass),
+            sd = sd(body_mass),
+            .by = c(species, sex)) |>
+  arrange(species, sex)
+```
+
+In R base, `tapply()` con una lista di due fattori restituisce le stesse medie sotto forma di una compatta tabella a doppia entrata:
+
+```{r}
+#| label: tapply-2way
+means_tab <- tapply(penguins$body_mass,
+                    list(penguins$species, penguins$sex),
+                    mean, na.rm = TRUE)
+round(means_tab)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- In ogni specie i maschi sono più pesanti delle femmine, in media di circa `r round(min(means_tab[, "male"] - means_tab[, "female"]))`–`r round(max(means_tab[, "male"] - means_tab[, "female"]))` g.
+- È una differenza grande? Confrontala con la **variabilità entro i gruppi** (le DS, qualche centinaio di grammi): la differenza è tra circa una e due DS e mezza, quindi i due sessi si sovrappongono ma sono chiaramente spostati.
+- Media e mediana sono vicine in ogni gruppo: nessuna forte asimmetria, quindi qui la media è una sintesi adeguata.
+:::
+
+Guarda sempre anche le distribuzioni, non solo i loro centri:
+
+```{r}
+#| label: fig-mass-sex
+#| fig-cap: "Massa corporea per specie e sesso. Le sintesi condizionate descrivono i centri; il grafico mostra quanto i gruppi si sovrappongono."
+penguins |>
+  filter(!is.na(sex)) |>
+  ggplot(aes(x = species, y = body_mass, fill = sex)) +
+  geom_boxplot() +
+  labs(x = NULL, y = "Massa corporea (g)", fill = "Sesso")
+```
+
+Se una differenza tra medie campionarie sia più grande di quanto produrrebbe il caso è una domanda per i [test t](../08-inference/34-t-tests.qmd) e l'[ANOVA](../08-inference/37-anova.qmd).
+
+## 5. Due variabili numeriche: un primo sguardo
+
+Per due variabili numeriche, comincia con un **grafico a dispersione**: ogni punto è un pinguino.
+
+```{r}
+#| label: fig-quadrants
+#| fig-cap: "Lunghezza delle pinne e massa corporea. Le linee tratteggiate indicano le due medie e dividono il grafico in quattro quadranti."
+pen <- penguins |> filter(!is.na(flipper_len), !is.na(body_mass))
+
+pen |>
+  mutate(product = (flipper_len - mean(flipper_len)) *
+           (body_mass - mean(body_mass)),
+         sign = if_else(product > 0, "positivo", "negativo")) |>
+  ggplot(aes(flipper_len, body_mass, colour = sign)) +
+  geom_point(alpha = 0.7) +
+  geom_vline(xintercept = mean(pen$flipper_len), linetype = "dashed") +
+  geom_hline(yintercept = mean(pen$body_mass), linetype = "dashed") +
+  labs(x = "Lunghezza delle pinne (mm)", y = "Massa corporea (g)",
+       colour = "Prodotto degli scarti")
+```
+
+I pinguini con pinne **più lunghe della media** tendono a essere **più pesanti della media** (quadrante in alto a destra), e quelli con pinne più corte più leggeri (in basso a sinistra). Per un punto in uno di questi due quadranti, i due scarti dalla media hanno lo **stesso segno**, quindi il loro prodotto è positivo. I punti negli altri due quadranti danno prodotti negativi.
+
+La **covarianza** è (quasi) la media di questi prodotti:
+
+$$
+\operatorname{cov}(x, y) = \frac{1}{n-1}\sum_{i=1}^n (x_i - \bar x)(y_i - \bar y).
+$$
+
+```{r}
+#| label: covariance
+cov(pen$flipper_len, pen$body_mass)
+mean((pen$flipper_len - mean(pen$flipper_len)) *
+       (pen$body_mass - mean(pen$body_mass)) > 0)  # quota di prodotti positivi
+```
+
+Una covarianza **positiva** significa che le variabili tendono a muoversi insieme; una **negativa** che, quando una è sopra la media, l'altra tende a essere sotto; un valore vicino a zero che non c'è una tendenza *lineare*. Ma la grandezza della covarianza è difficile da leggere, perché dipende dalle unità di misura:
+
+```{r}
+#| label: covariance-units
+cov(pen$flipper_len / 10, pen$body_mass / 1000)   # cm e kg invece di mm e g
+```
+
+Stessi pinguini, stessa relazione, una covarianza 10.000 volte più piccola. Dividendo per le due deviazioni standard si eliminano le unità di misura e si ottiene il **coefficiente di correlazione**, argomento di [Correlazione](../06-visualization/27-correlation.qmd).
+
+## 6. Il paradosso di Simpson: quando la tabella complessiva mente
+
+Nel 1973 l'Università della California a Berkeley era preoccupata per una possibile discriminazione di genere nelle ammissioni ai corsi di dottorato e master. Il dataset incluso in R `UCBAdmissions` contiene le domande di ammissione ai suoi sei dipartimenti più grandi: una tabella a tre vie `Admit` × `Gender` × `Dept`.
+
+### Il quadro aggregato
+
+```{r}
+#| label: ucb-aggregate
+ucb_overall <- margin.table(UCBAdmissions, c(1, 2))  # somma sui dipartimenti
+ucb_overall
+round(prop.table(ucb_overall, margin = 2), 3)       # all'interno di ciascun genere
+```
+
+Il genere è la variabile esplicativa, quindi calcoliamo le percentuali all'interno di ciascun genere (colonne). Complessivamente è stato ammesso il `r round(100 * prop.table(ucb_overall, 2)["Admitted", "Male"])`% degli uomini, ma solo il `r round(100 * prop.table(ucb_overall, 2)["Admitted", "Female"])`% delle donne. Sembra una chiara prova di discriminazione nei confronti delle donne.
+
+### Dipartimento per dipartimento
+
+```{r}
+#| label: ucb-dept
+rate_by_dept <- prop.table(UCBAdmissions, margin = c(2, 3))["Admitted", , ]
+round(rate_by_dept, 3)
+```
+
+`margin = c(2, 3)` calcola le proporzioni all'interno di ogni combinazione **genere–dipartimento**. Ora guarda lungo le colonne: in `r sum(rate_by_dept["Female", ] > rate_by_dept["Male", ])` dei 6 dipartimenti **le donne avevano un tasso di ammissione più alto degli uomini**, e dove gli uomini andavano meglio la differenza è piccola. La direzione dell'associazione si è **invertita** quando abbiamo separato per dipartimento. Questo è il **paradosso di Simpson**.
+
+### Perché succede?
+
+Due fatti lo spiegano:
+
+```{r}
+#| label: ucb-why
+# dove ha fatto domanda ciascun genere? (le righe sommano a 1)
+round(prop.table(margin.table(UCBAdmissions, c(2, 3)), margin = 1), 3)
+# quanto era difficile ciascun dipartimento? (tasso di ammissione, entrambi i generi)
+round(prop.table(margin.table(UCBAdmissions, c(1, 3)), margin = 2)["Admitted", ], 3)
+```
+
+1. I dipartimenti A e B hanno ammesso la maggior parte dei candidati; i dipartimenti C–F molti meno.
+2. Più della metà degli uomini ha fatto domanda ad A o B; più del 90% delle donne ha fatto domanda ai dipartimenti selettivi C–F.
+
+Quindi il tasso di ammissione aggregato delle donne è basso soprattutto perché **le donne facevano domanda a dipartimenti in cui era più difficile entrare per tutti**. Il dipartimento è una terza variabile legata sia al genere (dove si fa domanda) sia all'ammissione (quanto è selettivo). Una variabile di questo tipo si chiama **variabile confondente** (confondente) o **variabile nascosta** (*lurking variable*).
+
+```{r}
+#| label: fig-ucb
+#| fig-cap: "Tasso di ammissione per dipartimento e genere. La dimensione dei punti indica il numero di candidati. All'interno dei dipartimenti, i tassi delle donne sono simili o superiori a quelli degli uomini."
+ucb_df <- as.data.frame(UCBAdmissions) |>
+  summarise(applicants = sum(Freq),
+            admitted = sum(Freq[Admit == "Admitted"]),
+            .by = c(Dept, Gender)) |>
+  mutate(rate = admitted / applicants)
+
+ggplot(ucb_df, aes(Dept, rate, colour = Gender, size = applicants)) +
+  geom_point(alpha = 0.8) +
+  labs(x = "Dipartimento", y = "Tasso di ammissione",
+       colour = "Genere", size = "Candidati")
+```
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: il tasso aggregato è una media ponderata
+
+Per ciascun genere, il tasso di ammissione complessivo è una **media ponderata** dei tassi dei dipartimenti, con pesi pari alla quota delle domande di quel genere rivolte a ciascun dipartimento:
+
+$$
+\text{tasso}_{\text{donne}} = \sum_{d} w_{d,\text{donne}} \cdot \text{tasso}_{d,\text{donne}}, \qquad
+w_{d,\text{donne}} = \frac{\text{candidate donne a } d}{\text{tutte le candidate donne}} .
+$$
+
+```{r}
+#| label: ucb-weighted
+w_female <- prop.table(margin.table(UCBAdmissions, c(2, 3)), 1)["Female", ]
+sum(w_female * rate_by_dept["Female", ])
+```
+
+Questo riproduce il `r round(100 * prop.table(ucb_overall, 2)["Admitted", "Female"])`% visto sopra. Uomini e donne hanno pesi diversi (le donne assegnano pesi grandi ai dipartimenti con tasso basso), quindi le loro medie possono risultare ordinate in modo opposto a ogni (o quasi ogni) confronto a livello di dipartimento.
+:::
+
+La lezione è generale: **un'associazione nei dati aggregati può scomparire o invertirsi quando si condiziona a una terza variabile**. Prima di trarre conclusioni da una tabella a doppia entrata, chiediti quali altre variabili potrebbero essere legate a entrambe. Ritroverai lo stesso fenomeno con le correlazioni in [Correlazione](../06-visualization/27-correlation.qmd) e con i coefficienti di regressione in [Regressione multipla](../../../lessons/09-regression/39-multiple-regression.qmd).
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Confondere percentuali di riga e di colonna.** "La maggior parte dei fumatori è uomo" non equivale a "la maggior parte degli uomini fuma". Esplicita a parole il denominatore.
+2. **Confrontare conteggi grezzi tra gruppi di dimensioni diverse.** Confronta le proporzioni condizionate, non i conteggi.
+3. **Usare `prop.table()` senza `margin`.** Ottieni le proporzioni congiunte sull'intera tabella, che raramente rispondono alla tua domanda.
+4. **Ignorare le terze variabili.** Una tabella aggregata può mostrare l'*opposto* di ciò che accade in ogni sottogruppo (paradosso di Simpson).
+5. **Leggere la grandezza della covarianza come forza della relazione.** La covarianza dipende dalle unità di misura; per misurare la forza usa la correlazione.
+6. **Dedurre un nesso causale da una descrizione.** Un'associazione, per quanto forte, da sola non dice nulla sul *perché* le variabili sono legate.
+:::
+
+## 7. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. In una tabella `smoker` (righe) × `disease` (colonne), quali proporzioni rispondono alla domanda "I fumatori si ammalano più spesso dei non fumatori?"
+
+Le proporzioni di riga (`prop.table(tab, margin = 1)`): all'interno di ciascun gruppo di fumo, la frazione di malati. Il fumo è la variabile esplicativa, quindi condizioniamo a essa.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Come apparirebbe la tabella delle proporzioni di riga se due variabili categoriali fossero indipendenti?
+
+Tutte le righe sarebbero (approssimativamente) identiche, e uguali alla distribuzione complessiva (marginale) della variabile di colonna.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. La covarianza tra altezza (in cm) e peso (in kg) è 50. Un collega converte l'altezza in metri. Che cosa succede alla covarianza? E alla forza della relazione?
+
+La covarianza viene divisa per 100 (diventa 0.5) perché i valori dell'altezza sono 100 volte più piccoli. La relazione in sé non cambia: proprio per questo, per misurarne la forza, si usa la correlazione, che non ha unità di misura.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. In una frase: perché le donne a Berkeley avevano un tasso di ammissione complessivo più basso, pur facendo altrettanto bene o meglio nella maggior parte dei dipartimenti?
+
+Perché facevano domanda in proporzione maggiore a dipartimenti con bassi tassi di ammissione per tutti; il dipartimento confonde la relazione tra genere e ammissione.
+:::
+
+## 8. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — colore di capelli e occhi.** `HairEyeColor` è una tabella a tre vie (capelli × occhi × sesso). Somma rispetto al sesso, poi calcola la distribuzione del colore degli occhi **all'interno di ciascun colore di capelli**. Quale percentuale delle persone bionde ha gli occhi azzurri?
+
+```{webr}
+#| exercise: ex_23_1
+hair_eye <- margin.table(HairEyeColor, c(1, 2))
+hair_eye
+round(100 * prop.table(hair_eye, margin = ______), 1)
+```
+
+::: {.hint exercise="ex_23_1"}
+Il colore dei capelli è sulle righe, e vogliamo che ogni colore di capelli sommi al 100%.
+:::
+
+::: {.solution exercise="ex_23_1"}
+```r
+round(100 * prop.table(hair_eye, margin = 1), 1)
+```
+Circa il 74% delle persone bionde ha gli occhi azzurri, contro circa il 19% delle persone con i capelli neri. Il colore degli occhi è fortemente associato al colore dei capelli. (Nota che "il 74% dei biondi ha gli occhi azzurri" è diverso da "il 44% delle persone con gli occhi azzurri è biondo", che è una percentuale di colonna.)
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — sintesi condizionate.** Confronta il consumo di carburante (`mpg`) delle auto con cambio automatico (`am == 0`) e manuale (`am == 1`) in `mtcars`: numero di auto, media, mediana e DS per gruppo.
+
+```{webr}
+#| exercise: ex_23_2
+library(dplyr)
+mtcars |>
+  summarise(n = n(),
+            mean = ______,
+            median = ______,
+            sd = ______,
+            .by = ______)
+```
+
+::: {.hint exercise="ex_23_2"}
+Usa `mean(mpg)`, `median(mpg)`, `sd(mpg)` e `.by = am`.
+:::
+
+::: {.solution exercise="ex_23_2"}
+```r
+mtcars |>
+  summarise(n = n(), mean = mean(mpg), median = median(mpg),
+            sd = sd(mpg), .by = am)
+```
+Le auto con cambio manuale percorrono in media circa 7 miglia per gallone in più (≈ 24.4 contro 17.1). Attenzione: in questi dati le auto con cambio manuale sono anche più leggere, quindi il peso potrebbe essere un confondente; una descrizione non è una spiegazione causale.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — verifica il paradosso di Simpson.** Calcola il tasso di ammissione per ciascun genere **solo nel dipartimento A**, e confrontalo con i tassi complessivi.
+
+```{webr}
+#| exercise: ex_23_3
+dept_A <- UCBAdmissions[, , "A"]
+dept_A
+round(prop.table(dept_A, margin = ______), 3)
+
+overall <- margin.table(UCBAdmissions, c(______, ______))
+round(prop.table(overall, margin = 2), 3)
+```
+
+::: {.hint exercise="ex_23_3"}
+In ogni sezione bidimensionale `Admit` è sulle righe e `Gender` sulle colonne; condiziona al genere (`margin = 2`). La tabella complessiva somma sui dipartimenti, mantenendo le dimensioni 1 e 2.
+:::
+
+::: {.solution exercise="ex_23_3"}
+```r
+round(prop.table(dept_A, margin = 2), 3)
+overall <- margin.table(UCBAdmissions, c(1, 2))
+round(prop.table(overall, margin = 2), 3)
+```
+Nel dipartimento A è stato ammesso circa l'82% delle donne e il 62% degli uomini, mentre complessivamente i tassi sono circa il 30% per le donne e il 45% per gli uomini: il confronto si inverte.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — prevedi la covarianza.** Prevedi il segno della covarianza tra peso dell'auto (`wt`) e `mpg`, poi calcolala. Poi calcolala con il peso in chilogrammi (`wt` è in migliaia di libbre; 1000 lb ≈ 453.6 kg). Che cosa cambia e che cosa no?
+
+```{webr}
+#| exercise: ex_23_4
+cov(mtcars$wt, mtcars$mpg)
+cov(______, mtcars$mpg)
+```
+
+::: {.hint exercise="ex_23_4"}
+Il peso in kg è `mtcars$wt * 453.6`.
+:::
+
+::: {.solution exercise="ex_23_4"}
+```r
+cov(mtcars$wt, mtcars$mpg)          # circa -5.1
+cov(mtcars$wt * 453.6, mtcars$mpg)  # circa -2300
+```
+Le auto più pesanti percorrono meno miglia per gallone, quindi la covarianza è **negativa**. Cambiare unità di misura la moltiplica per 453.6: il segno resta, la grandezza da sola non ha significato.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — Titanic.** La tabella `Titanic` inclusa in R ha dimensioni `Class` × `Sex` × `Age` × `Survived`. (a) Calcola il tasso di sopravvivenza per classe. (b) Calcola il tasso di sopravvivenza per classe **e** sesso. (c) L'alto tasso di sopravvivenza dei passeggeri di 1ª classe era dovuto solo alla quota di donne tra loro? Scrivi tre frasi.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+cls <- margin.table(Titanic, c(1, 4))            # Class x Survived
+round(prop.table(cls, margin = 1), 3)
+
+cls_sex <- margin.table(Titanic, c(1, 2, 4))     # Class x Sex x Survived
+round(prop.table(cls_sex, margin = c(1, 2))[, , "Yes"], 3)
+
+round(prop.table(margin.table(Titanic, c(1, 2)), margin = 1), 3)  # quota di donne
+```
+È sopravvissuto circa il 62% dei passeggeri di 1ª classe, contro circa il 25% in 3ª classe. All'interno di ciascun sesso il gradiente per classe rimane: tra le donne è sopravvissuto circa il 97% in 1ª classe contro il 46% in 3ª; tra gli uomini circa il 34% contro il 17%. Quindi la sopravvivenza più alta in 1ª classe non è dovuta solo alla presenza di più donne: la classe conta in entrambi i sessi, anche se il sesso è un fattore ancora più forte.
+:::
+:::
+
+## Riepilogo
+
+| Obiettivo | R base | dplyr |
+|---|---|---|
+| Tabella di contingenza | `table(a, b)` | `count(df, a, b)` |
+| Marginali / totali | `margin.table(t, 1)`, `addmargins(t)` | `count(df, a)` |
+| Proporzioni congiunte | `prop.table(t)` | `mutate(p = n / sum(n))` |
+| Proporzioni condizionate di riga (di colonna) | `prop.table(t, margin = 1)` (`= 2`) | `mutate(p = n / sum(n), .by = a)` |
+| Frequenze attese sotto indipendenza | `outer(rowSums(t), colSums(t)) / sum(t)` | — |
+| Sintesi condizionate | `tapply(y, list(g1, g2), mean)` | `summarise(..., .by = c(g1, g2))` |
+| Covarianza | `cov(x, y)` | — |
+
+- Le distribuzioni **congiunta**, **marginali** e **condizionate** rispondono a domande diverse; le proporzioni condizionate descrivono l'associazione.
+- Calcola le percentuali **all'interno delle categorie della variabile esplicativa**.
+- Per una risposta numerica, confronta i **centri condizionati rispetto alla variabilità entro i gruppi**.
+- La **covarianza** indica la direzione di una relazione lineare, ma la sua grandezza dipende dalle unità di misura.
+- **Paradosso di Simpson**: aggregare rispetto a un confondente può invertire un'associazione. Chiediti sempre quali terze variabili potrebbero contare.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2a ed.), capitolo "Exploring categorical data", <https://openintro-ims.netlify.app>
+- Bickel, P. J., Hammel, E. A. & O'Connell, J. W. (1975). Sex bias in graduate admissions: data from Berkeley. *Science*, 187(4175), 398–404.
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitolo "Exploratory data analysis", <https://r4ds.hadley.nz>
+:::

@@ -1,0 +1,100 @@
+---
+title: "Inizia qui"
+subtitle: "Tutto ciò che ti serve prima della Lezione 1 — in circa 10 minuti"
+description: "Installa R e un editor, installa i pacchetti del corso e scopri come funzionano le lezioni e gli esercizi interattivi."
+---
+
+::: {.callout-note}
+## Versione italiana
+La versione italiana copre attualmente i Livelli 1–3. Le lezioni del Livello 4 (modelli e machine learning) e il percorso di deep learning sono disponibili in inglese: puoi raggiungerle con il pulsante "English" nella barra in alto oppure dalla barra laterale.
+:::
+
+## 1. Due modi di usare questo corso
+
+::: {.grid}
+::: {.g-col-12 .g-col-md-6}
+### Nel browser — niente da installare
+La maggior parte delle lezioni dei Livelli 1–3 contiene **esercizi interattivi**: riquadri di codice che puoi modificare ed eseguire direttamente nella pagina (grazie a [webR](https://docs.r-wasm.org/webr/latest/), R compilato per il browser). Fai clic su **Run Code** per eseguire, usa **Hint** (suggerimento) quando sei bloccato e **Show Solution** (mostra soluzione) per confrontare.
+
+Il primo esercizio di una pagina può richiedere qualche secondo, mentre R si avvia nel browser.
+:::
+
+::: {.g-col-12 .g-col-md-6}
+### Sul tuo computer — consigliato
+Per seguire tutte le lezioni, lavorare sui tuoi dati e completare il [progetto finale](../lessons/67-capstone.qmd) (in inglese), installa R e un editor (vedi sotto). È gratuito e richiede pochi minuti.
+:::
+:::
+
+## 2. Installa R (versione 4.5 o successiva)
+
+Scarica R da **CRAN**, il repository ufficiale: <https://cran.r-project.org>. Scegli il tuo sistema operativo e segui il programma di installazione.
+
+::: {.callout-note}
+## Perché R ≥ 4.5?
+Il corso usa il dataset `penguins`, incluso in R a partire dalla versione 4.5.0. Controlla la tua versione digitando `R.version.string` nella console di R.
+:::
+
+## 3. Installa un editor (IDE)
+
+Puoi usare indifferentemente:
+
+- **RStudio Desktop** — l'IDE classico e molto diffuso: <https://posit.co/download/rstudio-desktop/>
+- **Positron** — il più recente IDE di Posit per la data science (R e Python): <https://positron.posit.co>
+
+Entrambi sono gratuiti. La [Lezione 1](lessons/01-foundations/01-what-is-r.qmd) offre una breve panoramica dei pannelli di RStudio; Positron è organizzato in modo simile.
+
+## 4. Installa i pacchetti del corso
+
+Apri R (o il tuo IDE) ed esegui questa singola riga. Installa tutti i pacchetti usati nel corso (la prima volta può richiedere 10–20 minuti):
+
+```r
+source("https://raw.githubusercontent.com/gianluca-sottile/An-R-Tutorial-for-Beginners/master/scripts/install-packages.R")
+```
+
+Il percorso facoltativo di deep learning richiede software aggiuntivo; la [Lezione 61](../lessons/13-deep-learning/61-dl-setup.qmd) (in inglese) spiega come installarlo.
+
+## 5. Come è organizzata una lezione
+
+```{=html}
+<div class="lesson-meta"><span class="level-2">Livello 2 · Descrivere ed esplorare</span><span>⏱ ~60 min</span><span>Prerequisiti: …</span></div>
+```
+
+Ogni lezione inizia con il suo **livello**, un **tempo stimato** e i suoi **prerequisiti**, poi:
+
+| Blocco | A che cosa serve |
+|---|---|
+| 🎯 **Obiettivi di apprendimento** | Che cosa saprai fare alla fine |
+| 💡 **Perché…?** | Il problema reale che il metodo risolve |
+| ▶️ **Codice + spiegazione** | Brevi chunk, ciascuno spiegato |
+| 🔎 **Come leggere questo output** | Guida riga per riga ai risultati di R |
+| 🔬 **Per approfondire** (chiuso) | Formule e teoria per chi le desidera |
+| ⚠️ **Errori comuni** | Sbagli e fraintendimenti frequenti |
+| ✅ **Verifica la comprensione** | Domande rapide con risposte nascoste |
+| ✍️ **Esercizi** ★ / ★★ / ★★★ | Difficoltà crescente, soluzioni incluse |
+| 📋 **Riepilogo** | Funzioni e idee chiave in sintesi |
+
+Il codice che puoi copiare ha un pulsante di copia nell'angolo in alto a destra. Le righe di output iniziano con `#>`.
+
+## 6. Percorsi consigliati
+
+| Sei… | Percorso consigliato |
+|---|---|
+| Del tutto nuovo a R e alla statistica | Tutte le lezioni in ordine, dal Livello 1 al 4 |
+| A tuo agio con R, ma arrugginito in statistica | Scorri rapidamente il Livello 1, poi studia con attenzione i Livelli 2–3 |
+| Conosci la statistica, ma sei nuovo a R | Livello 1, poi le lezioni 24–27 (grafici), poi il Livello 4 |
+| Ti serve rapidamente il machine learning | 08–10, 18, 24, 38–41, poi 44–49 |
+
+Consulta il [percorso di apprendimento](learning-path.qmd) completo per la mappa dei prerequisiti.
+
+## 7. Per docenti e collaboratori: lavorare con i sorgenti
+
+Il sito è un progetto [Quarto](https://quarto.org). Per generarlo in locale:
+
+1. Installa [Quarto](https://quarto.org/docs/get-started/) (≥ 1.6) e i pacchetti del corso (passo 4).
+2. Clona il repository e apri `An-R-Tutorial-for-Beginners.Rproj`.
+3. Nel terminale, una sola volta: `quarto add r-wasm/quarto-live` (installa l'estensione per gli esercizi interattivi; aggiungi al commit la cartella `_extensions/`).
+4. Visualizza l'anteprima con `quarto preview`; genera tutto con `quarto render`.
+
+Tutti i risultati di R sono salvati in `_freeze/` (la funzionalità **freeze** di Quarto), che viene inclusa nel repository git. GitHub Actions pubblica poi il sito **senza eseguire R**, quindi i calcoli pesanti (compreso il deep learning) vengono eseguiti solo sul tuo computer.
+
+Hai trovato un errore? Usa il link **"Segnala un problema"** in fondo all'indice di ogni pagina.

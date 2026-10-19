@@ -1,0 +1,593 @@
+---
+title: "Analisi della varianza (ANOVA)"
+subtitle: "Confrontare più medie contemporaneamente — disegni a una e a due vie, diagnostica e trasformazioni"
+description: "Comprendi l'ANOVA come confronto tra la variabilità tra gruppi e quella entro i gruppi, stima modelli a una e a due vie con aov(), controlla i residui, gestisci varianze diverse con l'ANOVA di Welch o con una trasformazione e prosegui con i confronti di Tukey."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 3 · Inferenza]{.level-3} [⏱ ~90 min]{} [Prerequisiti: [Test t](34-t-tests.qmd), [La logica del test d'ipotesi](33-hypothesis-testing.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare perché si usa l'ANOVA invece di molti test t, e che cosa confronta il **rapporto F**;
+- stimare un'ANOVA a una via con `aov()` (oppure `lm()` + `anova()`) e riportare **η²**;
+- verificare le assunzioni con i **grafici dei residui**, e usare l'ANOVA di Welch o una **trasformazione** quando le varianze differiscono;
+- individuare quali gruppi differiscono con l'**HSD di Tukey**;
+- stimare e interpretare un'**ANOVA a due vie** con interazione, usando un grafico dell'interazione.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(readr)
+```
+
+## 1. Perché non eseguire semplicemente tanti test t?
+
+`PlantGrowth` ha **tre** gruppi (un controllo e due trattamenti). Con $k$ gruppi ci sono $k(k-1)/2$ coppie: 3 coppie per 3 gruppi, 10 coppie per 5 gruppi. Ogni test t al livello $\alpha = 0.05$ ha una probabilità del 5% di dare un falso positivo, quindi con molti test la probabilità di *almeno un* falso allarme cresce (vedi [La logica del test d'ipotesi](33-hypothesis-testing.qmd)).
+
+Una rapida simulazione: 5 gruppi di 10 osservazioni, tutti estratti dalla **stessa** popolazione, e tutti i 10 test t a coppie.
+
+```{r}
+#| label: many-t
+set.seed(2026)
+any_sig <- replicate(2000, {
+  y <- rnorm(50)
+  g <- factor(rep(1:5, each = 10))
+  p <- pairwise.t.test(y, g, p.adjust.method = "none")$p.value
+  any(p < 0.05, na.rm = TRUE)
+})
+mean(any_sig)
+```
+
+Anche se non c'è alcuna differenza, circa il `r round(100 * mean(any_sig))`% di questi "studi" trova almeno una coppia "significativa". L'**ANOVA** risponde alla domanda complessiva — *tutte le medie sono uguali?* — con **un solo** test al livello $\alpha$.
+
+## 2. L'intuizione: tra gruppi contro entro i gruppi
+
+```{r}
+#| label: plant-summary
+PlantGrowth |>
+  summarise(n = n(), mean = mean(weight), sd = sd(weight), .by = group)
+```
+
+Le medie dei gruppi differiscono. L'ANOVA si chiede se differiscono **più di quanto ci aspetteremmo, dato quanto variano le piante all'interno di ciascun gruppo**. La variabilità totale viene scomposta in due parti:
+
+- **tra gruppi**: quanto le medie dei gruppi distano dalla media generale;
+- **entro i gruppi**: quanto ogni pianta dista dalla media del proprio gruppo.
+
+```{r}
+#| label: fig-decomposition
+#| fig-cap: "Scomposizione della variabilità in PlantGrowth. Linee orizzontali colorate: medie dei gruppi. Linea tratteggiata: media generale. Sottili linee verticali: scarti entro i gruppi di ogni pianta dalla media del suo gruppo."
+grand_mean <- mean(PlantGrowth$weight)
+
+plants <- PlantGrowth |>
+  mutate(id = row_number()) |>
+  mutate(group_mean = mean(weight), .by = group)
+
+ggplot(plants, aes(id, weight, colour = group)) +
+  geom_segment(aes(xend = id, y = group_mean, yend = weight), alpha = 0.6) +
+  geom_point(size = 2) +
+  geom_line(aes(y = group_mean), linewidth = 1.2) +
+  geom_hline(yintercept = grand_mean, linetype = "dashed") +
+  labs(x = "Pianta", y = "Peso secco", colour = "Gruppo")
+```
+
+Se le linee colorate sono lontane dalla linea tratteggiata *rispetto alla* lunghezza delle sottili linee verticali, i gruppi differiscono davvero. La **statistica F** misura esattamente questo:
+
+$$
+F = \frac{\text{variabilità tra gruppi (per grado di libertà)}}{\text{variabilità entro i gruppi (per grado di libertà)}} = \frac{\text{MS}_\text{tra}}{\text{MS}_\text{entro}} .
+$$
+
+Sotto $H_0$ (tutte le medie della popolazione uguali) entrambe le medie dei quadrati (*mean squares*, MS) stimano lo stesso rumore, quindi $F$ è attorno a 1. Una $F$ grande significa che le medie dei gruppi sono più disperse di quanto produrrebbe il solo rumore. Calcoliamola a mano:
+
+```{r}
+#| label: f-by-hand
+k <- 3
+n <- nrow(plants)
+ss_between <- sum((plants$group_mean - grand_mean)^2)
+ss_within  <- sum((plants$weight - plants$group_mean)^2)
+
+f_stat <- (ss_between / (k - 1)) / (ss_within / (n - k))
+c(ss_between = ss_between, ss_within = ss_within, F = f_stat)
+pf(f_stat, df1 = k - 1, df2 = n - k, lower.tail = FALSE)
+```
+
+L'ultima riga è il p-value: la probabilità che una distribuzione F con `r k - 1` e `r n - k` gradi di libertà superi `r round(f_stat, 2)`.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: l'identità dell'ANOVA
+
+Con $k$ gruppi, $n_j$ osservazioni nel gruppo $j$, medie dei gruppi $\bar y_j$ e media generale $\bar y$:
+
+$$
+\underbrace{\sum_{j}\sum_{i}(y_{ij} - \bar y)^2}_{\text{SS}_\text{totale}}
+= \underbrace{\sum_j n_j(\bar y_j - \bar y)^2}_{\text{SS}_\text{tra}}
++ \underbrace{\sum_{j}\sum_{i}(y_{ij} - \bar y_j)^2}_{\text{SS}_\text{entro}} .
+$$
+
+Dividendo per i gradi di libertà $k-1$ e $n-k$ si ottengono le medie dei quadrati. Se gli errori sono indipendenti, normali e con varianza costante, sotto $H_0$ il rapporto segue una distribuzione $F_{k-1,\,n-k}$. Con due gruppi, $F = t^2$ del test t con varianze uguali: l'ANOVA lo generalizza.
+:::
+
+## 3. ANOVA a una via in R
+
+```{r}
+#| label: aov-plant
+fit_plant <- aov(weight ~ group, data = PlantGrowth)
+summary(fit_plant)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **Riga `group`**: variabilità tra gruppi. `Df` = $k - 1$ = 2; `Sum Sq` = SS tra gruppi; `Mean Sq` = Sum Sq / Df.
+- **Riga `Residuals`**: variabilità entro i gruppi, con $n - k$ = 27 gradi di libertà.
+- **`F value`** = `r round(summary(fit_plant)[[1]][["F value"]][1], 2)` = Mean Sq(group) / Mean Sq(residuals) — lo stesso valore del nostro calcolo a mano.
+- **`Pr(>F)`** = `r round(summary(fit_plant)[[1]][["Pr(>F)"]][1], 4)`: se le tre medie della popolazione fossero tutte uguali, una F almeno così grande sarebbe rara. Quindi almeno una media differisce — ma l'ANOVA non dice **quale** (Sezione 5).
+:::
+
+L'ANOVA è un modello lineare con un predittore categoriale; `lm()` + `anova()` produce la stessa tabella e ti prepara a [Regressione lineare semplice (EN)](../../../lessons/09-regression/38-simple-regression.qmd):
+
+```{r}
+#| label: lm-anova
+anova(lm(weight ~ group, data = PlantGrowth))
+```
+
+### Dimensione dell'effetto: η² (eta quadro)
+
+Quanta parte della variabilità totale spiegano i gruppi?
+
+$$
+\eta^2 = \frac{\text{SS}_\text{tra}}{\text{SS}_\text{totale}} .
+$$
+
+```{r}
+#| label: eta2
+eta_squared <- function(fit) {
+  ss <- summary(fit)[[1]][["Sum Sq"]]
+  ss[1] / sum(ss)
+}
+eta_squared(fit_plant)
+```
+
+Il gruppo di trattamento spiega circa il `r round(100 * eta_squared(fit_plant))`% della variabilità del peso delle piante. (Nell'ANOVA a una via, η² coincide con l'$R^2$ del modello lineare.)
+
+## 4. Assunzioni e diagnostica dei residui
+
+L'ANOVA assume che i **residui** (ogni osservazione meno la media del suo gruppo) siano
+
+1. **indipendenti** — una questione di disegno dello studio, non qualcosa che un grafico possa verificare;
+2. approssimativamente **normali** — conta soprattutto per gruppi piccoli;
+3. di **uguale varianza** in tutti i gruppi (*omoschedasticità*) — conta soprattutto quando le numerosità dei gruppi sono diverse.
+
+Due grafici verificano le ultime due:
+
+```{r}
+#| label: fig-diag-plant
+#| fig-cap: "Diagnostica dei residui per l'ANOVA su PlantGrowth. A sinistra: residui contro valori stimati (medie dei gruppi). A destra: QQ-plot normale dei residui."
+#| fig-width: 9
+#| fig-height: 4.5
+par(mfrow = c(1, 2))
+plot(fit_plant, which = 1:2)
+par(mfrow = c(1, 1))
+```
+
+::: {.callout-tip .read-output}
+## Come leggere i grafici diagnostici
+
+- **Residuals vs Fitted** (residui contro valori stimati): ogni striscia verticale è un gruppo. Vogliamo strisce di **altezza simile**, centrate sullo 0. Un imbuto (dispersione che cresce con il valore stimato) segnala varianze diverse.
+- **Q–Q Residuals**: punti vicini alla diagonale suggeriscono residui approssimativamente normali. Cerca curvature sistematiche o pochi punti estremi, non la perfezione.
+- Qui le dispersioni sono simili e il QQ-plot è accettabile: le assunzioni sembrano ragionevoli.
+:::
+
+Una verifica formale dell'uguaglianza delle varianze è il **test di Bartlett** (R di base), oppure il **test di Levene**, meno sensibile alla non normalità (`car::leveneTest(weight ~ group, data = PlantGrowth)` nel pacchetto `car`):
+
+```{r}
+#| label: bartlett
+bartlett.test(weight ~ group, data = PlantGrowth)
+```
+
+Considera questi test un complemento ai grafici, non un "cancello" da superare: come per i test di normalità, i campioni piccoli nascondono i problemi e quelli grandi segnalano problemi irrilevanti.
+
+### Quando le varianze differiscono: l'ANOVA di Welch
+
+Così come il test t di Welch è la scelta predefinita sicura per due gruppi ([Test t](34-t-tests.qmd)), `oneway.test()` confronta più medie **senza assumere varianze uguali**:
+
+```{r}
+#| label: welch-anova
+oneway.test(weight ~ group, data = PlantGrowth)
+```
+
+Qui concorda con l'ANOVA classica (p = `r round(oneway.test(weight ~ group, data = PlantGrowth)$p.value, 3)`), come ci si aspetta quando le varianze sono simili. Se i dati sono chiaramente non normali e i gruppi piccoli, il test di **Kruskal–Wallis** basato sui ranghi (`kruskal.test()`, vedi [Test non parametrici](36-nonparametric-tests.qmd)) è un'altra possibilità.
+
+## 5. Quali gruppi differiscono? L'HSD di Tukey
+
+I confronti **post-hoc** esaminano tutte le coppie mantenendo il tasso di errore complessivo (*family-wise error rate*) al 5%. La **Honest Significant Difference di Tukey** è la scelta standard dopo un'ANOVA a una via:
+
+```{r}
+#| label: tukey-plant
+tk_plant <- TukeyHSD(fit_plant)
+tk_plant
+```
+
+```{r}
+#| label: fig-tukey-plant
+#| fig-cap: "Intervalli di confidenza simultanei (family-wise) al 95% di Tukey per le differenze a coppie in PlantGrowth. Gli intervalli che non attraversano lo zero indicano differenze significative."
+plot(tk_plant, las = 1)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **`diff`**: differenza tra le medie dei due gruppi (es. `trt2-ctrl` = trt2 − ctrl).
+- **`lwr`, `upr`**: IC **simultanei** (*family-wise*) al 95%: il metodo è costruito in modo che, in esperimenti ripetuti, *tutti e tre* gli intervalli insieme coprano le vere differenze nel 95% dei casi.
+- **`p adj`**: p-value corretto. Solo **trt2 vs trt1** è significativo (p = `r round(tk_plant$group["trt2-trt1", "p adj"], 3)`).
+- Confronta con [La logica del test d'ipotesi](33-hypothesis-testing.qmd), dove un *singolo* test t di trt2 vs ctrl dava $p \approx 0.047$. Tra tre confronti, il p corretto di Tukey per quella coppia è `r round(tk_plant$group["trt2-ctrl", "p adj"], 2)`: l'evidenza è più debole una volta tenuto conto di aver esaminato tutte le coppie.
+:::
+
+## 6. Un caso più difficile: l'esperimento sui veleni
+
+I dati `poisons` (Box & Cox, 1964) provengono da un esperimento classico: 48 animali furono esposti a uno di **3 veleni** e ricevettero uno di **4 trattamenti** (antidoti), 4 animali per combinazione. La risposta è il tempo di sopravvivenza `time` (in unità di 10 ore). Si tratta di un **disegno bilanciato a due vie**.
+
+```{r}
+#| label: read-poisons
+#| message: false
+poisons <- read_csv(data_path("poisons.csv"),
+                    col_select = c(time, poison, treat)) |>
+  mutate(poison = factor(poison), treat = factor(treat))
+
+count(poisons, poison, treat) |> head(4)
+```
+
+### Prima a una via: il veleno conta?
+
+```{r}
+#| label: poison-oneway
+poisons |>
+  summarise(n = n(), mean = mean(time), sd = sd(time), .by = poison)
+
+fit_poison <- aov(time ~ poison, data = poisons)
+summary(fit_poison)
+```
+
+Il veleno conta chiaramente. Ma osserva le deviazioni standard: il veleno 3, con i tempi di sopravvivenza più brevi, ha una **dispersione molto più piccola**. È un segnale d'allarme che diventerà ben visibile nell'analisi a due vie.
+
+### Il modello a due vie: effetti principali e interazione
+
+Con due fattori possiamo stimare:
+
+- l'**effetto principale** di ciascun fattore (il veleno conta, facendo la media sui trattamenti? il trattamento conta?);
+- la loro **interazione**: l'effetto del trattamento **dipende dal** veleno?
+
+Il **grafico dell'interazione** mostra le medie di cella: linee parallele indicano assenza di interazione.
+
+```{r}
+#| label: fig-interaction
+#| fig-cap: "Grafico dell'interazione per l'esperimento sui veleni: tempo medio di sopravvivenza per ciascun trattamento, una linea per veleno."
+ggplot(poisons, aes(treat, time, colour = poison, group = poison)) +
+  stat_summary(fun = mean, geom = "line", linewidth = 1) +
+  stat_summary(fun = mean, geom = "point", size = 3) +
+  labs(x = "Trattamento", y = "Tempo medio di sopravvivenza (10 h)", colour = "Veleno")
+```
+
+```{r}
+#| label: two-way
+fit_int <- aov(time ~ poison * treat, data = poisons)   # = poison + treat + poison:treat
+summary(fit_int)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Righe `poison` e `treat`: i due **effetti principali**, entrambi chiaramente significativi.
+- `poison:treat`: l'**interazione**. Il suo p-value (`r round(summary(fit_int)[[1]][["Pr(>F)"]][3], 2)`) non fornisce un'evidenza forte che l'effetto del trattamento dipenda dal veleno — anche se il grafico mostra linee non proprio parallele.
+- **Interpreta prima l'interazione.** Se fosse importante, un "effetto principale del trattamento" sarebbe una media sui veleni che nasconde storie diverse.
+:::
+
+Se non c'è evidenza di interazione, si usa spesso il modello **additivo**, più semplice:
+
+```{r}
+#| label: additive
+fit_add <- aov(time ~ poison + treat, data = poisons)
+summary(fit_add)
+```
+
+### Ma prima: controlla i residui
+
+```{r}
+#| label: fig-diag-time
+#| fig-cap: "Diagnostica dei residui per il modello a due vie sul tempo di sopravvivenza. La dispersione dei residui cresce con il valore stimato."
+#| fig-width: 9
+#| fig-height: 4.5
+par(mfrow = c(1, 2))
+plot(fit_int, which = 1:2)
+par(mfrow = c(1, 1))
+```
+
+L'**imbuto** nel pannello di sinistra è inconfondibile: le celle con sopravvivenza media lunga hanno residui molto più variabili. Le deviazioni standard delle 12 celle vanno da `r round(min(tapply(poisons$time, interaction(poisons$poison, poisons$treat), sd)), 3)` a `r round(max(tapply(poisons$time, interaction(poisons$poison, poisons$treat), sd)), 3)` — un fattore superiore a 20 — e il QQ-plot mostra code pesanti. Il test di Bartlett concorda:
+
+```{r}
+#| label: bartlett-time
+bartlett.test(time ~ interaction(poison, treat), data = poisons)$p.value
+```
+
+L'assunzione di varianze uguali è gravemente violata, quindi i test F visti sopra non sono affidabili.
+
+### La soluzione: modellare la velocità di morte
+
+Quando la deviazione standard cresce con la media, una **trasformazione** della risposta spesso la stabilizza. Box e Cox mostrarono che per questi dati la migliore trasformazione di potenza è vicina a $y^{-1}$: il **reciproco** del tempo di sopravvivenza. Ha un significato naturale — $1/\text{tempo}$ è la **velocità di morte** (quanto rapidamente muore l'animale).
+
+```{r}
+#| label: reciprocal
+poisons <- poisons |> mutate(rate = 1 / time)
+
+fit_rate <- aov(rate ~ poison * treat, data = poisons)
+summary(fit_rate)
+```
+
+```{r}
+#| label: fig-diag-rate
+#| fig-cap: "Diagnostica dei residui dopo la trasformazione reciproca (velocità di morte = 1 / tempo). L'imbuto è scomparso."
+#| fig-width: 9
+#| fig-height: 4.5
+par(mfrow = c(1, 2))
+plot(fit_rate, which = 1:2)
+par(mfrow = c(1, 1))
+bartlett.test(rate ~ interaction(poison, treat), data = poisons)$p.value
+```
+
+::: {.callout-tip .read-output}
+## Prima e dopo la trasformazione
+
+- La dispersione dei residui non cresce più con il valore stimato, e il QQ-plot è molto più vicino alla retta. Il p-value di Bartlett passa da `r format.pval(bartlett.test(time ~ interaction(poison, treat), data = poisons)$p.value, digits = 2)` a `r round(bartlett.test(rate ~ interaction(poison, treat), data = poisons)$p.value, 2)`.
+- Sulla scala della velocità gli effetti principali sono ancora più netti (F = `r round(summary(fit_rate)[[1]][["F value"]][1], 1)` per il veleno e `r round(summary(fit_rate)[[1]][["F value"]][2], 1)` per il trattamento), e l'interazione diventa trascurabile (p = `r round(summary(fit_rate)[[1]][["Pr(>F)"]][3], 2)`): l'apparente non parallelismo delle linee sulla scala del tempo era in gran parte un sottoprodotto della dispersione disuguale.
+- Conclusione: un **modello additivo per la velocità di morte** descrive bene questi dati. Veleni e trattamenti agiscono (approssimativamente) in modo indipendente sulla velocità.
+:::
+
+Confronti post-hoc sul modello additivo per la velocità:
+
+```{r}
+#| label: tukey-rate
+fit_rate_add <- aov(rate ~ poison + treat, data = poisons)
+TukeyHSD(fit_rate_add, which = "poison")
+```
+
+Tutti e tre i veleni differiscono; il veleno 3 ha la velocità di morte più alta (uccide più rapidamente). Ricorda di riportare i risultati sulla scala originale: una **velocità** più alta significa un tempo di sopravvivenza **più breve**.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la trasformazione di Box–Cox
+
+Box e Cox (1964) proposero la famiglia $y^{(\lambda)} = (y^\lambda - 1)/\lambda$ (e $\log y$ per $\lambda = 0$), scegliendo $\lambda$ per massima verosimiglianza. `MASS::boxcox()` (il pacchetto `MASS` è incluso in R) disegna la log-verosimiglianza profilo:
+
+```{r}
+#| label: boxcox
+bc <- MASS::boxcox(time ~ poison * treat, data = poisons,
+                   lambda = seq(-2, 1, by = 0.05))
+bc$x[which.max(bc$y)]
+```
+
+Il massimo è vicino a $\lambda =$ `r bc$x[which.max(bc$y)]`, e $\lambda = -1$ (il reciproco) cade ben dentro l'intervallo al 95% mostrato nel grafico, mentre $\lambda = 1$ (nessuna trasformazione) è molto al di fuori. Scegliere il valore interpretabile $-1$ anziché l'ottimo esatto è prassi comune. Il logaritmo ($\lambda = 0$) è una correzione più blanda; provalo nell'Esercizio 4.
+:::
+
+## 7. Un secondo esempio: ToothGrowth
+
+`ToothGrowth` registra la lunghezza dei denti di 60 porcellini d'India che ricevettero vitamina C a tre dosi (0.5, 1, 2 mg/giorno) con due modalità (`supp`: succo d'arancia `OJ` o acido ascorbico `VC`), 10 animali per cella. `dose` è memorizzata come numero, quindi la convertiamo in fattore — altrimenti `aov()` stimerebbe una retta in funzione della dose (vedi Esercizio 3).
+
+```{r}
+#| label: toothgrowth
+tooth <- ToothGrowth |> mutate(dose = factor(dose))
+
+fit_tooth <- aov(len ~ supp * dose, data = tooth)
+summary(fit_tooth)
+```
+
+```{r}
+#| label: fig-tooth
+#| fig-cap: "Grafico dell'interazione per ToothGrowth: lunghezza media dei denti per dose e tipo di integratore."
+ggplot(tooth, aes(dose, len, colour = supp, group = supp)) +
+  stat_summary(fun = mean, geom = "line", linewidth = 1) +
+  stat_summary(fun = mean, geom = "point", size = 3) +
+  labs(x = "Dose (mg/giorno)", y = "Lunghezza media dei denti", colour = "Integratore")
+```
+
+Qui l'interazione **è** significativa (p = `r round(summary(fit_tooth)[[1]][["Pr(>F)"]][3], 3)`), e il grafico mostra perché: il succo d'arancia produce denti più lunghi alle dosi bassa e media, ma a 2 mg/giorno i due integratori danno praticamente lo stesso risultato. Un singolo "effetto principale dell'integratore" riassumerebbe male questa situazione — l'affermazione onesta è *"il succo d'arancia aiuta più dell'acido ascorbico alle dosi basse; il vantaggio scompare alla dose più alta."*
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: disegni non bilanciati e tipi di somme dei quadrati
+
+Nei disegni bilanciati (stessa $n$ in ogni cella, come in poisons e ToothGrowth) i fattori sono incorrelati e la tabella ANOVA non dipende dall'ordine dei termini. Nei disegni **non bilanciati** invece sì. `summary(aov())` e `anova(lm())` usano somme dei quadrati **sequenziali (di tipo I)**: ogni termine è aggiustato solo per i termini che lo *precedono*.
+
+```{r}
+#| label: types-ss
+anova(lm(mpg ~ factor(cyl) + factor(am), data = mtcars))["factor(am)", ]
+anova(lm(mpg ~ factor(am) + factor(cyl), data = mtcars))["factor(am)", ]
+```
+
+La somma dei quadrati per il tipo di cambio è molto diversa a seconda che entri per prima o dopo il numero di cilindri, perché in `mtcars` le due variabili sono associate. Alternative:
+
+- **Tipo II**: ogni effetto principale aggiustato per gli altri effetti principali (`car::Anova(fit, type = 2)`; per i modelli additivi `drop1(fit, test = "F")` dà gli stessi test). Una scelta predefinita ragionevole quando le interazioni sono assenti.
+- **Tipo III**: ogni termine aggiustato per tutti gli altri, interazioni comprese (`car::Anova(fit, type = 3)`, che richiede contrasti a somma zero come `options(contrasts = c("contr.sum", "contr.poly"))`).
+
+Con dati non bilanciati, dichiara quale tipo hai usato.
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Eseguire tutti i test t a coppie invece di ANOVA + confronti con correzione.** Il tasso di falsi positivi cresce rapidamente.
+2. **Dimenticare di trasformare la variabile di raggruppamento in un fattore.** Con una `dose` numerica, `aov()` stima un'unica pendenza (1 gdl) invece di confrontare i gruppi.
+3. **Saltare i grafici dei residui.** Una forma a imbuto (come in `poisons`) indica varianze diverse: usa l'ANOVA di Welch (`oneway.test()`) con un solo fattore, oppure trasforma la risposta.
+4. **Interpretare gli effetti principali ignorando un'interazione reale.** Guarda prima il grafico dell'interazione e il test dell'interazione.
+5. **Leggere "F significativa" come "tutti i gruppi differiscono".** L'ANOVA dice che almeno una media differisce; i test post-hoc dicono quale.
+6. **Dimenticare di tornare alla scala originale dopo una trasformazione.** Velocità più alta = tempo più breve.
+:::
+
+## 8. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Un'ANOVA dà F ≈ 1. Che cosa suggerisce?
+
+Le medie dei gruppi variano più o meno quanto ci si aspetterebbe dalla variabilità entro i gruppi: nessuna evidenza che le medie della popolazione differiscano.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. In un'ANOVA a due vie l'interazione è significativa. Perché devi fare attenzione agli effetti principali?
+
+Perché l'effetto di un fattore dipende dal livello dell'altro. L'effetto principale è una media sui livelli che può nascondere effetti opposti o molto diversi (come per il tipo di integratore in ToothGrowth).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Il grafico dei residui contro i valori stimati mostra un imbuto che si apre verso destra. Indica due rimedi.
+
+Trasformare la risposta (logaritmo, reciproco, radice quadrata, guidati da Box–Cox), oppure — con un solo fattore — usare l'ANOVA di Welch `oneway.test()`. Un modello per varianza non costante (per esempio un GLM, vedi [Regressione di Poisson (EN)](../../../lessons/09-regression/42-poisson-regression.qmd)) è un'ulteriore possibilità.
+:::
+
+## 9. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — ANOVA a una via e Tukey.** Le sei alimentazioni in `chickwts` portano a pesi medi diversi? Stima l'ANOVA, calcola η² ed esegui l'HSD di Tukey.
+
+```{webr}
+#| exercise: ex_37_1
+fit <- aov(______ ~ ______, data = chickwts)
+summary(fit)
+ss <- summary(fit)[[1]][["Sum Sq"]]
+ss[1] / sum(ss)          # eta quadro
+______(fit)
+```
+
+::: {.hint exercise="ex_37_1"}
+La risposta è `weight`, il fattore è `feed`; i confronti post-hoc usano `TukeyHSD()`.
+:::
+
+::: {.solution exercise="ex_37_1"}
+```r
+fit <- aov(weight ~ feed, data = chickwts)
+summary(fit)
+ss <- summary(fit)[[1]][["Sum Sq"]]
+ss[1] / sum(ss)          # circa 0.54
+TukeyHSD(fit)
+```
+Il test F è altamente significativo e l'alimentazione spiega circa il 54% della variabilità del peso. I confronti di Tukey mostrano, per esempio, che i pulcini *horsebean* sono più leggeri dei pulcini *casein*, *meatmeal*, *soybean* e *sunflower*, mentre *casein* e *sunflower* non differiscono.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — verifica le assunzioni.** Per i dati `InsectSprays` (conteggi di insetti per sei insetticidi), stima un'ANOVA a una via e disegna il grafico dei residui contro i valori stimati. Poi esegui il test di Bartlett e l'ANOVA di Welch. Che cosa concludi sull'ANOVA classica?
+
+```{webr}
+#| exercise: ex_37_2
+fit <- aov(count ~ spray, data = InsectSprays)
+plot(fit, which = ______)
+bartlett.test(count ~ spray, data = InsectSprays)
+______(count ~ spray, data = InsectSprays)
+```
+
+::: {.hint exercise="ex_37_2"}
+`which = 1` disegna i residui contro i valori stimati. L'ANOVA di Welch è `oneway.test()`.
+:::
+
+::: {.solution exercise="ex_37_2"}
+```r
+plot(fit, which = 1)
+bartlett.test(count ~ spray, data = InsectSprays)
+oneway.test(count ~ spray, data = InsectSprays)
+```
+La dispersione dei residui cresce chiaramente con il valore stimato (un imbuto) e il test di Bartlett è significativo (p ≈ 0.0001): le varianze sono diverse, come è tipico per i conteggi. L'ANOVA di Welch trova comunque una differenza molto forte tra gli insetticidi, quindi la conclusione regge, ma il test F classico non dovrebbe essere riportato acriticamente. Una trasformazione radice quadrata o un modello di Poisson sarebbero alternative naturali.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — trova l'errore.** Uno studente vuole confrontare le tre dosi in `ToothGrowth` e scrive il codice qui sotto. La tabella ANOVA mostra solo **1** grado di libertà per `dose`, non 2. Perché? Correggilo.
+
+```{webr}
+#| exercise: ex_37_3
+fit <- aov(len ~ dose, data = ToothGrowth)
+summary(fit)
+```
+
+::: {.hint exercise="ex_37_3"}
+Controlla `class(ToothGrowth$dose)`. Di quanti parametri ha bisogno una retta, e di quanti un confronto tra tre gruppi?
+:::
+
+::: {.solution exercise="ex_37_3"}
+```r
+class(ToothGrowth$dose)   # "numeric"
+fit <- aov(len ~ factor(dose), data = ToothGrowth)
+summary(fit)              # Df = 2
+TukeyHSD(fit)
+```
+Poiché `dose` è numerica, `aov()` stima un **andamento lineare** in funzione della dose (una pendenza, 1 gdl) invece di tre medie di gruppo. Con `factor(dose)` il modello confronta i tre gruppi (2 gdl). Il test di Tukey mostra poi che tutte e tre le dosi differiscono.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — logaritmo o reciproco?** Per i dati `poisons`, stima il modello a due vie su `log(time)` e confronta la sua diagnostica con quella dei modelli su `time` e su `1 / time`. Quale trasformazione stabilizza meglio la varianza?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+fit_log <- aov(log(time) ~ poison * treat, data = poisons)
+par(mfrow = c(1, 2)); plot(fit_log, which = 1:2); par(mfrow = c(1, 1))
+
+cells <- interaction(poisons$poison, poisons$treat)
+c(time = bartlett.test(poisons$time ~ cells)$p.value,
+  log  = bartlett.test(log(poisons$time) ~ cells)$p.value,
+  rate = bartlett.test(poisons$rate ~ cells)$p.value)
+```
+Il logaritmo aiuta molto (p di Bartlett ≈ 0.07 invece di ≈ 0.000005) ma nel grafico dei residui resta un leggero imbuto. Il reciproco lo elimina (p ≈ 0.54) e dà il QQ-plot migliore, in accordo con l'analisi di Box–Cox ($\lambda \approx -0.8$, più vicino a −1 che a 0).
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — interpreta.** Scrivi un breve paragrafo (3–4 frasi) che riporti l'analisi di ToothGrowth della Sezione 7 per un lettore senza formazione statistica. Menziona il ruolo della dose, l'interazione e che cosa significa in pratica.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+*Esempio:* "La lunghezza dei denti aumentava nettamente con la dose di vitamina C. Il succo d'arancia produceva denti più lunghi dell'acido ascorbico puro a 0.5 e 1 mg/giorno (in media circa 5–6 unità in più), ma a 2 mg/giorno i due integratori davano risultati praticamente identici. In termini statistici, l'effetto del tipo di integratore dipende dalla dose (un'interazione significativa, p ≈ 0.02). Quindi la scelta dell'integratore conta alle dosi basse, ma non a quella più alta."
+:::
+:::
+
+## Riepilogo
+
+| Compito | Codice |
+|---|---|
+| ANOVA a una via | `aov(y ~ g, data = df)` + `summary()`; oppure `anova(lm(y ~ g))` |
+| Dimensione dell'effetto η² | SS tra gruppi / SS totale |
+| Diagnostica dei residui | `plot(fit, which = 1:2)` |
+| Uguaglianza delle varianze | `bartlett.test(y ~ g)`; `car::leveneTest(y ~ g)` |
+| ANOVA di Welch | `oneway.test(y ~ g, data = df)` |
+| Alternativa basata sui ranghi | `kruskal.test(y ~ g, data = df)` |
+| Confronti post-hoc | `TukeyHSD(fit)`; `plot(TukeyHSD(fit))` |
+| ANOVA a due vie | `aov(y ~ A * B, data = df)` (con interazione); `aov(y ~ A + B)` (additiva) |
+| Trasformazione | `MASS::boxcox()`; es. `1 / time`, `log(y)` |
+
+- L'ANOVA confronta la variabilità **tra gruppi** con quella **entro i gruppi**: $F$ = segnale / rumore.
+- Un unico test complessivo controlla il tasso di falsi positivi; l'HSD di Tukey dice poi **quali** gruppi differiscono.
+- Guarda sempre i **residui**: un imbuto richiede l'ANOVA di Welch o una trasformazione.
+- Nei disegni a due vie, controlla l'**interazione** prima di interpretare gli effetti principali.
+- Le trasformazioni possono rendere un modello sia più valido *sia* più interpretabile (velocità di morte).
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2a ed.), capitolo sul confronto di più medie, <https://openintro-ims.netlify.app>
+- Box, G. E. P. & Cox, D. R. (1964). An analysis of transformations. *Journal of the Royal Statistical Society, Series B*, 26(2), 211–252.
+- Documentazione di R: `?aov`, `?TukeyHSD`, `?oneway.test`, `?MASS::boxcox`
+:::

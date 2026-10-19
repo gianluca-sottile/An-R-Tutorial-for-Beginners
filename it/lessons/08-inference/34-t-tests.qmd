@@ -1,0 +1,406 @@
+---
+title: "Test t: confrontare medie"
+subtitle: "Test t a un campione, a due campioni (Welch) e per dati appaiati — e come leggerli"
+description: "Impara quando e come usare i tre test t, verificarne le assunzioni, riportare la dimensione dell'effetto e interpretare l'output senza i soliti fraintendimenti."
+format:
+  live-html:
+    webr:
+      packages: ["dplyr"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+```
+
+::: {.lesson-meta}
+[Livello 3 · Inferenza]{.level-3} [⏱ ~75 min]{} [Prerequisiti: [Intervalli di confidenza](32-confidence-intervals.qmd), [La logica del test d'ipotesi](33-hypothesis-testing.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- scegliere tra un test t **a un campione**, **a due campioni** e **per dati appaiati**;
+- eseguire ciascun test con `t.test()` e leggere ogni riga del suo output;
+- verificare le assunzioni che contano (e sapere quali contano meno);
+- riportare una **dimensione dell'effetto** (*effect size*) e un **intervallo di confidenza**, non solo un p-value.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+```
+
+## 1. Perché ci serve un test?
+
+I pinguini Gentoo sembrano più pesanti dei pinguini di Adelia. Ma abbiamo *misurato* solo qualche centinaio di esemplari. Se tornassimo in Antartide e catturassimo un campione diverso, le due medie cambierebbero. La domanda a cui risponde un test t è:
+
+> La differenza che osserviamo tra le medie campionarie è **più grande di quella che il solo campionamento casuale produrrebbe tipicamente**?
+
+Il test t confronta un **segnale** (la differenza tra le medie) con il **rumore** che ci aspettiamo dalla variabilità campionaria (l'errore standard). Se il segnale è molte volte più grande del rumore, il caso da solo è una spiegazione poco plausibile.
+
+$$
+t \;=\; \frac{\text{segnale}}{\text{rumore}} \;=\; \frac{\text{differenza osservata} - \text{differenza sotto } H_0}{\text{errore standard della differenza}}
+$$
+
+## 2. I tre test t in sintesi
+
+| Domanda | Test | Codice R |
+|---|---|---|
+| La media di **un gruppo** è diversa da un valore di riferimento? | A un campione | `t.test(x, mu = m0)` |
+| **Due gruppi indipendenti** hanno medie diverse? | A due campioni (Welch) | `t.test(y ~ group, data = df)` |
+| **Due misurazioni sulle stesse unità** differiscono in media? | Per dati appaiati | `t.test(after, before, paired = TRUE)` |
+
+La domanda chiave riguarda il **disegno dello studio**, non i dati: *i due insiemi di numeri sono misurati sulle stesse unità (appaiati) o su unità diverse (indipendenti)?*
+
+## 3. Test t a un campione
+
+Supponi che una guida naturalistica affermi che i pinguini di Adelia hanno una lunghezza media delle pinne di 190 mm. I nostri dati sono d'accordo?
+
+```{r}
+#| label: adelie
+adelie <- penguins |>
+  filter(species == "Adelie") |>
+  pull(flipper_len)
+
+mean(adelie, na.rm = TRUE)
+```
+
+```{r}
+#| label: one-sample
+res_one <- t.test(adelie, mu = 190)
+res_one
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **`t`** — il rapporto segnale/rumore: la media campionaria dista `r round(res_one$statistic, 2)` errori standard da 190.
+- **`df`** — i gradi di libertà ($n - 1$); determinano la forma esatta della distribuzione t utilizzata.
+- **`p-value`** — *se* la vera media fosse 190, una media campionaria lontana da 190 almeno quanto questa si verificherebbe con probabilità `r format.pval(res_one$p.value, digits = 2)`.
+- **95 percent confidence interval** — l'intervallo di confidenza al 95%, cioè l'insieme delle medie della popolazione compatibili con i dati: da `r round(res_one$conf.int[1], 1)` a `r round(res_one$conf.int[2], 1)` mm. Nota che 190 si trova `r if (res_one$conf.int[1] > 190 | res_one$conf.int[2] < 190) "all'esterno" else "all'interno"` dell'intervallo — questo concorda sempre con il test al livello del 5%.
+- **sample estimates** — la media campionaria.
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la statistica t a un campione
+
+Con media campionaria $\bar x$, deviazione standard campionaria $s$ e numerosità campionaria $n$,
+
+$$
+t = \frac{\bar x - \mu_0}{s / \sqrt{n}}, \qquad t \sim t_{n-1} \text{ sotto } H_0: \mu = \mu_0 .
+$$
+
+Il denominatore $s/\sqrt n$ è l'**errore standard** della media (vedi [Distribuzioni campionarie](../07-probability/30-sampling-distributions.qmd)). La distribuzione t ha code più pesanti della normale perché anche $s$ è stimata; al crescere di $n$, $t_{n-1}$ si avvicina a $N(0,1)$.
+:::
+
+## 4. Test t a due campioni (Welch)
+
+Torniamo ora alla domanda iniziale: i pinguini di Adelia e i Gentoo differiscono per massa corporea? Si tratta di **esemplari diversi**, quindi i campioni sono indipendenti.
+
+### Prima guarda i dati
+
+```{r}
+#| label: fig-mass
+#| fig-cap: "Massa corporea dei pinguini di Adelia e Gentoo. Ogni punto è un esemplare; i box riassumono le distribuzioni."
+two_sp <- penguins |>
+  filter(species %in% c("Adelie", "Gentoo")) |>
+  droplevels()
+
+ggplot(two_sp, aes(species, body_mass, colour = species)) +
+  geom_boxplot(outlier.shape = NA, width = 0.5) +
+  geom_jitter(width = 0.15, alpha = 0.4) +
+  labs(x = NULL, y = "Massa corporea (g)") +
+  theme(legend.position = "none")
+```
+
+### Il test
+
+```{r}
+#| label: welch
+res_welch <- t.test(body_mass ~ species, data = two_sp)
+res_welch
+```
+
+R esegue **il test t di Welch come impostazione predefinita**. Questo test *non* assume che i due gruppi abbiano la stessa varianza, e non perde quasi nulla quando le varianze sono effettivamente uguali. Per questo la pratica moderna raccomanda Welch come scelta predefinita; la versione classica "di Student" (`var.equal = TRUE`) serve raramente.
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- La differenza stimata (Adelie − Gentoo) è `r round(diff(rev(res_welch$estimate)), 0)` g.
+- L'IC al 95% per la differenza va da `r round(res_welch$conf.int[1], 0)` a `r round(res_welch$conf.int[2], 0)` g: i pinguini Gentoo sono, in media, più pesanti di circa `r abs(round(res_welch$conf.int[2], -2))`–`r abs(round(res_welch$conf.int[1], -2))` g.
+- `df` non è un numero intero: la correzione di Welch aggiusta i gradi di libertà per tenere conto delle varianze diverse.
+- Il p-value è minuscolo: una differenza così grande sarebbe estremamente sorprendente se le due specie avessero la stessa massa media.
+:::
+
+### Quanto è grande la differenza? La dimensione dell'effetto
+
+Un p-value ti dice se una differenza è *rilevabile*, non se è *grande*. Con campioni enormi, anche differenze trascurabili diventano "significative". Riporta sempre una **dimensione dell'effetto** (*effect size*). Il $d$ di Cohen esprime la differenza in unità di deviazione standard:
+
+```{r}
+#| label: cohen-d
+cohens_d <- function(x, g) {
+  g <- droplevels(as.factor(g))
+  m  <- tapply(x, g, mean, na.rm = TRUE)
+  s  <- tapply(x, g, sd,   na.rm = TRUE)
+  n  <- tapply(!is.na(x), g, sum)
+  s_pooled <- sqrt(((n[1] - 1) * s[1]^2 + (n[2] - 1) * s[2]^2) / (sum(n) - 2))
+  unname((m[2] - m[1]) / s_pooled)
+}
+
+d <- cohens_d(two_sp$body_mass, two_sp$species)
+d
+```
+
+Una guida comune (e approssimativa!) interpreta $|d| \approx 0.2$ come piccolo, $0.5$ come medio e $0.8$ come grande. Qui $d =$ `r round(d, 1)`: una differenza enorme — le due distribuzioni si sovrappongono a malapena, come il grafico aveva già mostrato.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: la statistica di Welch
+
+$$
+t = \frac{\bar x_1 - \bar x_2}{\sqrt{\dfrac{s_1^2}{n_1} + \dfrac{s_2^2}{n_2}}}
+$$
+
+La distribuzione di riferimento è approssimativamente una $t_\nu$ con i gradi di libertà di Welch–Satterthwaite
+
+$$
+\nu \approx \frac{\left(s_1^2/n_1 + s_2^2/n_2\right)^2}{\dfrac{(s_1^2/n_1)^2}{n_1-1} + \dfrac{(s_2^2/n_2)^2}{n_2-1}} .
+$$
+
+La versione di Student sostituisce il denominatore con una varianza combinata (*pooled*) e usa $n_1+n_2-2$ gradi di libertà; è esatta solo quando le varianze nella popolazione sono uguali.
+:::
+
+## 5. Test t per dati appaiati
+
+Il dataset incorporato `sleep` registra le ore di sonno *aggiuntive* per **gli stessi 10 pazienti** sotto due farmaci. Ogni paziente fa da controllo a se stesso, quindi le misurazioni sono appaiate.
+
+```{r}
+#| label: sleep-wide
+sleep_wide <- data.frame(
+  drug1 = sleep$extra[sleep$group == 1],
+  drug2 = sleep$extra[sleep$group == 2]
+)
+sleep_wide$diff <- sleep_wide$drug2 - sleep_wide$drug1
+sleep_wide
+```
+
+```{r}
+#| label: paired
+res_paired <- t.test(sleep_wide$drug2, sleep_wide$drug1, paired = TRUE)
+res_paired
+```
+
+Un test per dati appaiati è semplicemente un **test t a un campione sulle differenze**:
+
+```{r}
+#| label: paired-equiv
+t.test(sleep_wide$diff, mu = 0)$p.value
+res_paired$p.value
+```
+
+### E se ignoriamo (sbagliando) l'appaiamento?
+
+```{r}
+#| label: unpaired-wrong
+t.test(sleep_wide$drug2, sleep_wide$drug1)$p.value
+```
+
+Ignorare l'appaiamento significa buttare via informazione: la variabilità da paziente a paziente finisce nel rumore, l'errore standard cresce e il p-value diventa `r round(t.test(sleep_wide$drug2, sleep_wide$drug1)$p.value, 3)` invece di `r round(res_paired$p.value, 4)`. È il disegno dello studio a determinare il test.
+
+## 6. Assunzioni: che cosa conta davvero
+
+| Assunzione | Quanto conta? | Come verificarla |
+|---|---|---|
+| **Indipendenza** delle osservazioni (all'interno dei gruppi e, per Welch, tra i gruppi) | Cruciale. Nessun test rimedia a un disegno difettoso. | Rifletti su come sono stati raccolti i dati. |
+| Dati (o differenze, per i dati appaiati) **approssimativamente normali** | Conta per $n$ piccoli (diciamo < 30 per gruppo) e in presenza di forte asimmetria o valori anomali. Per $n$ più grandi aiuta il teorema del limite centrale. | Istogramma / QQ-plot; cerca forte asimmetria o valori anomali. |
+| **Varianze uguali** | Non necessaria con Welch (l'impostazione predefinita). | — |
+
+```{r}
+#| label: fig-qq
+#| fig-cap: "QQ-plot della massa corporea per specie: punti vicini alla retta indicano un'approssimativa normalità."
+ggplot(two_sp, aes(sample = body_mass)) +
+  stat_qq(alpha = 0.5) +
+  stat_qq_line(colour = "#E8613C") +
+  facet_wrap(~ species) +
+  labs(x = "Quantili teorici", y = "Quantili campionari")
+```
+
+Se i campioni sono piccoli *e* chiaramente non normali, usa un'alternativa basata sui ranghi come il test di Wilcoxon (vedi [Test non parametrici](36-nonparametric-tests.qmd)) oppure un test di permutazione.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **"p = 0.03 significa che c'è il 3% di probabilità che H0 sia vera."** No. Il p-value è calcolato *assumendo* che H0 sia vera; è un'affermazione sui dati, non sull'ipotesi.
+2. **"Non significativo" ≠ "nessuna differenza".** Un p-value grande può riflettere semplicemente un campione piccolo. Guarda l'intervallo di confidenza: è stretto attorno a zero, oppure ampio?
+3. **Usare un test per campioni indipendenti su dati appaiati** (o viceversa). Decidi in base al disegno dello studio.
+4. **Eseguire molti test t su molti gruppi.** Con 5 gruppi ci sono 10 confronti a coppie e la probabilità di almeno un falso positivo cresce rapidamente — usa l'[ANOVA](37-anova.qmd) e confronti con correzione.
+5. **Verificare la normalità con un test formale e poi scegliere il test.** Con campioni piccoli questi test hanno poca potenza; con campioni grandi segnalano scostamenti irrilevanti. Guarda i grafici.
+:::
+
+## 7. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Una ricercatrice misura la pressione arteriosa di 20 pazienti prima e dopo un trattamento. Quale test?
+
+Un test t **per dati appaiati** (`paired = TRUE`): gli stessi pazienti sono misurati due volte.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Vero o falso: un IC al 95% per una differenza che non contiene 0 corrisponde a p < 0.05 nel test bilaterale.
+
+**Vero** (per lo stesso test e gli stessi dati). IC e test sono due modi di guardare lo stesso calcolo.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Perché R usa la versione di Welch come impostazione predefinita?
+
+Perché rimane valida quando le due varianze sono diverse, ed è potente quasi quanto il test di Student quando sono uguali. C'è poco da perdere e molto da guadagnare.
+:::
+
+## 8. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — test a un campione.** Verifica se la media di `mpg` (miglia per gallone) delle auto in `mtcars` è diversa da 20. Salva il risultato in `res` e stampalo.
+
+```{webr}
+#| exercise: ex_34_1
+res <- t.test(______, mu = ______)
+res
+```
+
+::: {.hint exercise="ex_34_1"}
+Usa la colonna `mpg` con `mtcars$mpg` e il valore di riferimento `20`.
+:::
+
+::: {.solution exercise="ex_34_1"}
+```r
+res <- t.test(mtcars$mpg, mu = 20)
+res
+```
+Il p-value è grande e l'IC al 95% contiene 20: i dati sono compatibili con una media di 20 mpg.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — due gruppi indipendenti.** Le auto con cambio manuale (`am == 1`) hanno una media di `mpg` diversa da quelle con cambio automatico (`am == 0`)? Usa l'interfaccia a formula.
+
+```{webr}
+#| exercise: ex_34_2
+t.test(______ ~ ______, data = mtcars)
+```
+
+::: {.hint exercise="ex_34_2"}
+La formula è `risposta ~ gruppo`.
+:::
+
+::: {.solution exercise="ex_34_2"}
+```r
+t.test(mpg ~ am, data = mtcars)
+```
+Le auto con cambio manuale hanno una media di `mpg` più alta; l'IC per la differenza (automatico − manuale) è interamente sotto lo 0.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 3 — che cosa significa "5%"?** Simula 5.000 esperimenti in cui **non c'è alcuna vera differenza**: ogni volta estrai due campioni di numerosità 10 dalla stessa distribuzione normale e registra il p-value del test di Welch. Quale proporzione di p-value è sotto 0.05? Poi ripeti con una vera differenza di 0.8 deviazioni standard nel secondo gruppo — che cosa stai stimando adesso?
+
+```{webr}
+#| exercise: ex_34_3
+set.seed(1)
+p_null <- replicate(5000, {
+  x <- rnorm(10)
+  y <- rnorm(10)
+  t.test(x, y)$p.value
+})
+mean(p_null < 0.05)
+
+# ora aggiungi a y un vero effetto di 0.8 DS
+p_alt <- replicate(5000, {
+  x <- rnorm(10)
+  y <- rnorm(10, mean = ______)
+  t.test(x, y)$p.value
+})
+mean(p_alt < 0.05)
+```
+
+::: {.hint exercise="ex_34_3"}
+Sotto H0 dovresti ottenere un valore vicino a 0.05 — questa *è* la definizione del tasso di errore di I tipo. Per la seconda parte, imposta `mean = 0.8`.
+:::
+
+::: {.solution exercise="ex_34_3"}
+```r
+p_alt <- replicate(5000, {
+  x <- rnorm(10); y <- rnorm(10, mean = 0.8)
+  t.test(x, y)$p.value
+})
+mean(p_alt < 0.05)   # circa 0.39
+```
+La prima proporzione stima il **tasso di errore di I tipo** (≈ 0.05). La seconda stima la **potenza** del test per un effetto grande con solo 10 unità per gruppo — ben al di sotto dell'80% convenzionale. Gli studi piccoli spesso non riescono a rilevare effetti reali.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4.** Usando `penguins`, confronta la **lunghezza del becco** (`bill_len`) dei pinguini Chinstrap *maschi* e *femmine*. (a) Rappresenta graficamente i dati. (b) Esegui il test appropriato. (c) Riporta il risultato in una frase che includa la differenza stimata, il suo IC al 95% e il $d$ di Cohen.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+chin <- penguins |>
+  filter(species == "Chinstrap", !is.na(sex)) |>
+  droplevels()
+
+ggplot(chin, aes(sex, bill_len)) + geom_boxplot() + geom_jitter(width = .1)
+
+res <- t.test(bill_len ~ sex, data = chin)
+res
+cohens_d(chin$bill_len, chin$sex)
+```
+*Esempio di resoconto:* "I pinguini Chinstrap maschi avevano il becco più lungo delle femmine (differenza ≈ 4.5 mm, IC al 95% da circa 3.3 a 5.7 mm; test t di Welch, p < 0.001), un effetto molto grande (d ≈ 1.8)." — controlla i numeri esatti nel tuo output.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — interpreta, non calcolare.** Uno studio riporta: *"t(48) = 1.20, p = 0.24, IC al 95% per la differenza [−1.1, 4.3]"*. Un collega conclude che "il trattamento non ha alcun effetto". Scrivi due frasi per spiegare perché questa conclusione è troppo forte.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Il test non ha rilevato una differenza, ma l'IC mostra che i dati sono compatibili con qualsiasi valore, da un piccolo effetto negativo (−1.1) a un effetto positivo piuttosto grande (4.3). Lo studio è inconcludente — probabilmente con potenza insufficiente — e non costituisce una prova dell'*assenza* di effetto.
+:::
+:::
+
+## Riepilogo
+
+| Situazione | Codice | Che cosa riportare |
+|---|---|---|
+| Una media vs valore di riferimento | `t.test(x, mu = m0)` | media, IC al 95%, p |
+| Due gruppi indipendenti | `t.test(y ~ g, data = df)` (Welch) | differenza, IC al 95%, p, d di Cohen |
+| Misurazioni appaiate | `t.test(x2, x1, paired = TRUE)` | differenza media, IC al 95%, p |
+
+- La statistica t è **segnale / rumore**.
+- Scegli il test in base al **disegno dello studio** (appaiato vs indipendente), non ai dati.
+- Welch è la scelta predefinita ragionevole per due gruppi.
+- Riporta sempre una **dimensione dell'effetto e un intervallo di confidenza** insieme al p-value.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), <https://r4ds.hadley.nz>
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2a ed.), capitoli sull'inferenza per le medie, <https://openintro-ims.netlify.app>
+- Lakens, D., *Improving Your Statistical Inferences*, <https://lakens.github.io/statistical_inferences/>
+:::

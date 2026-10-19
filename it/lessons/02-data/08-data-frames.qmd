@@ -1,0 +1,483 @@
+---
+title: "Data frame e tibble"
+subtitle: "La tabella da cui parte ogni analisi statistica"
+description: "Comprendere i dati in formato tidy (unità sulle righe, variabili sulle colonne), creare data frame e tibble, ispezionarli, indicizzarli con [righe, colonne], $ e [[, aggiungere colonne e selezionare righe."
+format:
+  live-html:
+    webr:
+      packages: ["dplyr", "tibble"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+library(tibble)
+```
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Vettori](../01-foundations/04-vectors.qmd), [Fattori](../01-foundations/06-factors.qmd), [Liste](../01-foundations/07-lists.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- individuare l'**unità statistica**, le **variabili** e le **osservazioni** in un dataset, e riconoscere i **dati in formato tidy**;
+- creare un data frame con `data.frame()` e un tibble con `tibble()`, e spiegare in che cosa differiscono;
+- ispezionare un dataset sconosciuto con `str()`, `glimpse()`, `head()`, `summary()`, `nrow()`, `ncol()` e `names()`;
+- estrarre celle, righe e colonne con `[righe, colonne]`, `$` e `[[`;
+- aggiungere una colonna e tenere solo le righe che soddisfano una condizione.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(tibble)
+library(dplyr)
+```
+
+## 1. Perché ci servono i data frame?
+
+Immagina una biologa sul campo che pesa un pinguino, ne misura il becco e la pinna, e annota la specie, l'isola e il sesso. Ripete l'operazione per 344 animali. Alla fine ottiene una **tabella**: una riga per animale, una colonna per misura.
+
+Alcune colonne contengono numeri (la massa corporea), altre contengono etichette (la specie). Una [matrice](../01-foundations/05-matrices.qmd) non può contenere tutto questo, perché tutte le sue celle devono avere lo stesso tipo. Un **data frame** sì: è l'oggetto di R per una tabella in cui ogni colonna è un vettore con il proprio tipo, e tutte le colonne hanno la stessa lunghezza.
+
+Quasi tutti i metodi statistici di questo corso, dalla media alla random forest, ricevono in input un data frame. Prendere confidenza con i data frame è il primo vero passo dell'analisi dei dati.
+
+## 2. Unità, variabili, osservazioni: i dati tidy
+
+Prima di toccare R, fissiamo il vocabolario che la statistica usa per una tabella.
+
+- L'**unità statistica** è la "cosa" su cui raccogliamo informazioni: un pinguino, un paziente, un paese in un certo anno, un'automobile.
+- Una **variabile** è una caratteristica misurata su ciascuna unità: massa corporea, specie, pressione arteriosa. I suoi valori *variano* da un'unità all'altra.
+- Un'**osservazione** è l'insieme dei valori misurati su una singola unità.
+
+Un dataset è in **formato tidy** (dati "ordinati") quando rispetta tre semplici regole:
+
+1. ogni **variabile** è una **colonna**;
+2. ogni **osservazione** (unità) è una **riga**;
+3. ogni **valore** è una **cella**.
+
+::: {.callout-tip}
+## Perché alla statistica interessano i dati tidy
+
+Quando calcoli "la massa corporea media", fai la media di una *colonna*. Quando conti "quanti pinguini", conti delle *righe*. Quando stimi un modello `body_mass ~ species`, R cerca due *colonne*. I software statistici presuppongono la struttura tidy; se la tua tabella non è tidy, il primo compito è ristrutturarla (vedi [Dati tidy e ristrutturazione](12-tidy-reshape.qmd)).
+:::
+
+Ecco una tabella che **non** è tidy. Memorizza lo stesso tipo di misura (la massa) in due colonne, una per anno:
+
+```{r}
+#| label: untidy
+untidy <- tibble(
+  penguin   = c("A1", "A2", "A3"),
+  mass_2008 = c(3750, 3800, 3250),
+  mass_2009 = c(3900, 3850, 3400)
+)
+untidy
+```
+
+L'unità è "un pinguino" o "un pinguino in un anno"? Se la domanda è *come cambia la massa nel tempo*, l'unità è la coppia pinguino-anno, e la versione tidy ha tre colonne: `penguin`, `year`, `mass`. Decidere qual è l'unità viene **prima** di qualsiasi codice.
+
+## 3. Creare un data frame
+
+### R base: `data.frame()`
+
+```{r}
+#| label: create-df
+df <- data.frame(
+  id    = c(10, 20, 30, 40),
+  item  = c("book", "pen", "textbook", "pencil_case"),
+  store = c(TRUE, FALSE, TRUE, FALSE),
+  price = c(2.5, 8, 10, 7)
+)
+df
+```
+
+Ogni argomento diventa una colonna: `id` e `price` sono numeriche, `item` è di tipo carattere, `store` è logica. Da R 4.0 le colonne di testo restano di tipo carattere (il vecchio valore predefinito `stringsAsFactors = TRUE` non esiste più); le converti in [fattore](../01-foundations/06-factors.qmd) solo quando ti serve.
+
+### Tidyverse: `tibble()`
+
+Un **tibble** è un data frame moderno del pacchetto tibble. *È* un data frame (ogni funzione che accetta un data frame accetta anche un tibble), con un comportamento più amichevole.
+
+```{r}
+#| label: create-tbl
+df_tbl <- tibble(
+  id    = c(10, 20, 30, 40),
+  item  = c("book", "pen", "textbook", "pencil_case"),
+  store = c(TRUE, FALSE, TRUE, FALSE),
+  price = c(2.5, 8, 10, 7)
+)
+df_tbl
+```
+
+| | `data.frame()` | `tibble()` |
+|---|---|---|
+| Stampa | stampa **tutte** le righe | stampa le prime 10 righe e i tipi delle colonne (`<dbl>`, `<chr>`, …) |
+| `df[, 1]` (una colonna) | restituisce un **vettore** | restituisce un **tibble** (con una colonna) |
+| Nomi di riga | ammessi (es. `mtcars`) | non usati; spostali in una colonna |
+| Corrispondenza parziale con `$` | `df$pri` restituisce la colonna `price` (con un avviso) | avviso e `NULL` |
+
+Puoi convertire nelle due direzioni con `as_tibble()` e `as.data.frame()`.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: un data frame è una lista
+
+Dietro le quinte un data frame è una [lista](../01-foundations/07-lists.qmd) di vettori della stessa lunghezza, con classe `"data.frame"`. Per questo `length(df)` restituisce il numero di **colonne** (`r length(df)`), e `df[["price"]]` funziona esattamente come per una lista.
+
+```{r}
+#| label: df-is-list
+is.list(df)
+length(df)
+```
+:::
+
+## 4. Ispezionare un dataset
+
+R base (≥ 4.5) include il dataset `penguins`: misure di `r nrow(penguins)` pinguini provenienti da tre isole dell'Antartide. Quando incontri un dataset nuovo, esegui per prime queste funzioni.
+
+```{r}
+#| label: inspect-size
+nrow(penguins)
+ncol(penguins)
+names(penguins)
+```
+
+```{r}
+#| label: inspect-str
+str(penguins)
+```
+
+`str()` ("structure", struttura) mostra, per ogni colonna, il suo **tipo** e i primi valori. `glimpse()` di dplyr mostra le stesse informazioni in una forma più ordinata:
+
+```{r}
+#| label: inspect-glimpse
+glimpse(penguins)
+```
+
+```{r}
+#| label: inspect-head
+head(penguins, n = 3)
+```
+
+```{r}
+#| label: inspect-summary
+summary(penguins)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Per le colonne **numeriche**, `summary()` riporta minimo, quartili, media e massimo: un primo sguardo alla [distribuzione](../05-descriptive/22-summary-statistics.qmd).
+- Per le colonne **fattore** (`species`, `island`, `sex`) riporta il conteggio di ciascun livello.
+- **`NA's`** conta i valori mancanti: per `r sum(is.na(penguins$sex))` pinguini non è registrato il `sex`, e per `r sum(is.na(penguins$body_mass))` manca la massa corporea. Ricordatelo: i valori mancanti torneranno in quasi ogni lezione.
+- `year` è memorizzato come intero, quindi ne viene calcolata la media (`r round(mean(penguins$year), 1)`), che non ha molto senso. Sapere con che *tipo* di variabile hai a che fare conta più di ciò che R calcola.
+:::
+
+I tibble si stampano in modo leggibile, perciò è comune convertire un data frame di base una volta all'inizio:
+
+```{r}
+#| label: as-tibble
+as_tibble(penguins)
+```
+
+Gli altri dataset predefiniti sono elencati da `data()`; ognuno ha una pagina di aiuto (`?mtcars`, `?airquality`). Alcuni, come `mtcars`, memorizzano il nome dell'unità nei **nomi di riga**. I tibble preferiscono averlo come vera variabile:
+
+```{r}
+#| label: rownames
+mtcars |>
+  rownames_to_column(var = "model") |>
+  as_tibble()
+```
+
+## 5. Indicizzazione: `[righe, colonne]`
+
+Un data frame ha due dimensioni, quindi le parentesi quadre accettano due indici separati da una virgola: `df[righe, colonne]`. Lasciare vuoto un lato significa "tutte".
+
+```{r}
+#| label: index-cell
+# Una cella: riga 1, colonna 2
+df[1, 2]
+```
+
+```{r}
+#| label: index-rows
+# Righe da 1 a 2, tutte le colonne
+df[1:2, ]
+```
+
+```{r}
+#| label: index-cols
+# Colonna 1, tutte le righe
+df[, 1]
+
+# Colonne scelte per nome
+df[, c("id", "store")]
+
+# Una cella tramite numero di riga e nome di colonna
+df[2, "price"]
+```
+
+Puoi indicizzare con **numeri** (posizioni), **nomi** o vettori **logici**, esattamente come con i [vettori](../01-foundations/04-vectors.qmd). I nomi sono più sicuri: se una colonna viene aggiunta o spostata, `df[, "price"]` funziona ancora, `df[, 4]` forse no.
+
+### Estrarre una colonna come vettore: `$` e `[[`
+
+```{r}
+#| label: dollar
+df$id         # comodo quando scrivi in modo interattivo
+df[["id"]]    # funziona con un nome memorizzato in una variabile
+col <- "price"
+df[[col]]
+```
+
+Le parentesi singole con un solo indice, `df["id"]`, restituiscono un **data frame** con una colonna; le parentesi doppie `df[["id"]]` restituiscono il **vettore** contenuto. È la stessa differenza "vagone del treno contro il suo contenuto" che hai visto con le liste.
+
+## 6. Aggiungere colonne
+
+Una nuova colonna deve avere **un valore per ogni riga**.
+
+```{r}
+#| label: add-col
+df$quantity <- c(10, 35, 40, 5)
+df
+```
+
+Se la lunghezza non corrisponde, R base si ferma con un errore:
+
+```{r}
+#| label: add-col-error
+#| error: true
+df$quantity <- c(10, 35, 40)
+```
+
+Spesso le nuove colonne si calcolano a partire da quelle esistenti. In R base:
+
+```{r}
+#| label: add-col-computed
+df$revenue <- df$price * df$quantity
+df
+```
+
+Nel tidyverse si usa `mutate()`, che userai di continuo a partire dalla [prossima lezione](09-dplyr-verbs.qmd):
+
+```{r}
+#| label: mutate-preview
+df_tbl |>
+  mutate(quantity = c(10, 35, 40, 5),
+         revenue  = price * quantity)
+```
+
+Il simbolo `|>` è la **pipe** (operatore pipe): leggilo come "e poi". Passa la tabella alla sua sinistra come primo argomento della funzione alla sua destra.
+
+## 7. Tenere alcune righe: la selezione
+
+Metti una **condizione logica** nella posizione delle righe: vengono tenute le righe in cui vale `TRUE`.
+
+```{r}
+#| label: subset-base
+df[df$price > 5, ]
+df[df$price > 5 & df$store, ]
+```
+
+`subset()` fa risparmiare un po' di battitura, e permette anche di scegliere le colonne:
+
+```{r}
+#| label: subset-fun
+subset(df, price > 5, select = c(item, price))
+```
+
+Il verbo `filter()` di dplyr svolge lo stesso compito e si inserisce nelle pipeline:
+
+```{r}
+#| label: filter-preview
+df |>
+  filter(price > 5)
+```
+
+### Valori mancanti nelle condizioni
+
+Guarda che cosa succede con dati reali che contengono valori mancanti:
+
+```{r}
+#| label: na-trap
+penguins[penguins$body_mass > 6000, ]
+```
+
+Le righe piene di `NA` vengono dai due pinguini la cui massa è mancante: `NA > 6000` è `NA`, e indicizzare con `NA` restituisce una riga di `NA`. Ci sono due vie d'uscita:
+
+```{r}
+#| label: na-fix
+penguins[which(penguins$body_mass > 6000), ]
+penguins |> filter(body_mass > 6000)
+```
+
+`which()` trasforma il vettore logico nelle posizioni dei `TRUE`, e `filter()` scarta le righe in cui la condizione è `NA`. Questo è uno dei motivi per cui `filter()` è lo strumento consigliato per i dati reali.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Dimenticare la virgola.** `df[1:2]` seleziona le *colonne* 1–2 (come per una lista), `df[1:2, ]` seleziona le *righe* 1–2.
+2. **Aspettarsi un vettore da un tibble.** `tbl[, 1]` restituisce un tibble con una colonna; usa `tbl[[1]]` o `tbl$nome` per ottenere il vettore.
+3. **Condizioni con `NA`.** `df[df$x > 5, ]` restituisce righe di `NA` quando `x` è mancante; usa `which()` o `filter()`.
+4. **Usare la posizione delle righe come identificativo.** Dopo un ordinamento o un filtro, la riga 3 è un'altra unità. Tieni una colonna `id`.
+5. **Colonne del tipo sbagliato.** Numeri letti come testo (`"3,5"`) o codici memorizzati come numeri (`sex = 1/2`): controlla sempre prima con `str()` o `glimpse()`.
+:::
+
+## 8. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. In un dataset ospedaliero ogni riga è una visita, e lo stesso paziente può comparire più volte. Qual è l'unità statistica?
+
+La **visita**, non il paziente. Se la tua domanda riguarda i pazienti (es. "proporzione di pazienti con diabete"), ti serve prima una riga per paziente, per esempio riassumendo le visite di ciascun paziente (vedi [Sintesi per gruppi](10-grouped-summaries.qmd)).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Che cosa restituiscono `df[2, ]`, `df[, 2]` e `df[[2]]` per un data frame di base?
+
+`df[2, ]` è la seconda **riga** (un data frame con una riga); `df[, 2]` è la seconda **colonna** come vettore; anche `df[[2]]` è la seconda colonna come vettore. Per un tibble, `df[, 2]` sarebbe un tibble con una colonna.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Perché `length(penguins)` restituisce 8 e non 344?
+
+Perché un data frame è una lista di colonne: `length()` conta gli elementi della lista, cioè le **colonne**. Usa `nrow()` per il numero di unità.
+:::
+
+## 9. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — primo sguardo.** Quanti pinguini e quante variabili ci sono in `penguins`? Quali colonne sono fattori? Completa gli spazi vuoti.
+
+```{webr}
+#| exercise: ex_08_1
+______(penguins)    # numero di righe
+______(penguins)    # numero di colonne
+str(______)
+```
+
+::: {.hint exercise="ex_08_1"}
+`nrow()` conta le righe, `ncol()` conta le colonne, `str()` mostra il tipo di ogni colonna.
+:::
+
+::: {.solution exercise="ex_08_1"}
+```r
+nrow(penguins)
+ncol(penguins)
+str(penguins)
+```
+Ci sono 344 pinguini (righe) e 8 variabili (colonne); `species`, `island` e `sex` sono fattori.
+:::
+:::
+
+::: {.exercise}
+[★]{.stars} **Esercizio 2 — indicizzazione.** Usando `[righe, colonne]`, estrai (a) la massa corporea del decimo pinguino; (b) le colonne `species` e `bill_len` per i primi 5 pinguini.
+
+```{webr}
+#| exercise: ex_08_2
+penguins[______, "body_mass"]
+penguins[______, c(______, ______)]
+```
+
+::: {.hint exercise="ex_08_2"}
+Le righe vanno prima della virgola, le colonne dopo. `1:5` indica le prime cinque righe.
+:::
+
+::: {.solution exercise="ex_08_2"}
+```r
+penguins[10, "body_mass"]
+penguins[1:5, c("species", "bill_len")]
+```
+Il decimo pinguino pesa 4250 g.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — prevedi, poi correggi.** Un compagno di corso vuole tutti i pinguini Gentoo più pesanti di 5500 g, ma ottiene righe piene di `NA`. Correggi il codice in due modi diversi (R base e `filter()`) e conta quanti pinguini soddisfano la condizione.
+
+```{webr}
+#| exercise: ex_08_3
+heavy <- penguins[penguins$species == "Gentoo" & penguins$body_mass > 5500, ]
+heavy
+```
+
+::: {.hint exercise="ex_08_3"}
+Un Gentoo ha la massa corporea mancante. Racchiudi la condizione in `which()`, oppure usa `penguins |> filter(species == "Gentoo", body_mass > 5500)`. Poi usa `nrow()`.
+:::
+
+::: {.solution exercise="ex_08_3"}
+```r
+heavy <- penguins[which(penguins$species == "Gentoo" &
+                          penguins$body_mass > 5500), ]
+nrow(heavy)
+
+heavy2 <- penguins |> filter(species == "Gentoo", body_mass > 5500)
+nrow(heavy2)
+```
+Entrambi danno le stesse righe. In `filter()`, le condizioni separate da virgole sono combinate con "e".
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — costruisci una tabella tidy.** Cinque studenti hanno svolto un quiz. Crea un tibble con le colonne `student` (nomi a tua scelta), `score` (su 30) e `passed` (`TRUE` se `score >= 18`, calcolata a partire da `score`, non scritta a mano). Poi aggiungi una colonna `grade` pari a `score / 30 * 100` e stampa solo gli studenti che hanno superato il quiz.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+quiz <- tibble(
+  student = c("Ada", "Ben", "Chiara", "Dev", "Eli"),
+  score   = c(25, 14, 18, 29, 11)
+)
+quiz$passed <- quiz$score >= 18
+quiz$grade  <- quiz$score / 30 * 100
+quiz[quiz$passed, ]
+```
+L'unità è lo studente; `score`, `passed` e `grade` sono variabili.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — qual è l'unità?** Per ciascun dataset, indica l'unità statistica e due variabili: (a) `airquality`; (b) `ToothGrowth`; (c) `mtcars`. Usa `?nome` e `head()` per scoprirlo.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+(a) `airquality`: un **giorno** (da maggio a settembre 1973 a New York); variabili `Ozone`, `Temp`, … (b) `ToothGrowth`: una **cavia**; variabili `len`, `supp`, `dose`. (c) `mtcars`: un **modello di automobile** (memorizzato nei nomi di riga); variabili `mpg`, `hp`, … Nota che solo (c) richiede `rownames_to_column()` per trasformare l'identificativo dell'unità in una vera variabile.
+:::
+:::
+
+## Riepilogo
+
+| Operazione | R base | Tidyverse |
+|---|---|---|
+| Creare | `data.frame(a = ..., b = ...)` | `tibble(a = ..., b = ...)` |
+| Dimensioni e nomi | `nrow()`, `ncol()`, `dim()`, `names()` | — |
+| Struttura | `str()`, `head()`, `summary()` | `glimpse()` |
+| Una cella | `df[1, 2]`, `df[1, "b"]` | — |
+| Una colonna (vettore) | `df$b`, `df[["b"]]` | `pull(df, b)` |
+| Alcune colonne | `df[, c("a", "b")]` | `select(df, a, b)` |
+| Aggiungere una colonna | `df$c <- ...` | `mutate(df, c = ...)` |
+| Tenere alcune righe | `df[which(cond), ]`, `subset()` | `filter(df, cond)` |
+
+- Un dataset è **tidy** quando le unità sono righe, le variabili sono colonne e i valori sono celle.
+- Decidi qual è l'**unità statistica** prima di scrivere codice.
+- Un data frame è una lista di colonne della stessa lunghezza; un tibble è un data frame con impostazioni predefinite più sicure.
+- I valori mancanti fanno restituire `NA` alle condizioni logiche: preferisci `filter()` o `which()`.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitolo "Data tidying", <https://r4ds.hadley.nz>
+- Wickham, H. (2014), "Tidy Data", *Journal of Statistical Software* 59(10), <https://doi.org/10.18637/jss.v059.i10>
+- Documentazione del pacchetto tibble, <https://tibble.tidyverse.org>
+:::

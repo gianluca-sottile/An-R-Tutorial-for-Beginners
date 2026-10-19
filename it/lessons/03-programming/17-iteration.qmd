@@ -1,0 +1,513 @@
+---
+title: "Iterazione con apply e purrr"
+subtitle: "Applica una funzione a ogni elemento, colonna o gruppo, senza scrivere il ciclo"
+description: "Usa apply(), lapply(), sapply(), vapply(), tapply() e mapply(), e i loro equivalenti moderni di purrr map(), map_dbl(), map2(), imap() e list_rbind(), per iterare su liste, colonne di data frame e gruppi, concludendo con un esempio a 'molti modelli'."
+format:
+  live-html:
+    webr:
+      packages: ["purrr"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(purrr)
+```
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Scrivere funzioni](14-functions.qmd), [Cicli](16-loops.qmd), [Liste](../01-foundations/07-lists.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- applicare una funzione alle righe o alle colonne di una matrice con `apply()`;
+- iterare su liste e colonne di data frame con `lapply()`, `sapply()`, `vapply()` e i loro equivalenti in `purrr`;
+- spiegare la **stabilità del tipo** (*type stability*) e scegliere funzioni il cui tipo di output sia prevedibile;
+- applicare una funzione **per gruppo** con `tapply()` oppure con `split()` + `map()`;
+- stimare un modello per ciascun gruppo e raccogliere i risultati in un'unica tabella.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(purrr)
+library(tibble)
+```
+
+## 1. Perché le funzioni di iterazione?
+
+In [Cicli](16-loops.qmd) hai calcolato la media di quattro colonne dei pinguini con un ciclo `for`. Servivano cinque righe: creare un contenitore, dargli i nomi, iterare sulle posizioni, estrarre una colonna, salvare il risultato. Solo una di quelle righe diceva che cosa volevamo davvero: *"la media"*.
+
+Una **funzione di iterazione** (detta anche *funzionale*, *functional*) riceve una funzione e la applica a ogni elemento di un vettore o di una lista, occupandosi al posto tuo di tutta la contabilità:
+
+```{r}
+#| label: motivation
+num_cols <- penguins[, c("bill_len", "bill_dep", "flipper_len", "body_mass")]
+
+sapply(num_cols, mean, na.rm = TRUE)                  # R base
+map_dbl(num_cols, \(x) mean(x, na.rm = TRUE))         # purrr
+```
+
+Entrambe le righe dicono "per ogni colonna, calcola la media". Sono più brevi, più difficili da sbagliare e facili da leggere. Dietro le quinte sono comunque cicli, quindi non sono magicamente più veloci: il guadagno è la **chiarezza**.
+
+## 2. `apply()`: righe e colonne di una matrice
+
+`apply(X, MARGIN, FUN, ...)` applica `FUN` a ogni riga (`MARGIN = 1`) o a ogni colonna (`MARGIN = 2`) di una matrice `X`. Gli argomenti aggiuntivi in `...` vengono passati a `FUN`.
+
+```{r}
+#| label: apply
+m1 <- matrix(1:30, nrow = 5, ncol = 6)
+m1
+
+apply(m1, 2, sum)       # un valore per colonna
+apply(m1, 1, max)       # un valore per riga
+```
+
+Per somme e medie esistono funzioni dedicate (e più veloci): `rowSums()`, `colSums()`, `rowMeans()`, `colMeans()`.
+
+```{r}
+#| label: colsums
+colSums(m1)
+```
+
+Se `FUN` restituisce più di un valore, `apply()` mette i risultati nelle **colonne** di una matrice, che spesso risulta trasposta rispetto a quanto ti aspetti:
+
+```{r}
+#| label: apply-range
+apply(m1, 2, range)     # 2 righe (min, max), una colonna per ogni colonna di m1
+```
+
+::: {.callout-warning}
+## `apply()` su un data frame
+`apply()` converte prima il data frame in una **matrice**. Se c'è anche una sola colonna di testo o un fattore, *tutto* diventa testo, e `mean()` restituisce `NA` con un avviso. Usa `apply()` per le matrici; per i data frame usa `lapply()`, `sapply()`, `map()` o `across()`.
+:::
+
+## 3. `lapply()`: restituisce sempre una lista
+
+`lapply(X, FUN, ...)` applica `FUN` a ogni elemento di `X` (un vettore, una lista o le colonne di un data frame) e **restituisce sempre una lista** della stessa lunghezza.
+
+```{r}
+#| label: lapply
+# cars è incluso in R; data() rende solo esplicita la provenienza
+data(cars, package = "datasets")
+lapply(cars, range)
+```
+
+Un altro esempio, con un vettore di caratteri:
+
+```{r}
+#| label: lapply-movies
+movies <- c("SPYDERMAN", "BATMAN", "VERTIGO", "CHINATOWN")
+movies_lower <- lapply(movies, tolower)
+str(movies_lower)
+unlist(movies_lower)     # di nuovo un vettore di caratteri
+```
+
+(`tolower()` è già vettorizzata, quindi `tolower(movies)` restituisce direttamente lo stesso vettore di caratteri: itera solo quando serve.)
+
+Una lista è il contenitore più flessibile: ogni elemento può avere lunghezza o tipo diversi. Questa flessibilità è anche il suo limite: spesso vorresti invece un semplice vettore.
+
+## 4. `sapply()` e `vapply()`: semplificare il risultato
+
+`sapply()` chiama `lapply()` e poi cerca di **semplificare** il risultato in un vettore o in una matrice:
+
+```{r}
+#| label: sapply
+sapply(cars, min)
+sapply(cars, range)      # ogni risultato ha lunghezza 2 -> una matrice a 2 colonne
+
+avg_range <- function(x) (min(x) + max(x)) / 2
+sapply(cars, avg_range)
+```
+
+### Il problema: l'instabilità del tipo
+
+Ciò che `sapply()` restituisce dipende da **ciò che restituisce la funzione**. Se i risultati hanno lunghezze diverse, restituisce in silenzio una lista:
+
+```{r}
+#| label: sapply-unstable
+above_mean <- function(x) x[x > mean(x)]
+
+res <- sapply(cars, above_mean)
+class(res)               # una lista, non un vettore né una matrice
+lengths(res)
+```
+
+E con un input vuoto restituisce una *lista* vuota:
+
+```{r}
+#| label: sapply-empty
+sapply(list(), length)
+```
+
+Una funzione il cui tipo di output dipende dai valori in input si dice **instabile nel tipo** (*type unstable*). In modo interattivo è innocuo; dentro una funzione o uno script può causare errori molto lontano dalla loro origine.
+
+### `vapply()`: dichiara che cosa ti aspetti
+
+`vapply()` aggiunge un argomento `FUN.VALUE` che descrive il risultato di **ogni** chiamata: `numeric(1)` (un numero), `character(1)`, `logical(1)`, oppure `numeric(2)` per due numeri. Se un risultato non corrisponde, `vapply()` si interrompe subito con un errore.
+
+```{r}
+#| label: vapply
+#| error: true
+vapply(cars, min, numeric(1))
+vapply(cars, range, numeric(2))
+vapply(cars, above_mean, numeric(1))     # errore: le lunghezze sono diverse
+```
+
+Regola pratica: `sapply()` alla console, `vapply()` (oppure `map_dbl()` e simili, più avanti) dentro le funzioni.
+
+## 5. Applicare una funzione per gruppo: `tapply()`
+
+`tapply(X, INDEX, FUN)` divide il vettore `X` nei gruppi definiti dal fattore `INDEX` e applica `FUN` a ciascun gruppo:
+
+```{r}
+#| label: tapply
+tapply(iris$Sepal.Width, iris$Species, median)
+tapply(penguins$body_mass, penguins$species, mean, na.rm = TRUE)
+```
+
+Con una **lista** di due fattori ottieni una tabella a doppia entrata:
+
+```{r}
+#| label: tapply-two
+tapply(penguins$body_mass, list(penguins$species, penguins$sex), mean,
+       na.rm = TRUE)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+Le righe sono le specie, le colonne i sessi, e ogni cella è la massa corporea media di quella combinazione. I maschi sono più pesanti delle femmine in tutte le specie. Per i data frame, `dplyr::summarise(.by = c(species, sex))` produce gli stessi numeri in una tabella in formato tidy: vedi [Sintesi per gruppi](../02-data/10-grouped-summaries.qmd).
+:::
+
+## 6. Due input contemporaneamente: `mapply()` e `Map()`
+
+`lapply()` itera su **un** vettore. Per iterare su due vettori in parallelo (il primo con il primo, il secondo con il secondo…), usa `mapply()` (che semplifica come `sapply()`) oppure `Map()` (che restituisce una lista come `lapply()`):
+
+```{r}
+#| label: mapply
+means <- c(0, 10, 100)
+sds   <- c(1, 2, 10)
+set.seed(1)
+Map(\(m, s) round(rnorm(3, mean = m, sd = s), 1), means, sds)
+```
+
+## 7. Il modo moderno: `purrr`
+
+Il pacchetto `purrr` (parte del tidyverse) offre le stesse idee con un'interfaccia **coerente e stabile nel tipo**. Il nome della funzione ti dice esattamente che cosa otterrai:
+
+| R base | purrr | Restituisce |
+|---|---|---|
+| `lapply(x, f)` | `map(x, f)` | una lista |
+| `vapply(x, f, numeric(1))` | `map_dbl(x, f)` | un vettore numerico (double) |
+| `vapply(x, f, character(1))` | `map_chr(x, f)` | un vettore di caratteri |
+| `vapply(x, f, logical(1))` | `map_lgl(x, f)` | un vettore logico |
+| `vapply(x, f, integer(1))` | `map_int(x, f)` | un vettore di interi |
+| `Map(f, x, y)` / `mapply()` | `map2(x, y, f)` | una lista (esistono anche `map2_dbl()`, …) |
+| — | `imap(x, f)` | come `map()`, ma `f` riceve anche il nome |
+
+```{r}
+#| label: purrr-basics
+map_dbl(cars, median)
+map_chr(penguins, \(col) class(col)[1])
+map_lgl(penguins, anyNA)
+```
+
+`map_dbl()` *garantisce* un vettore numerico della stessa lunghezza dell'input, oppure un errore. Nessuna sorpresa del tipo "a volte una lista".
+
+Argomenti aggiuntivi: scrivi una **funzione anonima** `\(x) ...` invece di passarli dopo la funzione. Così è chiaro quale argomento è quale:
+
+```{r}
+#| label: purrr-anon
+map_dbl(num_cols, \(x) sd(x, na.rm = TRUE))
+```
+
+### `map2()` e `imap()`
+
+`map2()` itera su due input in parallelo; `imap()` passa alla funzione sia l'elemento sia il suo **nome** (o la sua posizione):
+
+```{r}
+#| label: map2-imap
+map2_dbl(c(2, 3, 4), c(3, 2, 1), \(base, exp) base^exp)
+
+imap_chr(num_cols, \(x, name) paste0(name, ": ", sum(is.na(x)), " mancanti"))
+```
+
+### Combinare data frame: `list_rbind()`
+
+Uno schema molto frequente: calcolare un piccolo data frame per ogni elemento, poi impilarli in uno solo. `map()` produce una lista di data frame e `list_rbind()` li unisce per riga:
+
+```{r}
+#| label: list-rbind
+num_cols |>
+  imap(\(x, name) tibble(
+    variable = name,
+    mean     = mean(x, na.rm = TRUE),
+    sd       = sd(x, na.rm = TRUE)
+  )) |>
+  list_rbind()
+```
+
+Questo sostituisce il lento schema "far crescere un data frame con `rbind()` dentro un ciclo" (vedi [Cicli](16-loops.qmd#loops-or-vectorisation)).
+
+## 8. Applicare una funzione per gruppo: `split()` + `map()`
+
+`split(df, df$group)` taglia un data frame in una **lista con nomi** di data frame più piccoli, uno per gruppo. Poi qualsiasi funzione di iterazione può elaborare ciascun pezzo:
+
+```{r}
+#| label: split
+by_species <- split(penguins, penguins$species)
+names(by_species)
+map_int(by_species, nrow)
+```
+
+```{r}
+#| label: split-map
+map_dbl(by_species, \(d) cor(d$bill_len, d$bill_dep, use = "complete.obs"))
+```
+
+Tutte e tre le correlazioni tra lunghezza e profondità del becco sono positive *all'interno* delle specie. (Considerando tutti i pinguini insieme, la correlazione è *negativa*, `r round(cor(penguins$bill_len, penguins$bill_dep, use = "complete.obs"), 2)`: un esempio del paradosso di Simpson, che incontrerai di nuovo in [Correlazione](../06-visualization/27-correlation.qmd).)
+
+## 9. Mini-progetto: molti modelli
+
+La massa corporea aumenta con la lunghezza della pinna **allo stesso ritmo** in tutte le specie? Stimiamo una [regressione lineare](../../../lessons/09-regression/38-simple-regression.qmd) semplice per ciascuna specie e confrontiamo le pendenze. La pendenza di `lm(body_mass ~ flipper_len)` è l'aumento medio della massa corporea (g) per ogni millimetro in più di pinna.
+
+```{r}
+#| label: many-models
+fits <- by_species |>
+  map(\(d) lm(body_mass ~ flipper_len, data = d))
+
+slopes <- map_dbl(fits, \(m) coef(m)[["flipper_len"]])
+slopes
+```
+
+Ora raccogliamo diversi risultati per ogni modello in un'unica tabella:
+
+```{r}
+#| label: many-models-table
+model_table <- fits |>
+  imap(\(m, sp) tibble(
+    species   = sp,
+    n         = nobs(m),
+    intercept = coef(m)[[1]],
+    slope     = coef(m)[[2]],
+    r_squared = summary(m)$r.squared
+  )) |>
+  list_rbind()
+
+model_table
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+Ogni riga è un modello. Nei pinguini Gentoo la massa corporea aumenta di circa `r round(slopes[["Gentoo"]], 0)` g per mm di pinna; negli Adelie di circa `r round(slopes[["Adelie"]], 0)` g e nei Chinstrap di circa `r round(slopes[["Chinstrap"]], 0)` g. `n` è il numero di esemplari effettivamente usati (`lm()` scarta le righe con valori mancanti), e `r_squared` è la quota della variabilità della massa corporea spiegata dalla lunghezza della pinna all'interno di quella specie. Stabilire se le pendenze differiscano *più di quanto il caso possa spiegare* è una questione da affrontare con la [regressione multipla](../../../lessons/09-regression/39-multiple-regression.qmd) con un termine di interazione.
+:::
+
+La stessa ricetta in tre passi, **dividi, applica, combina** (*split, map, combine*), funziona per qualsiasi analisi per gruppo: un t-test per paese, un grafico per anno, una sintesi per file.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: altri modi per fare la stessa cosa
+- `dplyr`: `penguins |> group_by(species) |> group_map(\(d, key) ...)` oppure `nest_by()`; `reframe()` per sintesi che restituiscono più righe per gruppo.
+- `broom::tidy(m)` e `broom::glance(m)` trasformano un modello in un data frame di una riga (o di una riga per coefficiente), così che `map(fits, broom::tidy) |> list_rbind(names_to = "species")` costruisce una tabella completa dei coefficienti.
+- `purrr::safely()` e `possibly()` avvolgono una funzione in modo che un gruppo che fallisce non blocchi l'intera iterazione.
+- `furrr` / `mirai` eseguono iterazioni in stile `map()` in parallelo su più core.
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **`sapply()` che restituisce una lista quando ti aspettavi un vettore.** Usa `vapply()` o `map_dbl()`/`map_chr()`, così le sorprese diventano errori.
+2. **`apply()` su un data frame con colonne di testo** trasforma tutto in testo. Seleziona prima le colonne numeriche, oppure usa `map_dbl()`/`across()`.
+3. **Iterare quando esiste una funzione vettorizzata.** `sapply(x, sqrt)` è semplicemente `sqrt(x)`; `lapply(movies, tolower)` è semplicemente `tolower(movies)`.
+4. **Dimenticare che `apply(m, 2, range)` mette i risultati nelle colonne** (2 × ncol), non nelle righe.
+5. **`split()` con valori di gruppo mancanti.** Le righe il cui gruppo è `NA` vengono escluse dalla lista in silenzio.
+6. **Passare gli argomenti aggiuntivi nel posto sbagliato.** `map_dbl(x, mean, na.rm = TRUE)` funziona ancora, ma `\(x) mean(x, na.rm = TRUE)` è più chiaro ed è lo stile raccomandato da purrr.
+:::
+
+## 10. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Che tipo di oggetto restituisce `lapply()`? E `map_chr()`?
+
+`lapply()` restituisce sempre una **lista**. `map_chr()` restituisce sempre un **vettore di caratteri** della stessa lunghezza dell'input (oppure un errore).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Qual è il risultato di `apply(matrix(1:6, nrow = 2), 1, sum)`?
+
+La matrice ha righe `1 3 5` e `2 4 6`, quindi le somme per riga sono `9` e `12`.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Hai una lista di 50 data frame (uno per paese) e vuoi un'unica tabella con una riga per paese. Quali due funzioni di `purrr` usi?
+
+`map()` (oppure `imap()`, per conservare il nome del paese) per calcolare un data frame di una riga per ogni paese, poi `list_rbind()` per impilarli.
+:::
+
+## 11. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — `apply()` su una matrice.** La matrice predefinita `VADeaths` contiene i tassi di mortalità per 1000 abitanti in Virginia (1940) per classe d'età (righe) e gruppo di popolazione (colonne). Calcola il **massimo di ogni colonna** e la **media di ogni riga**.
+
+```{webr}
+#| exercise: ex_17_1
+VADeaths
+apply(VADeaths, ______, max)
+apply(VADeaths, ______, mean)
+```
+
+::: {.hint exercise="ex_17_1"}
+`MARGIN = 2` indica le colonne, `MARGIN = 1` le righe.
+:::
+
+::: {.solution exercise="ex_17_1"}
+```r
+apply(VADeaths, 2, max)
+apply(VADeaths, 1, mean)   # equivale a rowMeans(VADeaths)
+```
+I tassi di mortalità crescono costantemente con l'età: le medie per riga aumentano dalla classe più giovane a quella più anziana.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — `map_*()` sulle colonne.** Per ogni colonna di `airquality`, calcola (a) il numero di valori mancanti con `map_int()` e (b) la mediana, ignorando i valori mancanti, con `map_dbl()`.
+
+```{webr}
+#| exercise: ex_17_2
+library(purrr)
+map_int(airquality, \(x) sum(______))
+map_dbl(airquality, \(x) median(x, ______))
+```
+
+::: {.hint exercise="ex_17_2"}
+`is.na(x)` dà `TRUE` per ogni valore mancante; `sum()` li conta. Per la mediana usa `na.rm = TRUE`.
+:::
+
+::: {.solution exercise="ex_17_2"}
+```r
+map_int(airquality, \(x) sum(is.na(x)))
+map_dbl(airquality, \(x) median(x, na.rm = TRUE))
+```
+`Ozone` ha 37 valori mancanti e `Solar.R` ne ha 7; le altre colonne sono complete. Ritroverai questi valori mancanti in [Dati mancanti](../04-io/20-missing-data.qmd).
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi l'instabilità del tipo.** Questa funzione dovrebbe restituire, per ogni colonna di un data frame, il suo primo valore come testo. Funziona su `mtcars` ma restituisce una *lista* vuota su un data frame senza colonne. Riscrivila con `vapply()` (o `map_chr()`) in modo che restituisca sempre un vettore di caratteri.
+
+```{webr}
+#| exercise: ex_17_3
+first_values <- function(df) {
+  sapply(df, \(x) as.character(x[1]))
+}
+str(first_values(mtcars[1:3]))
+str(first_values(mtcars[0]))        # un data frame con zero colonne
+```
+
+::: {.hint exercise="ex_17_3"}
+`vapply(df, \(x) as.character(x[1]), character(1))` dichiara che ogni risultato è una sola stringa.
+:::
+
+::: {.solution exercise="ex_17_3"}
+```r
+first_values <- function(df) {
+  vapply(df, \(x) as.character(x[1]), character(1))
+}
+str(first_values(mtcars[1:3]))   # vettore chr con nomi
+str(first_values(mtcars[0]))     # Named chr(0): ancora un vettore di caratteri
+```
+Con zero colonne `sapply()` non ha nulla da semplificare e restituisce `list()`. `vapply()` conosce il tipo atteso anche quando non c'è nulla da calcolare.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — molti modelli.** Usando `mtcars`, stima `lm(mpg ~ wt)` separatamente per le auto con 4, 6 e 8 cilindri, ed estrai la pendenza di `wt` per ciascun gruppo. In quale gruppo 1000 libbre di peso in più costano più miglia per gallone?
+
+```{webr}
+#| exercise: ex_17_4
+library(purrr)
+by_cyl <- split(mtcars, ______)
+fits <- map(by_cyl, \(d) lm(______, data = d))
+map_dbl(fits, \(m) coef(m)[["wt"]])
+```
+
+::: {.hint exercise="ex_17_4"}
+Dividi in base a `mtcars$cyl`; la formula del modello è `mpg ~ wt`.
+:::
+
+::: {.solution exercise="ex_17_4"}
+```r
+by_cyl <- split(mtcars, mtcars$cyl)
+fits <- map(by_cyl, \(d) lm(mpg ~ wt, data = d))
+map_dbl(fits, \(m) coef(m)[["wt"]])
+```
+Tutte le pendenze sono negative (le auto più pesanti consumano di più). La pendenza più ripida è quella delle auto a 4 cilindri, circa −5.6 mpg ogni 1000 libbre. Con solo 7–14 auto per gruppo queste pendenze sono molto incerte: guarda `confint(fits[["4"]])` prima di trarre conclusioni.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — una tabella di sintesi per ogni colonna.** Scrivi una funzione `describe_col(x)` che restituisca un tibble di una riga con `n_missing`, `mean`, `sd`, `min` e `max` di un vettore numerico. Usa `imap()` + `list_rbind()` per costruire una tabella con una riga per ogni colonna numerica di `penguins` e una colonna `variable` con il nome della colonna.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+library(purrr)
+library(tibble)
+
+describe_col <- function(x) {
+  tibble(
+    n_missing = sum(is.na(x)),
+    mean = mean(x, na.rm = TRUE),
+    sd   = sd(x, na.rm = TRUE),
+    min  = min(x, na.rm = TRUE),
+    max  = max(x, na.rm = TRUE)
+  )
+}
+
+penguins |>
+  keep(is.numeric) |>                       # tieni solo le colonne numeriche
+  imap(\(x, name) tibble(variable = name, describe_col(x))) |>
+  list_rbind()
+```
+`keep()` di purrr conserva gli elementi (qui, le colonne) per cui il predicato è `TRUE`; `penguins[sapply(penguins, is.numeric)]` è l'equivalente in R base. Anche `year` è numerica, quindi compare nella tabella: valuta tu se ha senso.
+:::
+:::
+
+## Riepilogo
+
+| Compito | R base | purrr |
+|---|---|---|
+| Righe/colonne di una matrice | `apply(m, 1 or 2, f)`, `rowSums()`, `colMeans()` | — |
+| Ogni elemento → lista | `lapply(x, f)` | `map(x, f)` |
+| Ogni elemento → vettore di tipo noto | `vapply(x, f, numeric(1))` | `map_dbl()`, `map_chr()`, `map_lgl()`, `map_int()` |
+| Semplificare se possibile | `sapply(x, f)` | — |
+| Per gruppo | `tapply(x, g, f)`, `split()` + `lapply()` | `split()` + `map()` |
+| Due input in parallelo | `Map()`, `mapply()` | `map2()` |
+| Elemento e suo nome | — | `imap()` |
+| Impilare data frame | `do.call(rbind, lst)` | `list_rbind()` |
+
+- Le funzioni di iterazione esprimono **che cosa** fare a ogni elemento; la contabilità viene gestita al posto tuo.
+- Negli script e nelle funzioni preferisci funzioni **stabili nel tipo** (`vapply()`, `map_dbl()`, …).
+- **Dividi → applica → combina** gestisce qualsiasi analisi per gruppo, compresa la stima di molti modelli.
+- Se esiste una funzione vettorizzata, non hai affatto bisogno di iterare.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitolo "Iteration", <https://r4ds.hadley.nz/iteration.html>
+- Wickham, *Advanced R* (2a ed.), capitolo "Functionals", <https://adv-r.hadley.nz/functionals.html>
+- Documentazione di purrr, <https://purrr.tidyverse.org>
+:::

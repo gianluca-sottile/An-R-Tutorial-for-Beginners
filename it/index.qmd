@@ -1,0 +1,103 @@
+---
+title: "From Data to Models with R"
+pagetitle: "From Data to Models with R — Un corso introduttivo di statistica e machine learning"
+description: "Un corso libero e gratuito che ti accompagna dalla prima riga di codice R fino alla modellazione statistica e al machine learning — con oltre 340 esercizi, molti dei quali eseguibili direttamente nel browser."
+toc: false
+sidebar: false
+page-layout: article
+title-block-banner: false
+---
+
+```{=html}
+<style>
+  /* the home page draws its own title inside the hero */
+  #title-block-header { display: none; }
+</style>
+
+<section class="hero">
+  <div class="eyebrow">From Data to Models with R · Gratuito · Aperto · Interattivo</div>
+  <h1>Impara R e la statistica,<br>un passo alla volta.</h1>
+  <p class="lead">
+    Un corso universitario completo che ti accompagna dalla prima riga di codice R
+    fino alla regressione, al machine learning e al clustering — pensato per studenti
+    che <strong>non</strong> hanno una solida formazione statistica.
+  </p>
+  <div class="cta">
+    <a class="primary" href="setup.html">Inizia qui →</a>
+    <a class="ghost" href="learning-path.html">Guarda il percorso</a>
+    <a class="ghost" href="lessons/01-foundations/01-what-is-r.html">Vai alla lezione 1</a>
+  </div>
+  <div class="code-deco" aria-hidden="true">x |&gt; mean()</div>
+</section>
+
+<div class="stats">
+  <div><strong>67</strong><span>lezioni</span></div>
+  <div><strong>340+</strong><span>esercizi con soluzioni</span></div>
+  <div><strong>130+</strong><span>eseguibili nel browser</span></div>
+  <div><strong>4</strong><span>livelli, da principiante ad avanzato</span></div>
+</div>
+```
+
+## Quattro livelli, un unico percorso
+
+Ogni lezione indica il suo livello, quanto tempo richiede e che cosa dovresti sapere prima di iniziare. Segui i livelli in ordine, oppure salta direttamente a ciò che ti serve.
+
+::: {.callout-note}
+## Versione italiana
+La versione italiana copre attualmente i Livelli 1–3. Le lezioni del Livello 4 (modelli e machine learning) e il percorso di deep learning sono disponibili in inglese: puoi raggiungerle con il pulsante "English" nella barra in alto oppure dalla barra laterale.
+:::
+
+```{=html}
+<div class="level-grid">
+  <div class="level-card l1">
+    <span class="num">Livello 1</span>
+    <h3>Fondamenti di R</h3>
+    <p>Installa R, impara il linguaggio, manipola i dati con il tidyverse, scrivi funzioni, importa e pulisci i dati.</p>
+    <a class="stretched" href="lessons/01-foundations/01-what-is-r.html" aria-label="Inizia il Livello 1"></a>
+  </div>
+  <div class="level-card l2">
+    <span class="num">Livello 2</span>
+    <h3>Descrivere ed esplorare</h3>
+    <p>Tabelle di frequenza, medie e variabilità, grafici con ggplot2, correlazione — il linguaggio dei dati.</p>
+    <a class="stretched" href="lessons/05-descriptive/21-frequency-tables.html" aria-label="Inizia il Livello 2"></a>
+  </div>
+  <div class="level-card l3">
+    <span class="num">Livello 3</span>
+    <h3>Incertezza e inferenza</h3>
+    <p>Probabilità tramite simulazione, distribuzioni campionarie, bootstrap, intervalli di confidenza e test spiegati senza magia.</p>
+    <a class="stretched" href="lessons/07-probability/28-randomness-simulation.html" aria-label="Inizia il Livello 3"></a>
+  </div>
+  <div class="level-card l4">
+    <span class="num">Livello 4</span>
+    <h3>Modelli e apprendimento</h3>
+    <p>Modelli lineari e lineari generalizzati, tidymodels, alberi ed ensemble, PCA, clustering e un percorso facoltativo di deep learning (in inglese).</p>
+    <a class="stretched" href="../lessons/09-regression/38-simple-regression.html" aria-label="Inizia il Livello 4 (in inglese)"></a>
+  </div>
+</div>
+```
+
+## Come funziona ogni lezione
+
+```{=html}
+<div class="feature-grid">
+  <div><div class="icon">🎯</div><h4>Obiettivi chiari</h4><p>Che cosa saprai fare alla fine, dichiarato fin dall'inizio.</p></div>
+  <div><div class="icon">💡</div><h4>Prima l'intuizione</h4><p>Ogni idea parte da un problema concreto e da un grafico o una simulazione. La matematica c'è, nei riquadri espandibili "Per approfondire".</p></div>
+  <div><div class="icon">🔎</div><h4>Come leggere l'output</h4><p>Guide riga per riga a ciò che R stampa, così potrai spiegare a parole i tuoi risultati.</p></div>
+  <div><div class="icon">⚠️</div><h4>Errori comuni</h4><p>I fraintendimenti in cui cadono gli studenti (e i ricercatori!) e come evitarli.</p></div>
+  <div><div class="icon">▶️</div><h4>Esercizi nel browser</h4><p>Modifica ed esegui codice R direttamente nella pagina — senza installare nulla — con suggerimenti e soluzioni.</p></div>
+  <div><div class="icon">🧪</div><h4>R moderno e riproducibile</h4><p>Pipe nativa, tidyverse, tidymodels, Quarto e flussi di lavoro basati su progetti.</p></div>
+</div>
+```
+
+## A chi è rivolto?
+
+- **Studenti universitari** di statistica, economia, biologia, psicologia, ingegneria e scienze sociali che hanno bisogno di R per i loro corsi o per la tesi.
+- **Autodidatti** che cercano un percorso strutturato invece di tutorial sparsi.
+- **Docenti** alla ricerca di materiale aperto: il corso può sostenere un modulo fino a **9 CFU / 72 ore**. Tutti i sorgenti sono su [GitHub](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners).
+
+Non sono richieste conoscenze pregresse di programmazione o di statistica. Se sai installare un software sul tuo computer, sei pronto.
+
+::: {.callout-tip}
+## Sei nuovo?
+Leggi [Inizia qui](setup.qmd) (10 minuti) per installare R, scegliere un editor e scoprire come funzionano gli esercizi interattivi. Poi apri la [Lezione 1](lessons/01-foundations/01-what-is-r.qmd).
+:::

@@ -1,0 +1,603 @@
+---
+title: "Dati mancanti"
+subtitle: "Trova gli NA, capisci perché mancano e trattali senza ingannare te stesso"
+description: "Individua i valori mancanti, impara i tre meccanismi di mancanza (MCAR, MAR, MNAR) attraverso una simulazione, scopri quando l'analisi dei casi completi è distorta e perché l'imputazione con la media riduce la variabilità e altera le correlazioni; con rimandi all'imputazione multipla con mice."
+format:
+  live-html:
+    webr:
+      packages: ["dplyr", "tidyr"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+library(tidyr)
+```
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~75 min]{} [Prerequisiti: [Importare i dati](18-import.qmd), [I verbi di dplyr](../02-data/09-dplyr-verbs.qmd), [Iterazione](../03-programming/17-iteration.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- trovare e contare i valori mancanti in vettori e data frame;
+- spiegare con esempi quotidiani i tre **meccanismi di mancanza** (MCAR, MAR, MNAR);
+- mostrare con una simulazione quando l'**analisi dei casi completi** produce risultati distorti;
+- eliminare o sostituire i valori mancanti con `na.rm`, `drop_na()`, `na.omit()` e `replace_na()`, sapendo che cosa costa ciascuna scelta;
+- spiegare perché l'**imputazione con la media** riduce la varianza e indebolisce le correlazioni, e sapere che per le analisi serie esiste l'**imputazione multipla**.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+```
+
+## 1. Perché i dati mancanti sono importanti
+
+Quasi ogni insieme di dati reale ha dei buchi: una domanda di un questionario lasciata in bianco, un sensore che ha smesso di registrare, un paziente che ha abbandonato uno studio. R indica un valore mancante con `NA` ("not available", non disponibile).
+
+I valori mancanti creano due tipi di problemi:
+
+1. **Tecnici**: molte funzioni restituiscono `NA`, o falliscono, appena manca un valore.
+2. **Statistici**: se i valori mancano *per un motivo*, i dati osservati non sono più un'immagine fedele della popolazione, e ignorare semplicemente i buchi può portare a risultati **distorti**.
+
+Il primo problema si risolve con un argomento. Il secondo richiede di ragionare, ed è il cuore di questa lezione.
+
+## 2. `NA` in R
+
+`NA` è contagioso: qualsiasi calcolo che coinvolge un valore sconosciuto dà un risultato sconosciuto.
+
+```{r}
+#| label: na-basics
+x <- c(12, NA, 7, 3)
+mean(x)
+mean(x, na.rm = TRUE)     # elimina gli NA prima di calcolare
+sum(is.na(x))             # quanti sono mancanti?
+```
+
+Non puoi verificare la presenza di `NA` con `==`, perché la domanda "questo valore sconosciuto è uguale a NA?" ha a sua volta risposta sconosciuta:
+
+```{r}
+#| label: na-equal
+x == NA                   # tutti NA: non è ciò che vuoi
+is.na(x)                  # il modo corretto
+```
+
+Non confondere `NA` con `NaN` ("not a number", il risultato di, per esempio, `0 / 0`) né con `NULL` (un oggetto *assente*, di lunghezza 0). `is.na()` è `TRUE` sia per `NA` sia per `NaN`.
+
+## 3. Trovare i valori mancanti in un data frame
+
+Usiamo due insiemi di dati: `airquality`, già incluso in R (misure giornaliere della qualità dell'aria a New York, maggio–settembre 1973), e un elenco di passeggeri del Titanic.
+
+```{r}
+#| label: aq-count
+colSums(is.na(airquality))              # valori mancanti per colonna
+round(colMeans(is.na(airquality)), 3)   # proporzione di mancanti per colonna
+```
+
+`is.na(df)` restituisce una matrice di `TRUE`/`FALSE` con la stessa forma dei dati; `colSums()` conta i `TRUE` di ogni colonna e `colMeans()` ne dà la proporzione. `Ozone` manca in `r sum(is.na(airquality$Ozone))` giorni su `r nrow(airquality)`.
+
+```{r}
+#| label: aq-complete
+sum(complete.cases(airquality))         # righe senza alcun valore mancante
+```
+
+Solo `r sum(complete.cases(airquality))` righe su `r nrow(airquality)` sono complete. La mancanza può anche variare da un gruppo all'altro:
+
+```{r}
+#| label: aq-month
+airquality |>
+  summarise(prop_ozone_missing = mean(is.na(Ozone)), .by = Month)
+```
+
+L'ozono manca molto più spesso a **giugno** (mese 6) che negli altri mesi. Questo schema è un primo indizio sul *perché* i valori mancano.
+
+Ora i dati del Titanic:
+
+```{r}
+#| label: titanic
+titanic <- read_csv(data_path("test.csv"), show_col_types = FALSE)
+na_counts <- colSums(is.na(titanic))
+sort(na_counts[na_counts > 0], decreasing = TRUE)
+```
+
+`Cabin` manca per la maggior parte dei passeggeri, `Age` per `r sum(is.na(titanic$Age))` e `Fare` per `r sum(is.na(titanic$Fare))`.
+
+::: {.callout-tip}
+## Sintesi visive
+Il pacchetto `naniar` offre grafici e tabelle pensati per i dati mancanti, per esempio `naniar::vis_miss(airquality)` (una mappa delle celle mancanti) e `naniar::miss_var_summary(airquality)`. Sono facoltativi, ma utili con insiemi di dati più grandi.
+:::
+
+## 4. Perché mancano i dati? MCAR, MAR, MNAR
+
+Gli statistici distinguono tre **meccanismi**, cioè tre tipi di motivo per cui un dato manca. Immagina un questionario online che chiede l'età e il reddito mensile.
+
+| Meccanismo | Significato | Esempio |
+|---|---|---|
+| **MCAR** — *Missing Completely At Random* (mancanza completamente casuale) | La mancanza non ha nulla a che fare con alcuna variabile, osservata o no. | Un errore del server ha perso a caso il 30% delle risposte sul reddito. |
+| **MAR** — *Missing At Random* (mancanza casuale) | La mancanza dipende solo da variabili **osservate**. | I rispondenti più anziani saltano più spesso la domanda sul reddito; l'età di tutti la conosciamo. |
+| **MNAR** — *Missing Not At Random* (mancanza non casuale) | La mancanza dipende dal **valore mancante stesso** (o da qualcosa di non osservato). | Chi ha un reddito alto è meno disposto a dichiararlo. |
+
+I nomi creano confusione: "Missing *At Random*" **non** significa "casuale" nel senso comune. Significa casuale *una volta tenute in conto le variabili osservate*: tra persone della stessa età, il fatto che il reddito manchi è come il lancio di una moneta.
+
+Perché il meccanismo è importante? Perché stabilisce se i valori osservati rappresentano ancora tutti:
+
+- sotto **MCAR** le righe osservate sono un sottocampione casuale, quindi analizzare solo quelle (*analisi dei casi completi*) è **non distorto**, solo meno preciso;
+- sotto **MAR** le righe osservate sovrarappresentano alcuni gruppi (qui, i giovani), quindi i risultati dei casi completi possono essere **distorti**, ma le variabili osservate contengono l'informazione necessaria per correggere la distorsione;
+- sotto **MNAR** la distorsione non può essere corretta del tutto con i soli dati.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: le definizioni formali
+Sia $Y$ l'insieme dei dati, diviso in una parte osservata $Y_\text{obs}$ e una parte mancante $Y_\text{mis}$, e sia $R$ l'indicatore di quali valori mancano. I meccanismi si definiscono tramite la distribuzione di $R$:
+
+- MCAR: $P(R \mid Y_\text{obs}, Y_\text{mis}) = P(R)$;
+- MAR: $P(R \mid Y_\text{obs}, Y_\text{mis}) = P(R \mid Y_\text{obs})$;
+- MNAR: $P(R \mid Y_\text{obs}, Y_\text{mis})$ dipende da $Y_\text{mis}$.
+
+Dai soli dati osservati **non è possibile verificare** MAR contro MNAR, perché il test richiederebbe i valori che non abbiamo. A volte si può rifiutare MCAR (per esempio se la mancanza dipende chiaramente da una variabile osservata, come Ozone da Month), ma la scelta tra MAR e MNAR si basa sulla conoscenza di come i dati sono stati raccolti. Riferimenti: Little & Rubin, *Statistical Analysis with Missing Data* (3a ed., 2019); van Buuren, *Flexible Imputation of Missing Data* (2a ed.).
+:::
+
+## 5. Una simulazione: quando l'analisi dei casi completi è distorta?
+
+Possiamo vedere all'opera i tre meccanismi **simulando** il questionario: creiamo un insieme di dati completo (così conosciamo la verità), cancelliamo dei valori in tre modi diversi e confrontiamo il reddito medio dei rispondenti rimasti con la media vera.
+
+```{r}
+#| label: sim-data
+set.seed(2024)
+n <- 10000
+age    <- rnorm(n, mean = 45, sd = 12)
+income <- 1000 + 30 * age + rnorm(n, mean = 0, sd = 400)   # più anziani -> più ricchi
+true_mean <- mean(income)
+
+# probabilità che il reddito manchi, sotto ciascun meccanismo
+p_miss <- list(
+  MCAR = rep(0.3, n),                       # uguale per tutti
+  MAR  = plogis(-4 + 0.07 * age),           # dipende dall'età (osservata)
+  MNAR = plogis(-4 + 0.0012 * income)       # dipende dal reddito stesso
+)
+missing <- lapply(p_miss, \(p) runif(n) < p)
+sapply(missing, mean)                       # quota di valori mancanti
+```
+
+`plogis()` trasforma qualsiasi numero in una probabilità tra 0 e 1 (è la funzione *logistica* che incontrerai nella [regressione logistica](../../../lessons/09-regression/41-logistic-regression.qmd)); un'età maggiore, o un reddito maggiore, significa una probabilità più alta di mancare. I tre meccanismi eliminano una quota simile di valori, ma valori **diversi**:
+
+```{r}
+#| label: sim-cc
+cc_mean <- sapply(missing, \(m) mean(income[!m]))   # medie dei casi completi
+round(cc_mean - true_mean, 1)                      # distorsione
+```
+
+```{r}
+#| label: fig-sim
+#| fig-cap: "Distribuzione del reddito di tutte le persone simulate (grigio) e di quelle che hanno risposto (colore). Con MCAR i valori osservati assomigliano ai dati completi; con MAR e MNAR i redditi alti sono sottorappresentati."
+sim_long <- bind_rows(lapply(names(missing), \(mech) tibble(
+  mechanism = mech,
+  income    = income,
+  observed  = !missing[[mech]]
+)))
+
+ggplot(sim_long, aes(income)) +
+  geom_density(colour = "grey50", linewidth = 0.8) +
+  geom_density(data = filter(sim_long, observed), aes(colour = mechanism),
+               linewidth = 0.8) +
+  geom_vline(xintercept = true_mean, linetype = "dashed") +
+  facet_wrap(~ mechanism, ncol = 1) +
+  labs(x = "Reddito mensile", y = "Densità") +
+  theme(legend.position = "none")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+- **MCAR**: la distorsione è circa `r round(cc_mean[["MCAR"]] - true_mean, 0)`, praticamente zero (la differenza residua è rumore casuale). Perdere il 30% dei dati ha reso la stima meno precisa, ma non sistematicamente sbagliata.
+- **MAR**: i rispondenti sono più giovani, quindi in media più poveri. La media dei casi completi sottostima la verità di circa `r abs(round(cc_mean[["MAR"]] - true_mean, 0))`.
+- **MNAR**: chi guadagna molto nasconde il proprio reddito, e la media è troppo bassa di circa `r abs(round(cc_mean[["MNAR"]] - true_mean, 0))`.
+:::
+
+### Usare l'informazione osservata
+
+Sotto MAR la distorsione nasce dall'*età*, che osserviamo. Se usiamo l'età per prevedere i redditi mancanti (qui con una semplice regressione lineare stimata sui casi completi), gran parte della distorsione scompare. Sotto MNAR lo stesso trucco aiuta solo in parte, perché il motivo della mancanza, cioè il reddito stesso, è proprio ciò che non vediamo:
+
+```{r}
+#| label: sim-reg
+reg_mean <- sapply(missing, \(m) {
+  fit <- lm(income ~ age, subset = !m)          # stima sulle righe osservate
+  filled <- income
+  filled[m] <- predict(fit, newdata = data.frame(age = age[m]))
+  mean(filled)
+})
+round(rbind(complete_case = cc_mean - true_mean,
+            regression_fill = reg_mean - true_mean), 1)
+```
+
+Questa è l'idea chiave dei metodi moderni come l'**imputazione multipla** (Sezione 9): usare tutto ciò che si osserva per rendere il più plausibile possibile l'ipotesi di mancanza casuale. (Inserire singoli valori previsti, come abbiamo appena fatto, corregge la media ma sottostima ancora l'incertezza: ne parliamo tra poco.)
+
+## 6. Eliminare i valori mancanti
+
+### Dentro un calcolo: `na.rm = TRUE`
+
+La maggior parte delle funzioni di sintesi ha un argomento `na.rm`: `mean()`, `median()`, `sd()`, `var()`, `sum()`, `min()`, `max()`, `quantile()`. Per le correlazioni si usa `use = "complete.obs"`:
+
+```{r}
+#| label: na-rm
+mean(airquality$Ozone, na.rm = TRUE)
+cor(airquality$Ozone, airquality$Temp, use = "complete.obs")
+```
+
+### Eliminare righe: `drop_na()` e `na.omit()`
+
+`tidyr::drop_na()` elimina le righe con valori mancanti, in **qualsiasi** colonna oppure solo nelle colonne che indichi. La funzione `na.omit()` di R base considera sempre tutte le colonne.
+
+```{r}
+#| label: drop-na
+nrow(titanic)
+nrow(na.omit(titanic))          # manca un valore in qualsiasi colonna -> riga eliminata
+nrow(drop_na(titanic))          # uguale
+nrow(drop_na(titanic, Age))     # elimina solo le righe con Age mancante
+```
+
+Eliminare ogni riga incompleta lascia solo `r nrow(na.omit(titanic))` passeggeri su `r nrow(titanic)`, quasi interamente a causa di `Cabin`, una colonna che magari non ci serve nemmeno. **Elimina le righe solo in base alle variabili che la tua analisi usa**, e riporta quante righe hai perso. Ricorda dalla Sezione 5: l'analisi dei casi completi è sicura sotto MCAR, ma può essere distorta negli altri casi.
+
+## 7. Sostituire i valori mancanti con una costante: `replace_na()`
+
+A volte un valore mancante ha un significato noto. Per il Titanic, una `Cabin` mancante di solito significa che non è stato registrato alcun numero di cabina, quindi una categoria esplicita è più onesta che eliminare il passeggero:
+
+```{r}
+#| label: replace-na
+titanic |>
+  mutate(Cabin = replace_na(Cabin, "Sconosciuta")) |>
+  count(cabin_known = Cabin != "Sconosciuta")
+```
+
+Per i dati numerici, sostituisci `NA` con `0` solo quando "mancante" significa davvero "zero" (per esempio nessun acquisto registrato = 0 acquisti). Per una misura come l'età o l'ozono, `0` è un valore sbagliato, non un valore mancante.
+
+## 8. Imputazione con la media o la mediana e il suo costo nascosto
+
+**Imputare** significa riempire i valori mancanti con numeri plausibili. La versione più semplice sostituisce ogni `NA` di una colonna con la media (o la mediana) della colonna. È diffusa perché è facile:
+
+```{r}
+#| label: titanic-impute
+titanic_imp <- titanic |>
+  mutate(
+    age_mean   = replace_na(Age, mean(Age, na.rm = TRUE)),
+    age_median = replace_na(Age, median(Age, na.rm = TRUE))
+  )
+
+titanic_imp |>
+  summarise(across(
+    c(Age, age_mean, age_median),
+    list(n_missing = \(v) sum(is.na(v)), sd = \(v) sd(v, na.rm = TRUE))
+  ))
+```
+
+I valori mancanti sono spariti. Ma guarda le deviazioni standard: le colonne imputate sono **meno variabili** delle età osservate. Esaminiamo meglio l'effetto con `airquality`.
+
+### La varianza si riduce
+
+```{r}
+#| label: aq-impute
+aq <- airquality |>
+  mutate(
+    Ozone     = as.numeric(Ozone),   # integer -> double, vedi la nota qui sotto
+    imputed   = is.na(Ozone),
+    ozone_imp = replace_na(Ozone, mean(Ozone, na.rm = TRUE))
+  )
+
+c(sd_observed = sd(aq$Ozone, na.rm = TRUE),
+  sd_imputed  = sd(aq$ozone_imp))
+```
+
+`Ozone` è memorizzata come **intero**, mentre la sua media è un numero decimale. `replace_na()` rifiuta di inserire un decimale in una colonna di interi (perderebbe precisione in silenzio), quindi convertiamo prima la colonna con `as.numeric()`.
+
+Tutti i `r sum(aq$imputed)` giorni imputati ricevono esattamente lo stesso valore, la media. Valori che stanno esattamente al centro non aggiungono nulla alla variabilità, mentre la numerosità campionaria cresce: la deviazione standard scende da `r round(sd(aq$Ozone, na.rm = TRUE), 1)` a `r round(sd(aq$ozone_imp), 1)`. Qualsiasi errore standard, intervallo di confidenza o p-value calcolato dopo sarà **troppo ottimistico**, perché R crede di avere `r nrow(aq)` misure reali invece di `r sum(!aq$imputed)`.
+
+### Le correlazioni vengono alterate
+
+```{r}
+#| label: fig-aq-impute
+#| fig-cap: "Ozono in funzione della temperatura. I giorni imputati con la media (arancione) giacciono su una retta orizzontale al livello dell'ozono medio, indipendentemente dalla temperatura, e questo indebolisce la relazione visibile."
+ggplot(aq, aes(Temp, ozone_imp, colour = imputed)) +
+  geom_point(alpha = 0.8) +
+  scale_colour_manual(values = c(`FALSE` = "grey40", `TRUE` = "#E69F00"),
+                      labels = c("osservato", "imputato con la media")) +
+  labs(x = "Temperatura (°F)", y = "Ozono (ppb)", colour = NULL)
+```
+
+```{r}
+#| label: aq-cor
+c(complete_case = cor(aq$Ozone, aq$Temp, use = "complete.obs"),
+  mean_imputed  = cor(aq$ozone_imp, aq$Temp))
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+Nei giorni caldi l'ozono è alto, ma ai giorni caldi imputati viene assegnato un valore medio di ozono. I punti imputati trascinano la relazione verso zero: la correlazione scende da `r round(cor(aq$Ozone, aq$Temp, use = "complete.obs"), 2)` a `r round(cor(aq$ozone_imp, aq$Temp), 2)`. L'imputazione con la media **riduce le varianze e indebolisce le correlazioni** (e le pendenze di regressione), anche quando i dati sono MCAR.
+:::
+
+### Imputazione per gruppi
+
+Una versione leggermente migliore imputa la media **all'interno di gruppi** collegati alla variabile mancante. L'ozono dipende dalla stagione, quindi possiamo usare la media mensile:
+
+```{r}
+#| label: aq-group
+aq <- aq |>
+  mutate(ozone_month = replace_na(Ozone, mean(Ozone, na.rm = TRUE)),
+         .by = Month)
+
+c(sd_observed = sd(aq$Ozone, na.rm = TRUE),
+  sd_overall  = sd(aq$ozone_imp),
+  sd_by_month = sd(aq$ozone_month))
+```
+
+Le medie dei gruppi conservano le differenze *tra* i mesi, quindi si perde meno variabilità. La stessa idea applicata al Titanic imputerebbe `Age` per classe del passeggero e sesso (Esercizio 5). L'imputazione per gruppi resta comunque un unico valore fisso per gruppo: sottostima ancora la variabilità all'interno dei gruppi.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: di quanto si riduce la varianza?
+Supponiamo che $n_o$ valori siano osservati con varianza campionaria $s^2$ e che $n_m$ valori siano sostituiti dalla media osservata $\bar y$. I valori imputati non contribuiscono alla somma dei quadrati degli scarti, quindi la varianza calcolata su tutti gli $n = n_o + n_m$ valori è
+
+$$
+s^2_\text{imp} = \frac{(n_o - 1)\, s^2}{n - 1} \approx \frac{n_o}{n}\, s^2 .
+$$
+
+Con il `r round(mean(is.na(airquality$Ozone)) * 100)`% di valori di ozono mancanti, la varianza si riduce di circa quella proporzione. Le covarianze con le altre variabili si riducono dello stesso fattore, mentre la varianza dell'altra variabile no, perciò la correlazione si riduce verso zero.
+:::
+
+## 9. Farlo bene: l'imputazione multipla
+
+L'**imputazione multipla** (*multiple imputation*, MI) affronta entrambi i problemi dell'imputazione singola:
+
+1. prevede ogni valore mancante a partire dalle **altre variabili** (come nella Sezione 5), eliminando la distorsione sotto MAR;
+2. aggiunge **rumore casuale** a quelle previsioni e ripete l'intero processo più volte (diciamo 5–20), creando diversi insiemi di dati completati. L'analisi viene eseguita su ciascuno e i risultati vengono combinati (con le "regole di Rubin") in modo che gli errori standard includano l'incertezza aggiuntiva dovuta ai valori mancanti.
+
+In R il pacchetto di riferimento è `mice` (*Multivariate Imputation by Chained Equations*). Un flusso di lavoro minimo si presenta così:
+
+```{r}
+#| label: mice
+#| eval: false
+imp  <- mice::mice(airquality, m = 20, seed = 1, printFlag = FALSE)  # 20 insiemi di dati
+fits <- with(imp, lm(Ozone ~ Temp + Wind))       # stima il modello su ciascuno
+summary(mice::pool(fits))                        # combina i risultati
+```
+
+La MI non è magia: si basa sull'ipotesi MAR e su un modello di imputazione sensato. Ma è l'opzione consigliata di default quando la mancanza non è trascurabile. Il libro online gratuito di van Buuren (indicato sotto) è il testo di riferimento.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Verificare `x == NA`.** Dà sempre `NA`. Usa `is.na(x)`.
+2. **Dimenticare `na.rm = TRUE`** e ottenere `NA`, oppure, peggio, usare in silenzio una funzione che scarta gli `NA` senza dirti quanti sono.
+3. **`na.omit()` sull'intero data frame**, perdendo la maggior parte delle righe a causa di una colonna che non ti serve. Elimina in base alle variabili che analizzi e riporta la perdita.
+4. **Pensare che l'analisi dei casi completi sia innocua.** È non distorta solo se i dati sono MCAR (o, per la regressione, se la mancanza dipende solo dai predittori).
+5. **Imputazione con la media seguita da test e intervalli di confidenza.** La varianza è sottostimata e i p-value sono troppo piccoli. Usa l'imputazione multipla, o almeno riporta l'analisi con e senza imputazione.
+6. **Codici di valore mancante lasciati come numeri** (`-99`, `999`). Convertili in `NA` all'importazione (vedi [Importare i dati](18-import.qmd)).
+:::
+
+## 10. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. In uno studio clinico, i pazienti che sentono che il farmaco non funziona abbandonano prima della visita finale. Di quale meccanismo si tratta, con ogni probabilità?
+
+**MNAR**: la probabilità che l'esito finale manchi dipende dall'esito stesso (da quanto sta andando bene il paziente). Se l'abbandono potesse essere spiegato completamente da misure *precedenti* già registrate, sarebbe MAR.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Vero o falso: se i dati sono MCAR, l'analisi dei casi completi dà stime non distorte.
+
+**Vero**: i casi completi sono un sottocampione casuale. Il costo è una minore precisione (intervalli di confidenza più ampi), perché si usano meno osservazioni.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Dopo aver sostituito il 30% dei valori di una variabile con la sua media, la deviazione standard sarà maggiore, minore o uguale?
+
+**Minore.** I valori imputati stanno esattamente sulla media, quindi non aggiungono variabilità, mentre la numerosità usata per calcolare la deviazione standard cresce.
+:::
+
+## 11. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — quanto manca?** Per `airquality`, già incluso in R, calcola (a) la **proporzione** di valori mancanti in ogni colonna e (b) la proporzione di righe complete.
+
+```{webr}
+#| exercise: ex_20_1
+colMeans(______(airquality))
+mean(______(airquality))
+```
+
+::: {.hint exercise="ex_20_1"}
+`is.na(df)` restituisce una matrice logica; `colMeans()` applicata ad essa dà le proporzioni. `complete.cases(df)` dà un `TRUE`/`FALSE` per ogni riga.
+:::
+
+::: {.solution exercise="ex_20_1"}
+```r
+colMeans(is.na(airquality))
+mean(complete.cases(airquality))   # circa 0.73
+```
+Circa il 24% dei valori di `Ozone` e il 5% di quelli di `Solar.R` mancano; circa il 73% dei giorni è completo.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — prevedi l'output.** Scrivi che cosa restituisce ogni riga *prima* di eseguire il codice.
+
+```{webr}
+#| exercise: ex_20_2
+v <- c(4, NA, 10, NA)
+sum(v)
+sum(v, na.rm = TRUE)
+mean(is.na(v))
+v[!is.na(v)]
+NA > 3
+NA & FALSE
+```
+
+::: {.hint exercise="ex_20_2"}
+`NA` si propaga, a meno che la risposta sia la stessa qualunque sia il valore sconosciuto. `NA & FALSE` è uguale sia che `NA` sia `TRUE` sia che sia `FALSE`?
+:::
+
+::: {.solution exercise="ex_20_2"}
+`NA`, `14`, `0.5`, `4 10`, `NA`, `FALSE`. L'ultimo è `FALSE` perché "qualsiasi cosa AND FALSE" è `FALSE` indipendentemente dal valore sconosciuto: R restituisce `NA` solo quando la risposta è davvero sconosciuta.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — il costo dell'imputazione con la media.** Imputa con la media i valori mancanti di `Solar.R` in `airquality`, poi confronta (a) la deviazione standard e (b) la correlazione con `Ozone` (sui casi completi) prima e dopo l'imputazione.
+
+```{webr}
+#| exercise: ex_20_3
+library(dplyr)
+library(tidyr)
+aq <- airquality |>
+  mutate(Solar.R   = as.numeric(Solar.R),   # integer -> double
+         solar_imp = replace_na(Solar.R, ______))
+
+c(before = sd(aq$Solar.R, na.rm = TRUE), after = sd(______))
+c(before = cor(aq$Solar.R, aq$Ozone, use = "complete.obs"),
+  after  = cor(aq$solar_imp, aq$Ozone, use = "complete.obs"))
+```
+
+::: {.hint exercise="ex_20_3"}
+Il valore di sostituzione è `mean(Solar.R, na.rm = TRUE)`; la seconda deviazione standard è quella di `aq$solar_imp`.
+:::
+
+::: {.solution exercise="ex_20_3"}
+```r
+aq <- airquality |>
+  mutate(Solar.R   = as.numeric(Solar.R),
+         solar_imp = replace_na(Solar.R, mean(Solar.R, na.rm = TRUE)))
+c(before = sd(aq$Solar.R, na.rm = TRUE), after = sd(aq$solar_imp))
+c(before = cor(aq$Solar.R, aq$Ozone, use = "complete.obs"),
+  after  = cor(aq$solar_imp, aq$Ozone, use = "complete.obs"))
+```
+Sia la deviazione standard sia la correlazione diminuiscono leggermente. L'effetto qui è piccolo perché sono stati imputati solo 7 valori su 153 (circa il 5%); con il 30–50% di mancanti diventa grande.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — simula MCAR contro MNAR.** Il codice crea i punteggi d'esame di 5.000 studenti. Rendi mancante il punteggio (a) in modo completamente casuale con probabilità 0.4, e (b) con una probabilità **più alta per i punteggi bassi** (gli studenti con punteggi bassi non li riportano). Confronta in entrambi i casi la media dei punteggi osservati con la media vera.
+
+```{webr}
+#| exercise: ex_20_4
+set.seed(1)
+score <- rnorm(5000, mean = 24, sd = 4)
+true_mean <- mean(score)
+
+miss_mcar <- runif(5000) < ______
+miss_mnar <- runif(5000) < plogis(6 - 0.3 * ______)
+
+c(mcar = mean(score[!miss_mcar]) - true_mean,
+  mnar = mean(score[!miss_mnar]) - true_mean)
+```
+
+::: {.hint exercise="ex_20_4"}
+Per MCAR la probabilità è la costante `0.4`. Per MNAR la probabilità deve dipendere da `score`: `plogis(6 - 0.3 * score)` è più grande per i punteggi piccoli.
+:::
+
+::: {.solution exercise="ex_20_4"}
+```r
+miss_mcar <- runif(5000) < 0.4
+miss_mnar <- runif(5000) < plogis(6 - 0.3 * score)
+c(mcar = mean(score[!miss_mcar]) - true_mean,
+  mnar = mean(score[!miss_mnar]) - true_mean)
+```
+La differenza con MCAR è vicina a 0. Con MNAR la media osservata è troppo **alta** (di circa 1 punto): gli studenti che non hanno riportato il punteggio erano per lo più i più deboli. Nei soli punteggi osservati non c'è nulla che lo riveli.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — imputazione per gruppi sul Titanic.** Leggi `data/test.csv`. Imputa i valori mancanti di `Age` (a) con la mediana complessiva e (b) con la mediana di ciascun gruppo `Pclass` × `Sex`. Confronta l'età media imputata dei passeggeri di terza classe con i due metodi, e la deviazione standard di `Age` prima e dopo ciascuna imputazione.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+library(dplyr)
+library(tidyr)
+library(readr)
+
+titanic <- read_csv(here::here("data", "test.csv"), show_col_types = FALSE)
+
+titanic_imp <- titanic |>
+  mutate(age_overall = replace_na(Age, median(Age, na.rm = TRUE))) |>
+  mutate(age_group = replace_na(Age, median(Age, na.rm = TRUE)),
+         .by = c(Pclass, Sex))
+
+titanic_imp |>
+  filter(is.na(Age)) |>
+  summarise(overall = mean(age_overall), by_group = mean(age_group),
+            .by = Pclass)
+
+titanic_imp |>
+  summarise(across(c(Age, age_overall, age_group), \(v) sd(v, na.rm = TRUE)))
+```
+I passeggeri di prima classe sono in media più anziani di quelli di terza; la mediana per gruppo assegna ai passeggeri di terza classe età imputate più basse, il che è più plausibile. Entrambe le imputazioni riducono la deviazione standard rispetto ad `Age` osservata, quella per gruppi un po' meno.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 6 — confronta tre analisi.** Con `airquality`, stima la pendenza di `Temp` in `lm(Ozone ~ Temp)` con (a) i casi completi, (b) `Ozone` imputato con la media e (c) l'imputazione multipla con `mice` (`m = 20`, `seed = 1`). Confronta le pendenze e i loro errori standard.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+library(dplyr)
+library(tidyr)
+
+cc  <- lm(Ozone ~ Temp, data = airquality)
+aq_mean <- airquality |>
+  mutate(Ozone = replace_na(as.numeric(Ozone), mean(Ozone, na.rm = TRUE)))
+mean_fit <- lm(Ozone ~ Temp, data = aq_mean)
+
+imp  <- mice::mice(airquality, m = 20, seed = 1, printFlag = FALSE)
+mi   <- summary(mice::pool(with(imp, lm(Ozone ~ Temp))))
+
+summary(cc)$coefficients["Temp", 1:2]
+summary(mean_fit)$coefficients["Temp", 1:2]
+mi[mi$term == "Temp", c("estimate", "std.error")]
+```
+L'imputazione con la media dà una pendenza più **piatta** (i punti imputati giacciono su una retta orizzontale) e un errore standard più **piccolo** (finge di avere 153 osservazioni reali). Le pendenze dei casi completi e dell'imputazione multipla sono qui simili, con la MI che sfrutta l'informazione delle altre variabili.
+:::
+:::
+
+## Riepilogo
+
+| Obiettivo | Codice |
+|---|---|
+| È mancante? | `is.na(x)`, `anyNA(x)` |
+| Conteggio / proporzione per colonna | `colSums(is.na(df))`, `colMeans(is.na(df))` |
+| Righe complete | `complete.cases(df)` |
+| Ignorare gli NA in una sintesi | `mean(x, na.rm = TRUE)`, `cor(x, y, use = "complete.obs")` |
+| Eliminare righe | `tidyr::drop_na(df, col)`, `na.omit(df)` |
+| Sostituire con una costante | `tidyr::replace_na(x, value)` |
+| Imputazione con la media / la media di gruppo | `mutate(x = replace_na(x, mean(x, na.rm = TRUE)), .by = g)` |
+| Imputazione multipla | `mice::mice()`, `with()`, `mice::pool()` |
+
+- Il **motivo** per cui i valori mancano (MCAR, MAR, MNAR) decide se le soluzioni semplici sono sicure.
+- L'analisi dei casi completi è **non distorta solo sotto MCAR**; sotto MAR si usano le variabili osservate; MNAR richiede ipotesi che vanno oltre i dati.
+- L'imputazione con la media **riduce le varianze, indebolisce le correlazioni** e rende i p-value troppo piccoli.
+- Elimina le righe solo in base alle variabili che usi e **riporta** quante ne hai perse.
+- Per analisi serie con una mancanza non trascurabile, usa l'**imputazione multipla**.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- van Buuren, S., *Flexible Imputation of Missing Data* (2a ed.), gratuito online, <https://stefvanbuuren.name/fimd/>
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitolo "Missing values", <https://r4ds.hadley.nz/missing-values.html>
+- Documentazione di naniar, <https://naniar.njtierney.com>
+:::

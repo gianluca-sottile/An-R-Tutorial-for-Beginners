@@ -96,3 +96,8 @@ No previous programming or statistics knowledge is assumed. If you can install s
 ## New here?
 Read [Start here](setup.qmd) (10 minutes) to install R, choose an editor and learn how the interactive exercises work. Then open [Lesson 1](lessons/01-foundations/01-what-is-r.qmd).
 :::
+
+::: {.callout-note appearance="simple"}
+## 🇮🇹 Versione italiana
+Levels 1–3 are also available in Italian: use the **Italiano** button in the top bar, or go directly to the [Italian home page](it/index.qmd).
+:::

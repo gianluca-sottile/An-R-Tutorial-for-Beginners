@@ -1,0 +1,617 @@
+---
+title: "Casualità e simulazione"
+subtitle: "Lascia che sia R a lanciare le monete: la probabilità come frequenza di lungo periodo che puoi osservare"
+description: "Usa sample(), set.seed() e replicate() per simulare esperimenti casuali, stimare probabilità, vedere all'opera la legge dei grandi numeri e comprendere il valore atteso, le regole di base della probabilità e la fallacia del tasso di base."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 3 · Inferenza]{.level-3} [⏱ ~75 min]{} [Prerequisiti: [Statistiche descrittive di sintesi](../05-descriptive/22-summary-statistics.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare la probabilità come **frequenza relativa di lungo periodo** e vederla emergere in una simulazione;
+- usare `sample()` (con e senza reinserimento, con `prob =`) e `set.seed()` per eseguire esperimenti casuali **riproducibili**;
+- **stimare una probabilità tramite simulazione** con `replicate()` e confrontarla con la risposta esatta;
+- descrivere la **legge dei grandi numeri** e il **valore atteso** di una variabile casuale;
+- applicare le regole del complementare, dell'addizione e della probabilità condizionata, e spiegare perché un risultato positivo a un buon test medico può comunque essere probabilmente sbagliato.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(ggplot2)
+```
+
+## 1. Perché simulare?
+
+Finora abbiamo *descritto* dati: medie, mediane, grafici. Ma ogni insieme di dati è, in qualche misura, il risultato del caso. Un gruppo diverso di pazienti, una settimana diversa di vendite, un campione diverso di pinguini — e i numeri cambierebbero.
+
+Per ragionare su "che cosa sarebbe potuto succedere invece" ci serve il linguaggio della **probabilità**. La probabilità si può insegnare con le formule, ma esiste una strada più diretta: **far ripetere al computer un esperimento casuale migliaia di volte e contare che cosa succede**. Questo è il significato di *simulazione*, e R è molto bravo a farlo.
+
+In tutto questo modulo useremo continuamente un'unica idea:
+
+> Se sai descrivere come vengono generati i dati, puoi simularli — e tutto ciò che puoi simulare, puoi misurarlo.
+
+## 2. Che cos'è una probabilità?
+
+Lancia una moneta equilibrata. Uscirà testa? Non puoi saperlo. Lanciala però 10.000 volte e la **proporzione** di teste sarà molto vicina a 0.5. Questa proporzione stabile nel lungo periodo è ciò che chiamiamo **probabilità** di testa.
+
+- Un **esperimento** (o *prova*) è qualsiasi processo con un risultato incerto: lanciare una moneta, lanciare un dado, scegliere un paziente a caso.
+- Un **esito** è un singolo risultato possibile (ad es. "4").
+- Un **evento** è un insieme di esiti che ci interessa (ad es. "un numero pari").
+- La **probabilità** di un evento, $P(A)$, è un numero tra 0 (impossibile) e 1 (certo): la proporzione di volte in cui l'evento si verifica se ripetiamo l'esperimento moltissime volte.
+
+Questa lettura *frequentista* della probabilità è quella usata dai test e dagli intervalli di confidenza che vedremo più avanti nel corso. E ci fornisce una ricetta: **per stimare una probabilità, ripeti l'esperimento molte volte e calcola la proporzione di successi.**
+
+## 3. Estrazioni casuali con `sample()`
+
+`sample(x, size)` estrae a caso `size` elementi dal vettore `x`.
+
+```{r}
+#| label: sample-basic
+set.seed(2026)
+sample(1:10, size = 5)                   # senza reinserimento: nessuna ripetizione
+sample(1:6, size = 10, replace = TRUE)   # un dado lanciato 10 volte
+sample(c("H", "T"), size = 8, replace = TRUE)   # H = testa (heads), T = croce (tails)
+```
+
+- **Senza reinserimento** (il comportamento predefinito) ogni elemento può essere estratto al massimo una volta — come pescare carte da un mazzo o scegliere persone per un'indagine.
+- **Con reinserimento** (`replace = TRUE`) ogni estrazione riparte da capo — come lanciare un dado più e più volte.
+
+Gli esiti non devono necessariamente essere equiprobabili. L'argomento `prob =` assegna a ogni elemento la propria probabilità (la loro somma dovrebbe essere 1):
+
+```{r}
+#| label: sample-prob
+set.seed(2026)
+loaded <- sample(1:6, size = 6000, replace = TRUE,
+                 prob = c(0.1, 0.1, 0.1, 0.1, 0.1, 0.5))
+table(loaded) / length(loaded)
+```
+
+Il sei esce circa la metà delle volte, come richiesto; le proporzioni osservate sono vicine, ma non esattamente uguali, alle probabilità che abbiamo fissato. Questo scarto è la **variabilità campionaria**, la protagonista di questo modulo.
+
+### Riproducibilità con `set.seed()`
+
+I computer non producono numeri davvero casuali: producono numeri **pseudo-casuali** tramite un algoritmo deterministico che parte da un *seme* (seed). Fissa il seme e otterrai ogni volta esattamente gli stessi numeri "casuali":
+
+```{r}
+#| label: seed
+set.seed(1); sample(1:100, 3)
+set.seed(1); sample(1:100, 3)   # identici
+sample(1:100, 3)                # la sequenza prosegue: numeri diversi
+```
+
+Chiama sempre `set.seed()` all'inizio di una simulazione che vuoi far riprodurre ad altri (o a te stesso in futuro). Il valore del seme è arbitrario; ciò che conta è che sia scritto.
+
+## 4. Stimare una probabilità tramite simulazione
+
+Qual è la probabilità che la **somma di due dadi sia 7**? Lanciamo due dadi 10.000 volte.
+
+```{r}
+#| label: two-dice
+set.seed(42)
+n_sim <- 10000
+die1 <- sample(1:6, n_sim, replace = TRUE)
+die2 <- sample(1:6, n_sim, replace = TRUE)
+total <- die1 + die2
+
+mean(total == 7)
+```
+
+`total == 7` è un vettore logico (`TRUE`/`FALSE`); la `mean()` di un vettore logico è la **proporzione di `TRUE`**. Questo trucco della "`mean()` di una condizione" è il cavallo di battaglia di tutte le simulazioni di questo modulo.
+
+La risposta esatta è facile da contare: 6 delle 36 coppie equiprobabili, $(1,6), (2,5), \ldots, (6,1)$, hanno somma 7, quindi $P = 6/36 = `r round(6/36, 4)`$. La simulazione ha dato `r mean(total == 7)`: vicino, ma non identico. Con più ripetizioni si avvicinerebbe ancora di più (Sezione 5).
+
+Altrettanto facile è stimare l'intera distribuzione della somma:
+
+```{r}
+#| label: fig-dice-sum
+#| fig-cap: "Distribuzione simulata della somma di due dadi (10.000 lanci). Le somme vicine a 7 sono le più probabili perché sono prodotte da un maggior numero di coppie di facce."
+dice_df <- data.frame(total = total)
+ggplot(dice_df, aes(x = factor(total))) +
+  geom_bar(aes(y = after_stat(count / sum(count))), fill = "#0072B2") +
+  labs(x = "Somma di due dadi", y = "Proporzione di lanci")
+```
+
+### Una ricetta generale con `replicate()`
+
+Per esperimenti più complessi, scrivi **una** esecuzione dell'esperimento come blocco di codice e lascia che `replicate()` la ripeta:
+
+```{r}
+#| label: replicate
+set.seed(42)
+# Esperimento: lancia una moneta 10 volte. Otteniamo almeno 8 teste?
+at_least_8 <- replicate(10000, {
+  tosses <- sample(c("H", "T"), 10, replace = TRUE)
+  sum(tosses == "H") >= 8
+})
+mean(at_least_8)
+```
+
+`replicate(B, { ... })` valuta il blocco `B` volte e raccoglie l'ultimo valore di ogni esecuzione. La probabilità stimata di ottenere almeno 8 teste in 10 lanci è circa `r round(mean(at_least_8), 3)` (la risposta esatta, che calcoleremo con `pbinom()` nella [prossima lezione](29-distributions.qmd), è `r round(1 - pbinom(7, 10, 0.5), 4)`).
+
+### Il problema dei compleanni
+
+In una classe di 23 studenti, qual è la probabilità che **almeno due compiano gli anni lo stesso giorno**? La maggior parte delle persone ipotizza un valore piccolo, come il 5%. Simuliamo (ignorando gli anni bisestili e supponendo che tutti i 365 giorni siano equiprobabili):
+
+```{r}
+#| label: birthday-sim
+set.seed(1)
+shared <- replicate(10000, {
+  bdays <- sample(1:365, size = 23, replace = TRUE)
+  any(duplicated(bdays))
+})
+mean(shared)
+```
+
+Circa il `r round(100 * mean(shared))`% — più o meno come il lancio di una moneta, e molto più di quanto si immagini di solito. La sorpresa deriva dal numero di *coppie*: 23 studenti formano `r choose(23, 2)` coppie, e una qualsiasi di esse può coincidere.
+
+La risposta esatta usa il complementare (Sezione 7): la probabilità che *tutti* i compleanni siano diversi è $\frac{365}{365}\cdot\frac{364}{365}\cdots\frac{343}{365}$.
+
+```{r}
+#| label: birthday-exact
+p_shared <- function(n) 1 - prod((365 - 0:(n - 1)) / 365)
+p_shared(23)
+```
+
+```{r}
+#| label: fig-birthday
+#| fig-cap: "Probabilità che almeno due persone compiano gli anni lo stesso giorno: curva esatta (linea) e stime da simulazione (punti, 2.000 classi ciascuna)."
+set.seed(3)
+class_sizes <- seq(5, 60, by = 5)
+sim_est <- sapply(class_sizes, \(n) {
+  mean(replicate(2000, any(duplicated(sample(365, n, replace = TRUE)))))
+})
+exact_df <- data.frame(n = 2:60, p = sapply(2:60, p_shared))
+sim_df   <- data.frame(n = class_sizes, p = sim_est)
+
+ggplot(exact_df, aes(n, p)) +
+  geom_line(linewidth = 1, colour = "grey40") +
+  geom_point(data = sim_df, colour = "#D55E00", size = 2.5) +
+  geom_hline(yintercept = 0.5, linetype = "dashed") +
+  labs(x = "Numero di persone", y = "P(almeno un compleanno condiviso)")
+```
+
+Simulazione e matematica concordano. È lo schema dell'intero modulo: **quando la matematica è facile, la simulazione la conferma; quando la matematica è difficile, la simulazione la sostituisce.**
+
+## 5. La legge dei grandi numeri
+
+Quante ripetizioni sono "abbastanza"? Osserviamo come evolve la proporzione di teste mentre continuiamo a lanciare una moneta equilibrata. Dopo ogni lancio calcoliamo la **proporzione cumulata**: le teste ottenute finora divise per i lanci effettuati finora.
+
+```{r}
+#| label: fig-lln
+#| fig-cap: "Proporzione cumulata di teste in quattro sequenze indipendenti di 5.000 lanci di una moneta equilibrata (scala logaritmica sull'asse x). All'inizio le proporzioni oscillano molto; nel lungo periodo si stabilizzano tutte vicino a 0.5."
+set.seed(10)
+n_toss <- 5000
+lln_df <- do.call(rbind, lapply(1:4, \(s) {
+  heads <- sample(c(1, 0), n_toss, replace = TRUE)
+  data.frame(sequence = paste("Sequenza", s),
+             toss = 1:n_toss,
+             prop_heads = cumsum(heads) / (1:n_toss))
+}))
+
+ggplot(lln_df, aes(toss, prop_heads, colour = sequence)) +
+  geom_line(linewidth = 0.7) +
+  geom_hline(yintercept = 0.5, linetype = "dashed") +
+  scale_x_log10() +
+  labs(x = "Numero di lanci (scala logaritmica)",
+       y = "Proporzione cumulata di teste", colour = NULL)
+```
+
+`cumsum(heads)` conta le teste accumulate dopo ogni lancio; dividendo per `1:n_toss` i conteggi diventano proporzioni.
+
+Questa è la **legge dei grandi numeri (LGN)**: al crescere del numero di ripetizioni indipendenti, la proporzione osservata (o, più in generale, la media) si avvicina sempre di più alla vera probabilità (o alla vera media).
+
+::: {.callout-tip .read-output}
+## Come leggere questo grafico
+
+- Dopo 10 lanci, proporzioni di 0.3 o 0.7 sono del tutto normali. I campioni piccoli sono rumorosi.
+- Dopo qualche migliaio di lanci tutte e quattro le linee distano da 0.5 al più un paio di punti percentuali.
+- Le linee si stabilizzano **non** perché la moneta "compensi" le serie precedenti (non ha memoria), ma perché le deviazioni iniziali vengono *diluite* dai molti lanci che seguono.
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: quanto velocemente si stabilizza la proporzione?
+
+Sia $\hat p_n$ la proporzione di successi in $n$ prove indipendenti con probabilità di successo $p$. La LGN afferma che $\hat p_n \to p$ per $n \to \infty$. Quanto sia vicina dopo $n$ prove si misura con la sua deviazione standard,
+
+$$
+\operatorname{SD}(\hat p_n) = \sqrt{\frac{p(1-p)}{n}} .
+$$
+
+Quadruplicare il numero di prove *dimezza* soltanto l'errore tipico. Per una moneta equilibrata, $n = 10{,}000$ dà $\sqrt{0.25/10000} = 0.005$, quindi una simulazione con 10.000 ripetizioni stima una probabilità vicina a 0.5 con un'approssimazione di circa $\pm 0.01$ (due deviazioni standard). Questo andamento $1/\sqrt n$ ricomparirà come **errore standard** in [Distribuzioni campionarie](30-sampling-distributions.qmd).
+:::
+
+## 6. Variabili casuali e valore atteso
+
+Una **variabile casuale** (o aleatoria) è un numero il cui valore è determinato da un esperimento casuale: la faccia di un dado, il numero di teste in 10 lanci, la massa corporea di un pinguino scelto a caso.
+
+- Una variabile casuale **discreta** assume valori separati e numerabili (0, 1, 2, …): conteggi, facce di un dado, numero di pezzi difettosi.
+- Una variabile casuale **continua** può assumere qualsiasi valore in un intervallo: peso, tempo, temperatura. Per una variabile continua la probabilità di *un singolo valore esatto* (diciamo, esattamente 4.000,000… g) è 0; si parla solo di probabilità di *intervalli* (tra 3.900 e 4.100 g). La [prossima lezione](29-distributions.qmd) mostra come.
+
+Il **valore atteso** $E(X)$ (o *media*) di una variabile casuale è la sua **media di lungo periodo**: la media dei valori che osserveresti ripetendo l'esperimento all'infinito. Per un dado equilibrato è $(1+2+3+4+5+6)/6 = 3.5$ — un valore che il dado non può mai mostrare, ma quello su cui si stabilizza la sua media:
+
+```{r}
+#| label: ev-die
+set.seed(7)
+rolls <- sample(1:6, 100000, replace = TRUE)
+mean(rolls)
+```
+
+Per una variabile discreta con valori $x_i$ e probabilità $p_i$, il valore atteso è la **media ponderata per le probabilità** $E(X) = \sum_i x_i \, p_i$. I valori attesi ci aiutano a valutare le scommesse. Un gioco costa 1 €; lanci un dado e vinci 5 € se esce un sei. Conviene giocare?
+
+```{r}
+#| label: ev-game
+net <- c(4, -1)          # guadagno netto: vincita (5 - 1) o perdita della posta
+p   <- c(1/6, 5/6)
+sum(net * p)             # valore atteso esatto
+
+set.seed(7)
+games <- sample(net, 100000, replace = TRUE, prob = p)
+mean(games)              # media di lungo periodo dalla simulazione
+```
+
+In media perdi circa `r round(abs(sum(net * p)), 2)` euro a partita. Ogni singola partita può essere vinta, ma il casinò conta sulla LGN.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: valore atteso e varianza
+
+Per una variabile casuale discreta,
+
+$$
+E(X) = \sum_i x_i\, p_i, \qquad
+\operatorname{Var}(X) = E\big[(X - E X)^2\big] = \sum_i (x_i - E X)^2 p_i .
+$$
+
+Per una variabile continua con densità $f(x)$ le somme diventano integrali: $E(X) = \int x f(x)\,dx$. La deviazione standard è $\sqrt{\operatorname{Var}(X)}$. Queste sono le versioni *di popolazione* della media e della varianza campionarie viste in [Statistiche descrittive di sintesi](../05-descriptive/22-summary-statistics.qmd); le versioni campionarie le stimano.
+:::
+
+## 7. Le regole della probabilità, verificate con la simulazione
+
+Lancia due dadi e definisci tre eventi:
+
+- $A$: il primo dado mostra un 6;
+- $B$: la somma è almeno 10;
+- $C$: il secondo dado è pari.
+
+```{r}
+#| label: rules-setup
+set.seed(123)
+n_sim <- 100000
+d1 <- sample(1:6, n_sim, replace = TRUE)
+d2 <- sample(1:6, n_sim, replace = TRUE)
+A <- d1 == 6
+B <- d1 + d2 >= 10
+C <- d2 %% 2 == 0
+```
+
+**Complementare.** "Non $A$" si verifica esattamente quando $A$ non si verifica: $P(\text{non } A) = 1 - P(A)$.
+
+```{r}
+#| label: rule-complement
+c(simulata = mean(!A), esatta = 1 - 1/6)
+```
+
+La regola del complementare è spesso la via più facile. *Qual è la probabilità di ottenere almeno un sei in quattro lanci?* Direttamente, i casi sono molti (un sei, due sei, …); passando per il complementare, è $1 - P(\text{nessun sei in quattro lanci}) = 1 - (5/6)^4 = `r round(1 - (5/6)^4, 4)`$.
+
+**Regola dell'addizione.** $P(A \text{ o } B) = P(A) + P(B) - P(A \text{ e } B)$. Sottraiamo la sovrapposizione per non contarla due volte.
+
+```{r}
+#| label: rule-addition
+c(diretta  = mean(A | B),
+  formula = mean(A) + mean(B) - mean(A & B))
+```
+
+**Probabilità condizionata.** $P(B \mid A)$, che si legge "probabilità di $B$ **dato** $A$", è la probabilità di $B$ *tra i casi in cui $A$ si è verificato*. In R, seleziona i casi in cui `A` è `TRUE` e calcola la proporzione:
+
+```{r}
+#| label: rule-conditional
+c(P_B = mean(B), P_B_given_A = mean(B[A]))
+```
+
+Sapere che il primo dado è un 6 fa salire la probabilità di una somma di almeno 10 da circa 1/6 a circa 1/2 (il secondo dado deve essere 4, 5 o 6). La formula è $P(B \mid A) = P(A \text{ e } B) / P(A)$.
+
+**Indipendenza.** Due eventi sono **indipendenti** se conoscere l'uno non cambia la probabilità dell'altro: $P(C \mid A) = P(C)$ o, in modo equivalente, $P(A \text{ e } C) = P(A)\,P(C)$.
+
+```{r}
+#| label: rule-independence
+c(P_C = mean(C), P_C_given_A = mean(C[A]))
+c(P_A_and_C = mean(A & C), prodotto = mean(A) * mean(C))
+```
+
+I due dadi non si influenzano a vicenda, quindi $A$ e $C$ sono indipendenti (a meno del rumore di simulazione). $A$ e $B$ **non** sono indipendenti: il primo dado fa parte della somma.
+
+## 8. Una tabella a doppia entrata: il paradosso del test medico
+
+Una malattia colpisce l'**1%** di una popolazione. Un test di screening ha
+
+- **sensibilità** del 90%: tra le persone *con* la malattia, il 90% risulta positivo;
+- **specificità** del 95%: tra le persone *senza* la malattia, il 95% risulta negativo.
+
+Risulti positivo. Qual è la probabilità che tu abbia la malattia? Molte persone (inclusi molti medici, secondo indagini pubblicate) rispondono "circa il 90%". Simuliamo una città di 100.000 abitanti:
+
+```{r}
+#| label: diag-sim
+set.seed(2026)
+n_people <- 100000
+ill <- sample(c(TRUE, FALSE), n_people, replace = TRUE,
+              prob = c(0.01, 0.99))
+u <- runif(n_people)           # un numero casuale uniforme per persona
+positive <- ifelse(ill, u < 0.90, u < 0.05)
+
+tab <- table(Malattia = ifelse(ill, "malato", "sano"),
+             Test = ifelse(positive, "positivo", "negativo"))
+addmargins(tab)
+```
+
+`runif(n)` estrae `n` numeri distribuiti uniformemente tra 0 e 1, quindi `u < 0.90` è `TRUE` con probabilità 0.90 — un modo rapido per simulare "sì con probabilità p".
+
+```{r}
+#| label: diag-ppv
+mean(ill[positive])     # P(malato | positivo)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questa tabella
+
+- Leggi lungo una **riga** per valutare il test: tra i malati, la maggior parte è risultata positiva (sensibilità); tra i sani, la maggior parte è risultata negativa (specificità).
+- Leggi lungo la **colonna dei positivi** per rispondere alla domanda del paziente. Dei `r sum(positive)` test positivi, solo `r sum(ill & positive)` appartengono a persone malate. Gli altri sono falsi allarmi provenienti dalla grande maggioranza sana: il 5% di 99.000 è un numero elevato di persone.
+- Quindi $P(\text{malato} \mid \text{positivo})$ è solo del `r round(100 * mean(ill[positive]))`% circa, anche se $P(\text{positivo} \mid \text{malato})$ è del 90%. Queste due probabilità condizionate **non** sono la stessa cosa.
+:::
+
+Ignorare quanto sia rara la malattia (il **tasso di base**) è la cosiddetta **fallacia del tasso di base** (*base-rate fallacy*). Le stesse quantità — sensibilità, specificità e probabilità che un "positivo" sia davvero positivo (il *valore predittivo positivo*, o *precisione*) — torneranno quando valuteremo i modelli di classificazione in [Regressione logistica](../../../lessons/09-regression/41-logistic-regression.qmd) e [Il flusso di lavoro del machine learning](../../../lessons/10-ml/44-ml-workflow.qmd).
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: il teorema di Bayes
+
+La risposta esatta discende dalla definizione di probabilità condizionata:
+
+$$
+P(\text{malato} \mid +) = \frac{P(+ \mid \text{malato})\,P(\text{malato})}
+{P(+ \mid \text{malato})\,P(\text{malato}) + P(+ \mid \text{sano})\,P(\text{sano})}
+= \frac{0.90 \times 0.01}{0.90 \times 0.01 + 0.05 \times 0.99} \approx `r round(0.009 / (0.009 + 0.05 * 0.99), 3)` .
+$$
+
+Il numeratore conta i veri positivi; il denominatore conta *tutti* i positivi. Questo è il **teorema di Bayes**. Nota la regola della moltiplicazione nascosta al suo interno: $P(\text{malato e } +) = P(+ \mid \text{malato})\,P(\text{malato})$.
+:::
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Dimenticare `replace = TRUE`.** `sample(1:6, 10)` dà errore ("cannot take a sample larger than the population") e `sample(1:6, 6)` è un rimescolamento, non sei lanci di un dado. Dadi, monete e campioni bootstrap richiedono il reinserimento.
+2. **Nessun seme, o un seme nel posto sbagliato.** Senza `set.seed()` i tuoi numeri cambiano a ogni esecuzione. Metti il seme nello stesso chunk della simulazione, subito prima di essa.
+3. **Aspettarsi che le simulazioni diano la risposta esatta.** Una probabilità simulata è una *stima* con un proprio errore (circa $\pm 1/\sqrt{B}$ per $B$ ripetizioni). Due esecuzioni con semi diversi differiranno leggermente — è normale.
+4. **La fallacia del giocatore.** Dopo cinque teste di fila, il lancio successivo è ancora 50/50. La LGN funziona per diluizione, non per compensazione.
+5. **Confondere $P(A \mid B)$ con $P(B \mid A)$.** "La maggior parte dei malati risulta positiva" non significa "la maggior parte di chi risulta positivo è malato". Chiediti sempre: *tra chi?*
+6. **Moltiplicare le probabilità di eventi dipendenti.** $P(A \text{ e } B) = P(A)\,P(B)$ vale solo per eventi indipendenti.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Qual è la differenza tra `sample(1:52, 5)` e `sample(1:52, 5, replace = TRUE)`?
+
+Il primo distribuisce cinque carte *diverse* da un mazzo (senza reinserimento). Il secondo può estrarre la stessa carta più di una volta, come se ogni carta venisse rimessa nel mazzo e il mazzo rimescolato prima dell'estrazione successiva.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Una simulazione con 100 ripetizioni stima una probabilità pari a 0.31; una con 10.000 ripetizioni dà 0.287. Di quale ti fidi di più, e perché?
+
+Di quella con 10.000 ripetizioni. Per la legge dei grandi numeri la stima si avvicina alla vera probabilità al crescere del numero di ripetizioni; il suo errore tipico è circa 10 volte più piccolo (poiché $\sqrt{10000/100} = 10$).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Vero o falso: se un dado non ha mostrato un sei negli ultimi 20 lanci, ora un sei è più probabile.
+
+**Falso.** I lanci sono indipendenti: il dado non ha memoria e la probabilità è sempre 1/6.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Nell'esempio del test medico, che cosa succederebbe a $P(\text{malato} \mid \text{positivo})$ se la malattia colpisse il 20% della popolazione anziché l'1%?
+
+Aumenterebbe nettamente (fino a circa 0.82), perché ci sarebbero molti più veri positivi rispetto ai falsi positivi provenienti dal gruppo dei sani. Il valore predittivo di un test dipende dal tasso di base, non solo dalla sua sensibilità e specificità. (L'Esercizio 4 ti permette di verificarlo.)
+:::
+
+## 10. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — due dadi, due domande.** Simula 10.000 lanci di due dadi e stima (a) la probabilità che entrambi i dadi mostrino lo stesso numero ("un doppio") e (b) la probabilità che la somma sia al massimo 4. Confronta con le risposte esatte 6/36 e 6/36.
+
+```{webr}
+#| exercise: ex_28_1
+set.seed(1)
+d1 <- sample(1:6, 10000, replace = ______)
+d2 <- sample(1:6, 10000, replace = ______)
+mean(______)        # (a) un doppio
+mean(______)        # (b) somma al massimo 4
+6 / 36
+```
+
+::: {.hint exercise="ex_28_1"}
+Usa `replace = TRUE`. Un doppio significa `d1 == d2`; il secondo evento è `d1 + d2 <= 4`.
+:::
+
+::: {.solution exercise="ex_28_1"}
+```r
+set.seed(1)
+d1 <- sample(1:6, 10000, replace = TRUE)
+d2 <- sample(1:6, 10000, replace = TRUE)
+mean(d1 == d2)
+mean(d1 + d2 <= 4)
+6 / 36
+```
+Entrambe le stime sono vicine a 6/36 ≈ 0.167. (La somma è al massimo 4 per (1,1), (1,2), (2,1), (1,3), (2,2), (3,1): sei coppie.)
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — il problema dei compleanni.** Scrivi l'esperimento per una classe di `n` persone e stima la probabilità di un compleanno condiviso per `n = 30` e `n = 50`. Poi usa la funzione esatta `p_shared()` per trovare la **più piccola dimensione della classe** per cui la probabilità supera 0.9.
+
+```{webr}
+#| exercise: ex_28_2
+p_shared <- function(n) 1 - prod((365 - 0:(n - 1)) / 365)
+
+set.seed(1)
+sim_birthday <- function(n, B = 5000) {
+  mean(replicate(B, any(duplicated(sample(365, ______, replace = TRUE)))))
+}
+sim_birthday(30)
+sim_birthday(50)
+
+probs <- sapply(1:80, p_shared)
+which(probs > ______)[1]
+```
+
+::: {.hint exercise="ex_28_2"}
+Dentro `sample()` la dimensione è quella della classe, `n`. `which(probs > 0.9)` restituisce tutte le dimensioni di classe sopra 0.9; `[1]` prende la prima.
+:::
+
+::: {.solution exercise="ex_28_2"}
+```r
+sim_birthday <- function(n, B = 5000) {
+  mean(replicate(B, any(duplicated(sample(365, n, replace = TRUE)))))
+}
+sim_birthday(30)   # circa 0.71
+sim_birthday(50)   # circa 0.97
+probs <- sapply(1:80, p_shared)
+which(probs > 0.9)[1]   # 41
+```
+Con 30 persone un compleanno condiviso è probabile (≈ 0.71); con 41 persone la probabilità supera 0.9.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — la legge dei grandi numeri per un dado.** Lancia un dado equilibrato 2.000 volte, calcola la **media cumulata** dei lanci e rappresentala graficamente con una linea orizzontale in corrispondenza del valore atteso 3.5. Poi prevedi: come cambia il grafico se usi un dado truccato con `prob = c(0.5, rep(0.1, 5))`? Eseguilo per verificare.
+
+```{webr}
+#| exercise: ex_28_3
+set.seed(5)
+n <- 2000
+rolls <- sample(1:6, n, replace = TRUE)
+running_mean <- ______ / (1:n)
+plot(running_mean, type = "l", log = "x",
+     xlab = "Numero di lanci", ylab = "Media cumulata")
+abline(h = ______, lty = 2)
+```
+
+::: {.hint exercise="ex_28_3"}
+La somma cumulata è `cumsum(rolls)`. Per il dado truccato il valore atteso è `sum(1:6 * c(0.5, rep(0.1, 5)))`.
+:::
+
+::: {.solution exercise="ex_28_3"}
+```r
+set.seed(5)
+n <- 2000
+rolls <- sample(1:6, n, replace = TRUE)
+running_mean <- cumsum(rolls) / (1:n)
+plot(running_mean, type = "l", log = "x",
+     xlab = "Numero di lanci", ylab = "Media cumulata")
+abline(h = 3.5, lty = 2)
+
+p_loaded <- c(0.5, rep(0.1, 5))
+loaded <- sample(1:6, n, replace = TRUE, prob = p_loaded)
+lines(cumsum(loaded) / (1:n), col = "red")
+abline(h = sum(1:6 * p_loaded), lty = 2, col = "red")   # 2.5
+```
+La media cumulata del dado equilibrato si stabilizza vicino a 3.5. Il dado truccato favorisce l'1, quindi la sua media cumulata si stabilizza vicino al proprio valore atteso, 2.5. La LGN porta sempre alla media *vera*, qualunque essa sia.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — i tassi di base contano.** Trasforma la simulazione del test medico in una funzione della prevalenza e calcola $P(\text{malato} \mid \text{positivo})$ per prevalenze pari a 0.001, 0.01, 0.1 e 0.2 (sensibilità 0.90, specificità 0.95). Che cosa concludi sullo screening delle malattie rare?
+
+```{webr}
+#| exercise: ex_28_4
+ppv_sim <- function(prev, sens = 0.90, spec = 0.95, n = 100000) {
+  ill <- runif(n) < prev
+  u <- runif(n)
+  positive <- ifelse(ill, u < sens, u < ______)
+  mean(ill[______])
+}
+set.seed(1)
+sapply(c(0.001, 0.01, 0.1, 0.2), ppv_sim)
+```
+
+::: {.hint exercise="ex_28_4"}
+Una persona sana risulta positiva con probabilità `1 - spec`. La risposta è la proporzione di malati *tra i positivi*: `ill[positive]`.
+:::
+
+::: {.solution exercise="ex_28_4"}
+```r
+ppv_sim <- function(prev, sens = 0.90, spec = 0.95, n = 100000) {
+  ill <- runif(n) < prev
+  u <- runif(n)
+  positive <- ifelse(ill, u < sens, u < 1 - spec)
+  mean(ill[positive])
+}
+set.seed(1)
+sapply(c(0.001, 0.01, 0.1, 0.2), ppv_sim)
+```
+Le probabilità sono all'incirca 0.02, 0.15, 0.67 e 0.82. Con una malattia rara quasi tutti i positivi sono falsi positivi, quindi i risultati dello screening vanno confermati con un secondo test più specifico.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — il problema di Monty Hall.** In un quiz televisivo ci sono tre porte: dietro una c'è un'automobile, dietro le altre due delle capre. Scegli una porta. Il conduttore, che sa dove si trova l'auto, apre una delle *altre* porte mostrando una capra e ti offre la possibilità di cambiare. Simula 10.000 partite e stima la probabilità di vincere se **mantieni** la scelta e se **cambi**.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+set.seed(1)
+play <- function() {
+  car  <- sample(1:3, 1)
+  pick <- sample(1:3, 1)
+  # il conduttore apre una porta con la capra che non è né quella scelta né quella dell'auto
+  goat_doors <- setdiff(1:3, c(pick, car))
+  opened <- if (length(goat_doors) == 1) goat_doors else sample(goat_doors, 1)
+  switched <- setdiff(1:3, c(pick, opened))
+  c(stay = pick == car, switch = switched == car)
+}
+res <- replicate(10000, play())
+rowMeans(res)
+```
+Mantenendo la scelta si vince circa 1/3 delle volte, cambiando circa 2/3. La tua prima scelta è giusta con probabilità 1/3; quando è sbagliata (probabilità 2/3), la scelta del conduttore lascia l'auto dietro la porta rimanente. Nota la condizione `if`: `sample(x, 1)` con un singolo numero `x` estrarrebbe da `1:x`, una classica trappola di R.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| `sample(x, size)` | Estrae senza reinserimento (rimescolare, distribuire carte) |
+| `sample(x, size, replace = TRUE, prob = p)` | Estrae con reinserimento, eventualmente con probabilità diverse |
+| `set.seed(n)` | Rende riproducibili i risultati casuali |
+| `replicate(B, { ... })` | Ripete `B` volte un esperimento casuale |
+| `mean(condition)` | Proporzione di `TRUE` = probabilità stimata |
+| `runif(n) < p` | `TRUE` con probabilità `p` |
+| `cumsum(x) / seq_along(x)` | Proporzione cumulata / media cumulata (grafici della LGN) |
+| $P(\text{non }A) = 1 - P(A)$ | Regola del complementare |
+| $P(B \mid A) = P(A \text{ e } B)/P(A)$ | Probabilità condizionata: `mean(B[A])` |
+
+- Una probabilità è una **frequenza relativa di lungo periodo**: la si stima ripetendo l'esperimento e contando.
+- La **legge dei grandi numeri**: medie e proporzioni si stabilizzano sui loro valori veri al crescere delle ripetizioni, con un errore che si riduce come $1/\sqrt{n}$.
+- Il **valore atteso** è la media di lungo periodo di una variabile casuale.
+- $P(A \mid B) \neq P(B \mid A)$: i tassi di base contano, come mostra la tabella del test medico.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), <https://openintro-ims.netlify.app>
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2e), <https://r4ds.hadley.nz>
+- Diez, Çetinkaya-Rundel & Barr, *OpenIntro Statistics* (PDF gratuito, capitolo sulla probabilità), <https://www.openintro.org/book/os/>
+:::

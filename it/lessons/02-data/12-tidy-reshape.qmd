@@ -1,0 +1,514 @@
+---
+title: "Dati tidy e ristrutturazione"
+subtitle: "Tabelle in formato largo e lungo, e come passare dall'una all'altra con tidyr"
+description: "Riconoscere il formato largo e il formato lungo, ristrutturare con pivot_longer() e pivot_wider(), dividere e combinare colonne con separate_wider_delim() e unite(), e rendere esplicite le combinazioni mancanti con complete() e drop_na()."
+format:
+  live-html:
+    webr:
+      packages: ["dplyr", "tidyr", "tibble"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+library(tidyr)
+library(tibble)
+```
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Data frame](08-data-frames.qmd), [Sintesi per gruppi](10-grouped-summaries.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- capire se una tabella è in **formato largo** o in **formato lungo**, e quale dei due serve a un'analisi;
+- trasformare colonne in righe con `pivot_longer()`, anche quando i nomi delle colonne contengono più variabili (`names_sep`, `names_pattern`);
+- trasformare righe in colonne con `pivot_wider()`, riempiendo i vuoti con `values_fill`;
+- dividere e combinare colonne con `separate_wider_delim()` e `unite()`;
+- rendere esplicite le combinazioni mancanti implicite con `complete()`, e rimuovere le righe incomplete con `drop_na()`.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+```
+
+## 1. Perché ristrutturare?
+
+In [Data frame](08-data-frames.qmd) abbiamo detto che un dataset è **tidy** quando ogni variabile è una colonna e ogni osservazione è una riga. I dati reali spesso non sono tidy, e per buone ragioni: un foglio di calcolo pensato per essere letto da *persone* ha un aspetto diverso da una tabella pensata per essere analizzata da un *software*.
+
+Considera la pressione arteriosa di tre pazienti misurata in due visite:
+
+```{r}
+#| label: bp-wide
+bp_wide <- tibble(
+  patient = c("P1", "P2", "P3"),
+  visit_1 = c(132, 118, 141),
+  visit_2 = c(128, 121, 135)
+)
+bp_wide
+```
+
+Questo è il **formato largo**: una riga per paziente, una colonna per visita. È facile da leggere, ma la "pressione arteriosa" è distribuita su due colonne e la "visita" è nascosta nei nomi delle colonne. Per rappresentare la pressione in funzione della visita, o per stimare un modello `pressure ~ visit`, ci servono **visita** e **pressione** come colonne. Questo è il **formato lungo**:
+
+```{r}
+#| label: bp-long
+bp_long <- bp_wide |>
+  pivot_longer(
+    cols      = c(visit_1, visit_2),
+    names_to  = "visit",
+    values_to = "pressure"
+  )
+bp_long
+```
+
+Nessuno dei due formati è "sbagliato": quello giusto dipende dalla domanda. Come regola pratica, **ggplot2 e i modelli statistici vogliono dati in formato lungo** (una riga per misura), mentre le tabelle per i report sono spesso più larghe.
+
+## 2. `pivot_longer()`: da colonne a righe
+
+`pivot_longer()` ha bisogno di tre informazioni:
+
+- `cols`: quali colonne impilare (funziona qualsiasi funzione ausiliaria di `select()`);
+- `names_to`: il nome della nuova colonna che conterrà i **vecchi nomi delle colonne**;
+- `values_to`: il nome della nuova colonna che conterrà i **valori**.
+
+```{r}
+#| label: longer-prefix
+bp_wide |>
+  pivot_longer(
+    cols         = starts_with("visit_"),
+    names_to     = "visit",
+    names_prefix = "visit_",
+    values_to    = "pressure"
+  )
+```
+
+`names_prefix` rimuove un prefisso comune, quindi `visit` diventa `"1"` e `"2"`.
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- Il numero di righe è (numero di pazienti) × (numero di colonne impilate) = `r nrow(bp_wide)` × 2 = `r nrow(bp_long)`.
+- La colonna `patient`, che **non** è stata impilata, viene ripetuta per ogni misura: identifica l'unità.
+- Ogni valore della tabella larga compare esattamente una volta nella tabella lunga: la ristrutturazione non perde né crea mai dati.
+:::
+
+### Un esempio classico: `relig_income`
+
+tidyr include `relig_income`, una tabella di un'indagine con una riga per religione e una colonna per fascia di reddito; le celle sono conteggi di rispondenti.
+
+```{r}
+#| label: relig
+relig_income
+```
+
+Le fasce di reddito sono valori di una variabile ("reddito"), non variabili. Trasformiamola in formato lungo:
+
+```{r}
+#| label: relig-long
+relig_long <- relig_income |>
+  pivot_longer(cols = !religion, names_to = "income", values_to = "count")
+relig_long
+```
+
+`!religion` significa "tutte le colonne tranne `religion`". La versione tidy ha tre variabili (religione, reddito, conteggio) ed è pronta per `count()`, `summarise()` o un grafico.
+
+### Più variabili nei nomi delle colonne: `names_sep`, `names_pattern`
+
+A volte il nome di una colonna racchiude **due** variabili. Qui la pressione sistolica (`sys`) e quella diastolica (`dia`) sono misurate in due visite:
+
+```{r}
+#| label: bp2-wide
+bp2 <- tibble(
+  patient = c("P1", "P2"),
+  sys_v1 = c(132, 118), sys_v2 = c(128, 121),
+  dia_v1 = c(85, 76),   dia_v2 = c(82, 79)
+)
+
+bp2 |>
+  pivot_longer(
+    cols      = !patient,
+    names_to  = c("measure", "visit"),
+    names_sep = "_",
+    values_to = "value"
+  )
+```
+
+Passando due nomi a `names_to` e un separatore a `names_sep`, `"sys_v1"` viene diviso in `measure = "sys"` e `visit = "v1"`. Quando la struttura è meno regolare, `names_pattern` accetta un'**espressione regolare** le cui parentesi indicano i pezzi da tenere (le espressioni regolari sono introdotte in [Stringhe e date](13-strings-dates.qmd)):
+
+```{r}
+#| label: names-pattern
+bp2 |>
+  pivot_longer(
+    cols          = !patient,
+    names_to      = c("measure", "visit"),
+    names_pattern = "(.*)_v(\\d)",
+    values_to     = "value"
+  )
+```
+
+Ora `visit` contiene solo la cifra.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: il segnaposto `.value`
+
+In `bp2`, la pressione sistolica e quella diastolica sono in realtà due **variabili diverse**, quindi la tabella davvero tidy ha una riga per coppia paziente–visita e due colonne `sys` e `dia`. Usa il nome speciale `".value"` in `names_to`: quella parte del nome della colonna diventa una colonna a sé.
+
+```{r}
+#| label: dot-value
+bp2 |>
+  pivot_longer(
+    cols      = !patient,
+    names_to  = c(".value", "visit"),
+    names_sep = "_"
+  )
+```
+:::
+
+### Perché ggplot vuole dati in formato lungo
+
+Con `penguins` in formato lungo, un solo `facet_wrap()` disegna un istogramma per ogni misura:
+
+```{r}
+#| label: fig-penguins-long
+#| fig-cap: "Distribuzione di quattro misure dei pinguini, resa possibile impilando le quattro colonne in una sola."
+penguins_long <- penguins |>
+  pivot_longer(
+    cols      = c(bill_len, bill_dep, flipper_len, body_mass),
+    names_to  = "measurement",
+    values_to = "value"
+  )
+
+ggplot(penguins_long, aes(value)) +
+  geom_histogram(bins = 30, na.rm = TRUE) +
+  facet_wrap(~ measurement, scales = "free") +
+  labs(x = "Valore (unità originali)", y = "Numero di pinguini")
+```
+
+`penguins_long` ha `r nrow(penguins_long)` righe: quattro per pinguino. Con la tabella larga questo grafico richiederebbe quattro grafici separati.
+
+## 3. `pivot_wider()`: da righe a colonne
+
+`pivot_wider()` è l'operazione inversa. Ha bisogno di:
+
+- `names_from`: la colonna i cui valori diventano i **nuovi nomi delle colonne**;
+- `values_from`: la colonna i cui valori riempiono le celle.
+
+```{r}
+#| label: wider-bp
+bp_long |>
+  pivot_wider(names_from = visit, values_from = pressure)
+```
+
+Siamo tornati a `bp_wide`. Un uso frequente è trasformare una sintesi in formato lungo in una **tabella leggibile**, per esempio i conteggi delle specie per isola:
+
+```{r}
+#| label: wider-counts
+penguins |>
+  count(species, island) |>
+  pivot_wider(names_from = island, values_from = n)
+```
+
+Le combinazioni che non si presentano mai (nessun Chinstrap su Biscoe) diventano `NA`. Qui sappiamo che significano "zero pinguini", quindi lo diciamo con `values_fill`:
+
+```{r}
+#| label: wider-fill
+penguins |>
+  count(species, island) |>
+  pivot_wider(names_from = island, values_from = n, values_fill = 0)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+Questa è una **tabella di contingenza**: le righe sono le specie, le colonne sono le isole, le celle sono conteggi. Gli zeri mostrano che solo i pinguini Adelie sono stati trovati su più di un'isola. Costruirai tabelle di questo tipo direttamente con `table()` in [Tabelle di frequenza](../05-descriptive/21-frequency-tables.qmd).
+:::
+
+`values_fill` va usato solo quando una combinazione mancante significa davvero zero (o un altro valore noto). Una *misura* mancante non è zero.
+
+## 4. Dividere e combinare colonne
+
+### `separate_wider_delim()`
+
+A volte una colonna memorizza più valori separati da un carattere. Codici di campione come `"Biscoe-2008-017"` contengono isola, anno e un identificativo:
+
+```{r}
+#| label: separate
+samples <- tibble(
+  code = c("Biscoe-2008-017", "Dream-2009-003", "Torgersen-2007-112"),
+  mass = c(4300, 3650, 3800)
+)
+
+samples_split <- samples |>
+  separate_wider_delim(code, delim = "-",
+                       names = c("island", "year", "id"))
+samples_split
+```
+
+Le nuove colonne sono di tipo **carattere**; convertile dove serve, es. `mutate(year = as.integer(year))`. (Il codice più vecchio usa `separate()`, che funziona ancora ma è stata sostituita dalla famiglia `separate_wider_*()`.)
+
+### `unite()`
+
+`unite()` fa l'opposto: incolla insieme più colonne.
+
+```{r}
+#| label: unite
+samples_split |>
+  unite(col = "code", island, year, id, sep = "-")
+```
+
+## 5. Valori mancanti: impliciti ed espliciti
+
+Un valore può mancare in due modi:
+
+- **esplicitamente**: la cella esiste e contiene `NA`;
+- **implicitamente**: la riga semplicemente non esiste.
+
+Nei conteggi delle specie per isola, "Chinstrap su Biscoe" era mancante in modo implicito. `complete()` aggiunge ogni combinazione delle variabili che indichi, rendendo esplicite le righe mancanti:
+
+```{r}
+#| label: complete
+penguins |>
+  count(species, island) |>
+  complete(species, island, fill = list(n = 0))
+```
+
+Questo conta, per esempio, quando calcoli un conteggio medio per gruppo: tralasciare gli zeri porterebbe a sovrastimarlo.
+
+`drop_na()` va nella direzione opposta: rimuove le righe con `NA` nelle colonne che indichi (o in qualsiasi colonna, se non ne indichi nessuna).
+
+```{r}
+#| label: drop-na
+nrow(penguins)
+penguins |> drop_na(sex) |> nrow()
+penguins |> drop_na() |> nrow()
+```
+
+`drop_na()` è comodo, ma eliminare le righe incomplete può introdurre distorsione in un'analisi se i valori non mancano in modo casuale. Rifletti prima di eliminare: vedi [Dati mancanti](../04-io/20-missing-data.qmd).
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Dimenticare quali colonne identificano l'unità.** In `pivot_wider()`, ogni colonna non usata in `names_from`/`values_from` viene trattata come identificativo. Una colonna in più con valori unici (es. un numero di riga) impedisce alle righe di accorparsi e produce una tabella piena di `NA`.
+2. **Identificativi duplicati in `pivot_wider()`.** Se due righe hanno gli stessi identificativi e lo stesso valore di `names_from`, tidyr non può mettere due valori in una cella: dà un avviso e crea colonne-lista. Sintetizza prima, oppure aggiungi l'identificativo mancante.
+3. **Riempire con zero valori realmente mancanti.** Usa `values_fill` e `complete(fill = ...)` solo per combinazioni che significano davvero "nessuno".
+4. **Aspettarsi numeri dopo una divisione.** `separate_wider_delim()` e i nomi presi dalle intestazioni delle colonne restituiscono testo; converti con `as.integer()` / `as.numeric()`.
+5. **Impilare variabili con unità di misura diverse** in un'unica colonna `value` e poi sintetizzarle insieme (es. fare la media di grammi e millimetri). Raggruppa sempre per la colonna `names_to`.
+:::
+
+## 6. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Una tabella ha una riga per studente e le colonne `math_2023`, `math_2024`, `physics_2023`, `physics_2024`. Quante righe avrà la versione in formato lungo per 50 studenti?
+
+50 × 4 = 200 righe, con colonne come `student`, `subject`, `year` e `grade` (usando `names_sep = "_"`).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Perché ggplot2 preferisce i dati in formato lungo?
+
+Perché un'estetica (x, colore, faccette…) associa **una colonna** a una proprietà visiva. Per colorare in base alla visita, o per creare faccette in base alla misura, la visita o il nome della misura devono essere una colonna, ed è esattamente ciò che offre il formato lungo.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Qual è la differenza tra valori mancanti impliciti ed espliciti?
+
+Un valore mancante esplicito è un `NA` in una riga esistente; uno implicito è una riga assente. `complete()` trasforma i valori mancanti impliciti in espliciti; `drop_na()` trasforma quelli espliciti in impliciti.
+:::
+
+## 7. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — formato lungo.** Impila le due misure del becco di `penguins` (`bill_len`, `bill_dep`) in una colonna `dimension`, con i valori in una colonna `mm`. Tieni solo `species`, `dimension` e `mm`. Quante righe ti aspetti?
+
+```{webr}
+#| exercise: ex_12_1
+penguins |>
+  select(species, bill_len, bill_dep) |>
+  pivot_longer(
+    cols      = ______,
+    names_to  = ______,
+    values_to = ______
+  )
+```
+
+::: {.hint exercise="ex_12_1"}
+`cols = c(bill_len, bill_dep)`, `names_to = "dimension"`, `values_to = "mm"`. Righe attese: 344 × 2.
+:::
+
+::: {.solution exercise="ex_12_1"}
+```r
+penguins |>
+  select(species, bill_len, bill_dep) |>
+  pivot_longer(
+    cols      = c(bill_len, bill_dep),
+    names_to  = "dimension",
+    values_to = "mm"
+  )
+```
+688 righe: due per pinguino.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — una tabella leggibile.** Conta i pinguini per `species` e `sex` (escludi quelli di sesso sconosciuto), e ristruttura la tabella in modo da avere una riga per specie e una colonna per sesso.
+
+```{webr}
+#| exercise: ex_12_2
+penguins |>
+  drop_na(______) |>
+  count(species, sex) |>
+  pivot_wider(names_from = ______, values_from = ______)
+```
+
+::: {.hint exercise="ex_12_2"}
+Elimina i valori mancanti di `sex`; i nuovi nomi delle colonne vengono da `sex`, i valori da `n`.
+:::
+
+::: {.solution exercise="ex_12_2"}
+```r
+penguins |>
+  drop_na(sex) |>
+  count(species, sex) |>
+  pivot_wider(names_from = sex, values_from = n)
+```
+Ogni specie ha un numero circa uguale di femmine e maschi (per esempio 73 e 73 per gli Adelie).
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_12_3
+scores <- tibble::tibble(
+  student     = c("Ada", "Ben", "Chiara"),
+  math_2023   = c(24, 18, 27),
+  math_2024   = c(26, 21, 28),
+  physics_2023 = c(22, 25, 19),
+  physics_2024 = c(25, 24, 23)
+)
+```
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — due variabili nei nomi.** La tabella `scores` (già creata) ha colonne come `math_2023`. Trasformala in formato lungo con le colonne `student`, `subject`, `year`, `grade`. Poi calcola il voto medio per materia e anno.
+
+```{webr}
+#| exercise: ex_12_3
+scores
+scores |>
+  pivot_longer(
+    cols      = !student,
+    names_to  = c(______, ______),
+    names_sep = ______,
+    values_to = "grade"
+  ) |>
+  summarise(mean_grade = mean(grade), .by = c(subject, year))
+```
+
+::: {.hint exercise="ex_12_3"}
+`names_to = c("subject", "year")` e `names_sep = "_"`.
+:::
+
+::: {.solution exercise="ex_12_3"}
+```r
+scores |>
+  pivot_longer(
+    cols      = !student,
+    names_to  = c("subject", "year"),
+    names_sep = "_",
+    values_to = "grade"
+  ) |>
+  summarise(mean_grade = mean(grade), .by = c(subject, year))
+```
+I voti medi salgono dal 2023 al 2024 in entrambe le materie (matematica: 23 → 25; fisica: 22 → 24).
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — billboard.** Il dataset `billboard` di tidyr ha una riga per canzone e le colonne `wk1`, `wk2`, … con la posizione in classifica in ciascuna settimana dopo l'ingresso in classifica. Trasformalo in formato lungo con le colonne `week` (un intero) e `rank`, eliminando le settimane `NA`. Poi trova, per ogni canzone, la posizione migliore (la più bassa) raggiunta.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+billboard_long <- billboard |>
+  pivot_longer(
+    cols            = starts_with("wk"),
+    names_to        = "week",
+    names_prefix    = "wk",
+    names_transform = list(week = as.integer),
+    values_to       = "rank",
+    values_drop_na  = TRUE
+  )
+
+billboard_long |>
+  summarise(best_rank = min(rank), weeks = n(), .by = c(artist, track)) |>
+  arrange(best_rank, desc(weeks))
+```
+`values_drop_na = TRUE` rimuove le settimane successive all'uscita di una canzone dalla classifica, che sono `NA` strutturali e non misure mancanti.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — correggi una tabella larga.** Un collega esegue il codice seguente per ottenere una colonna per specie con la lunghezza media della pinna per isola, ma ottiene molti `NA` e una riga per pinguino. Spiega perché e correggi il codice.
+
+```r
+penguins |>
+  mutate(row = row_number()) |>
+  pivot_wider(names_from = species, values_from = flipper_len)
+```
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Tutte le colonne non usate in `names_from`/`values_from` (compresa `row`, e ogni misura) vengono trattate come identificativi, e `row` è unica per ogni pinguino, quindi nulla si accorpa. Sintetizza prima, tenendo solo l'identificativo che ti interessa:
+
+```r
+penguins |>
+  summarise(mean_flipper = mean(flipper_len, na.rm = TRUE),
+            .by = c(island, species)) |>
+  pivot_wider(names_from = species, values_from = mean_flipper)
+```
+Ora gli `NA` rimasti hanno un significato: quella specie non è stata osservata su quell'isola.
+:::
+:::
+
+## Riepilogo
+
+| Funzione | Scopo | Argomenti principali |
+|---|---|---|
+| `pivot_longer()` | colonne → righe (largo → lungo) | `cols`, `names_to`, `values_to`, `names_sep`, `names_pattern`, `names_prefix` |
+| `pivot_wider()` | righe → colonne (lungo → largo) | `names_from`, `values_from`, `values_fill` |
+| `separate_wider_delim()` | una colonna → più colonne | `cols`, `delim`, `names` |
+| `unite()` | più colonne → una | `col`, `...`, `sep` |
+| `complete()` | aggiunge le combinazioni mancanti | `...`, `fill` |
+| `drop_na()` | rimuove le righe con `NA` | `...` (colonne da controllare) |
+
+- Il formato **largo** serve per leggere, quello **lungo** per i grafici e i modelli.
+- La ristrutturazione non cambia mai i dati, solo la loro disposizione: controlla il numero di righe (unità × colonne impilate).
+- Ogni colonna non coinvolta nel pivot è un **identificativo**; assicurati che gli identificativi identifichino davvero l'unità.
+- Distingui i valori mancanti impliciti da quelli espliciti, e non riempire mai con zeri misure realmente mancanti.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitolo "Data tidying", <https://r4ds.hadley.nz>
+- Vignette di tidyr "Pivoting", <https://tidyr.tidyverse.org/articles/pivot.html>
+- Wickham, H. (2014), "Tidy Data", *Journal of Statistical Software* 59(10), <https://doi.org/10.18637/jss.v059.i10>
+:::

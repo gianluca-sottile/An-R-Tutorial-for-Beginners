@@ -1,0 +1,602 @@
+---
+title: "Grafici per le distribuzioni"
+subtitle: "Istogrammi, grafici di densità, boxplot, grafici a violino ed ECDF, e come leggerli"
+description: "Visualizzare la distribuzione di una variabile numerica e confrontare gruppi con istogrammi, grafici di densità, boxplot (con ogni elemento spiegato, intaccature comprese), grafici a violino, punti con jitter e funzioni di ripartizione empiriche."
+format:
+  live-html:
+    webr:
+      packages: ["ggplot2", "dplyr"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(ggplot2)
+library(dplyr)
+```
+
+::: {.lesson-meta}
+[Livello 2 · Descrivere ed esplorare]{.level-2} [⏱ ~75 min]{} [Prerequisiti: [La grammatica dei grafici](24-ggplot-grammar.qmd), [Indici di sintesi](../05-descriptive/22-summary-statistics.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- disegnare **istogrammi** e **grafici di densità** e spiegare come l'ampiezza delle classi e l'ampiezza di banda cambiano ciò che vedi;
+- riconoscere ogni elemento di un **boxplot** (quartili, baffi, valori anomali, intaccature) e interpretarlo correttamente;
+- usare **grafici a violino**, **punti con jitter** ed **ECDF** per mostrare le distribuzioni in maggior dettaglio;
+- scegliere un grafico sensato per **confrontare una variabile numerica tra gruppi**.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(ggplot2)
+library(dplyr)
+```
+
+## 1. Perché rappresentare una distribuzione?
+
+In [Indici di sintesi](../05-descriptive/22-summary-statistics.qmd) abbiamo compresso una variabile in pochi numeri. I numeri da soli possono essere molto fuorvianti. Il dataset `faithful` registra `r nrow(faithful)` eruzioni del geyser Old Faithful; la durata media di un'eruzione è di `r round(mean(faithful$eruptions), 2)` minuti. È un'eruzione "tipica"?
+
+```{r}
+#| label: fig-faithful-intro
+#| fig-cap: "Durata delle eruzioni di Old Faithful. La linea tratteggiata è la media: quasi nessuna eruzione dura così."
+ggplot(faithful, aes(eruptions)) +
+  geom_histogram(binwidth = 0.25, boundary = 1.5,
+                 fill = "grey70", colour = "white") +
+  geom_vline(xintercept = mean(faithful$eruptions), linetype = "dashed") +
+  labs(x = "Durata dell'eruzione (minuti)", y = "Numero di eruzioni")
+```
+
+No. Ci sono **due tipi** di eruzioni, quelle brevi di circa 2 minuti e quelle lunghe di circa 4–5 minuti, e la media cade nel vuoto tra le due. Una distribuzione con due picchi si dice **bimodale**. Solo un grafico lo rivela.
+
+## 2. Istogrammi
+
+Un **istogramma** è la rappresentazione grafica di una tabella di frequenza per classi (vedi [Tabelle di frequenza](../05-descriptive/21-frequency-tables.qmd)): l'asse x è diviso in **classi** (*bin*) adiacenti e l'altezza di ogni barra è il numero di osservazioni nella classe. A differenza di un grafico a barre, le barre si toccano, perché l'asse x è una retta numerica continua.
+
+### Le classi cambiano la storia
+
+Controlli le classi con `bins` (quante) oppure, meglio, con `binwidth` (quanto larghe) e `boundary` (dove cade un estremo di classe):
+
+```{r}
+#| label: fig-bins
+#| fig-cap: "Gli stessi dati con tre ampiezze di classe."
+#| fig-subcap:
+#|   - "binwidth = 1.5: troppo larga"
+#|   - "binwidth = 0.25: circa giusta"
+#|   - "binwidth = 0.02: troppo stretta"
+#| layout-ncol: 3
+#| fig-asp: 0.9
+h <- ggplot(faithful, aes(eruptions)) +
+  labs(x = "Durata (min)", y = "Conteggio")
+
+h + geom_histogram(binwidth = 1.5, boundary = 1.5, colour = "white")
+h + geom_histogram(binwidth = 0.25, boundary = 1.5, colour = "white")
+h + geom_histogram(binwidth = 0.02, boundary = 1.5, colour = "white")
+```
+
+- Con **classi molto larghe** i due gruppi si fondono in una sola gobba: la bimodalità scompare.
+- Con **classi molto strette** ogni barra contiene poche eruzioni e domina il rumore casuale.
+- Nel mezzo, le caratteristiche principali sono visibili. Prova sempre **diverse ampiezze di classe** prima di decidere; ggplot2 usa 30 classi per impostazione predefinita e stampa un messaggio che ti invita a scegliere un valore migliore.
+
+Scegli `binwidth` in unità tonde della variabile (0.25 minuti, 5 mm, 500 g) e imposta `boundary` in modo che gli estremi delle classi cadano su numeri tondi: così i lettori possono leggere le classi.
+
+### Conteggi o densità?
+
+Per impostazione predefinita l'asse y mostra i **conteggi**. Con `aes(y = after_stat(density))` mostra una **densità**: le *aree* delle barre sommano a 1, quindi gli istogrammi di gruppi di dimensioni diverse diventano confrontabili e vi si può sovrapporre una curva di densità:
+
+```{r}
+#| label: fig-hist-density
+#| fig-cap: "Istogramma su scala di densità con una stima kernel della densità sovrapposta."
+ggplot(faithful, aes(eruptions)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 0.25,
+                 boundary = 1.5, fill = "grey80", colour = "white") +
+  geom_density(linewidth = 1) +
+  labs(x = "Durata dell'eruzione (minuti)", y = "Densità")
+```
+
+`after_stat()` si riferisce a una variabile calcolata dalla statistica del geom (qui la densità di ciascuna classe) anziché a una colonna dei dati.
+
+## 3. Grafici di densità
+
+Un **grafico di densità** (stima kernel della densità) è una versione liscia di un istogramma. Immagina di mettere una piccola "gobba" a campana su ogni osservazione e di sommarle: dove molte osservazioni sono vicine, le gobbe si accumulano in un picco. L'area totale sotto la curva è 1, quindi l'altezza non è un conteggio ma una *concentrazione relativa* di osservazioni.
+
+La larghezza delle gobbe è l'**ampiezza di banda** (*bandwidth*); la puoi riscalare con `adjust` (valore predefinito 1):
+
+```{r}
+#| label: fig-adjust
+#| fig-cap: "L'ampiezza di banda svolge il ruolo dell'ampiezza di classe: troppo piccola mostra rumore, troppo grande nasconde la struttura."
+ggplot(faithful, aes(eruptions)) +
+  geom_density(adjust = 0.25, linetype = "dotted") +
+  geom_density(adjust = 1, linewidth = 1) +
+  geom_density(adjust = 3, linetype = "dashed") +
+  labs(x = "Durata dell'eruzione (minuti)", y = "Densità",
+       subtitle = "adjust = 0.25 (punteggiata), 1 (continua), 3 (tratteggiata)")
+```
+
+I grafici di densità sono eccellenti per **confrontare pochi gruppi** sugli stessi assi:
+
+```{r}
+#| label: fig-density-groups
+#| fig-cap: "Massa corporea per specie: i riempimenti trasparenti lasciano visibili tutte e tre le curve."
+ggplot(penguins, aes(body_mass, fill = species)) +
+  geom_density(alpha = 0.5, na.rm = TRUE) +
+  labs(x = "Massa corporea (g)", y = "Densità", fill = "Specie")
+```
+
+Tieni presente che una curva di densità può estendersi oltre l'intervallo possibile dei dati (per esempio sotto lo zero per una variabile positiva) e può far apparire campioni molto piccoli più regolari di quanto l'evidenza giustifichi.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: lo stimatore kernel della densità
+
+Per i dati $x_1, \dots, x_n$, la stima kernel della densità in un punto $x$ è
+
+$$
+\hat f(x) = \frac{1}{n h} \sum_{i=1}^n K\!\left(\frac{x - x_i}{h}\right),
+$$
+
+dove $K$ è un **kernel** (una densità simmetrica, per impostazione predefinita la normale standard) e $h > 0$ è l'**ampiezza di banda**. ggplot2 usa `bw.nrd0()` (la regola pratica di Silverman), $h = 0.9 \min(s, \mathrm{IQR}/1.34)\, n^{-1/5}$, moltiplicata per `adjust`. Per le eruzioni:
+
+```{r}
+#| label: bandwidth
+bw.nrd0(faithful$eruptions)
+```
+
+La funzione `density()` di R base calcola la stessa stima.
+:::
+
+## 4. Boxplot: ogni elemento spiegato
+
+Un **boxplot** (il diagramma a scatola e baffi di Tukey) disegna la sintesi a cinque numeri vista in [Indici di sintesi](../05-descriptive/22-summary-statistics.qmd), più una regola per segnalare i valori insoliti. Calcoliamo ogni elemento per la concentrazione di ozono in `airquality` e poi vediamo dove compare.
+
+```{r}
+#| label: box-elements
+ozone <- airquality$Ozone[!is.na(airquality$Ozone)]
+
+q <- quantile(ozone, c(0.25, 0.5, 0.75))
+iqr <- q[[3]] - q[[1]]
+fences <- c(lower = q[[1]] - 1.5 * iqr, upper = q[[3]] + 1.5 * iqr)
+
+q
+fences
+c(lower_whisker = min(ozone[ozone >= fences[["lower"]]]),
+  upper_whisker = max(ozone[ozone <= fences[["upper"]]]))
+ozone[ozone > fences[["upper"]] | ozone < fences[["lower"]]]
+```
+
+```{r}
+#| label: fig-box-anatomy
+#| fig-cap: "Anatomia di un boxplot, calcolata sui dati dell'ozono."
+#| fig-asp: 0.45
+labels_df <- tibble(
+  x = c(q[[1]], q[[2]], q[[3]], max(ozone[ozone <= fences[["upper"]]]), 150),
+  label = c("Q1", "mediana", "Q3", "fine del\nbaffo", "valori\nanomali")
+)
+
+ggplot(tibble(ozone), aes(x = ozone, y = 0)) +
+  geom_boxplot(aes(group = 1), width = 0.3, orientation = "y") +
+  geom_text(data = labels_df, aes(x = x, y = 0.25, label = label),
+            size = 3.5, lineheight = 0.9) +
+  scale_y_continuous(limits = c(-0.3, 0.35), breaks = NULL) +
+  labs(x = "Ozono (ppb)", y = NULL)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere un boxplot
+
+- **La scatola** va dal primo quartile (Q1 = `r q[[1]]`) al terzo quartile (Q3 = `r q[[3]]`): contiene il **50% centrale** delle osservazioni. La sua lunghezza è l'IQR (`r iqr`).
+- **La linea dentro la scatola** è la **mediana** (`r q[[2]]`). La sua posizione nella scatola suggerisce l'asimmetria: qui è più vicina a Q1 e la parte destra della scatola è più lunga, segno di una distribuzione asimmetrica a destra.
+- **I baffi** si estendono dalla scatola fino all'**osservazione più estrema che si trova entro 1.5 × IQR dalla scatola**. *Non* terminano esattamente a Q3 + 1.5 × IQR (`r fences[["upper"]]`); qui il baffo superiore termina al valore osservato `r max(ozone[ozone <= fences[["upper"]]])`. Il baffo inferiore termina al minimo (`r min(ozone)`) perché nessun valore è sotto la soglia inferiore.
+- **I punti oltre i baffi** vengono disegnati singolarmente come **potenziali valori anomali** (qui `r paste(sort(ozone[ozone > fences[["upper"]]]), collapse = " e ")`). Sono valori da controllare, *non* automaticamente errori e *non* qualcosa da eliminare. In dati asimmetrici, molte osservazioni perfettamente valide finiscono oltre i baffi.
+:::
+
+I quartili di `geom_boxplot()` sono calcolati con `quantile()` (tipo 7). La funzione `boxplot()` di R base usa i cardini di Tukey (`fivenum()`), quindi i due possono differire leggermente.
+
+### Che cosa nasconde un boxplot
+
+Un boxplot mostra cinque numeri e i valori anomali, nient'altro. Due distribuzioni molto diverse possono avere lo stesso boxplot. Le eruzioni bimodali sembrano perfettamente normali in un boxplot:
+
+```{r}
+#| label: fig-box-hides
+#| fig-cap: "Il boxplot della durata delle eruzioni non dà alcun indizio dei due gruppi che l'istogramma mostrava così chiaramente."
+#| fig-asp: 0.35
+ggplot(faithful, aes(x = eruptions, y = "")) +
+  geom_boxplot() +
+  labs(x = "Durata dell'eruzione (minuti)", y = NULL)
+```
+
+Per questo i boxplot danno il meglio **combinati con i punti**, oppure per confronti rapidi tra molti gruppi di cui hai già verificato la forma.
+
+## 5. Confrontare gruppi: l'ozono per mese
+
+La vecchia versione di questo corso esplorava i livelli di ozono di New York per mese. Prima prepariamo i dati: `Month` diventa un fattore con i nomi dei mesi (in inglese, come in `month.name`), e una nuova variabile categoriale divide ogni mese in inizio, metà e fine.
+
+```{r}
+#| label: air-data
+air <- airquality |>
+  filter(!is.na(Ozone)) |>
+  mutate(
+    Month = factor(Month, levels = 5:9, labels = month.name[5:9]),
+    day_cat = case_when(
+      Day < 10 ~ "Inizio",
+      Day < 20 ~ "Metà",
+      .default = "Fine"
+    ) |>
+      factor(levels = c("Inizio", "Metà", "Fine"))
+  ) |>
+  select(Ozone, Wind, Month, Day, day_cat)
+
+count(air, Month)
+```
+
+Nota che giugno (June) ha solo `r sum(air$Month == "June")` giorni con una misura di ozono: tienilo a mente nei confronti.
+
+```{r}
+#| label: fig-air-box
+#| fig-cap: "Ozono per mese. Punti: le medie mensili aggiunte con stat_summary()."
+box_air <- ggplot(air, aes(x = Month, y = Ozone)) +
+  labs(x = NULL, y = "Ozono (ppb)")
+
+box_air +
+  geom_boxplot(outlier.colour = "#D55E00", outlier.shape = 17,
+               outlier.size = 2.5) +
+  stat_summary(fun = mean, geom = "point", size = 3, colour = "#0072B2")
+```
+
+- Gli argomenti `outlier.*` cambiano l'aspetto dei punti segnalati.
+- `stat_summary(fun = mean, ...)` calcola una sintesi per ciascun gruppo e la disegna (il vecchio argomento `fun.y` è deprecato: usa `fun`).
+- Luglio e agosto hanno i livelli di ozono più alti. In quattro mesi su cinque la media è chiaramente sopra la mediana, segno di asimmetria a destra all'interno dei mesi (a luglio le due quasi coincidono).
+
+Varianti dello stesso grafico:
+
+```{r}
+#| label: fig-air-variants
+#| fig-cap: "Due varianti dei boxplot mensili."
+#| fig-subcap:
+#|   - "Scatole orizzontali con coord_flip()"
+#|   - "Colore per mese, legenda rimossa"
+#| layout-ncol: 2
+#| fig-asp: 0.8
+box_air + geom_boxplot() + coord_flip()
+
+ggplot(air, aes(Month, Ozone, colour = Month)) +
+  geom_boxplot() +
+  guides(colour = "none") +
+  labs(x = NULL, y = "Ozono (ppb)")
+```
+
+Rimuovere la legenda nel secondo grafico è corretto: il mese è già scritto sull'asse, quindi la legenda sarebbe inchiostro ridondante. Qui il colore non aggiunge informazione: usalo solo quando codifica qualcosa.
+
+I boxplot per **due variabili di raggruppamento** usano `fill` (o `colour`) per la seconda:
+
+```{r}
+#| label: fig-air-two-groups
+#| fig-cap: "Ozono per mese e per parte del mese."
+ggplot(air, aes(Month, Ozone, fill = day_cat)) +
+  geom_boxplot() +
+  labs(x = NULL, y = "Ozono (ppb)", fill = "Parte del mese")
+```
+
+Con tre scatole per mese, la maggior parte delle scatole sintetizza meno di 10 giorni, e la scatola "Fine" di giugno un solo giorno: un grafico attraente può poggiare su pochissimi dati.
+
+## 6. Boxplot con intaccature
+
+Un'**intaccatura** (*notch*) restringe la scatola attorno alla mediana. La sua semiampiezza è
+
+$$
+1.58 \times \frac{\mathrm{IQR}}{\sqrt{n}} .
+$$
+
+```{r}
+#| label: fig-notch
+#| fig-cap: "Boxplot con intaccature. A giugno (n = 9) l'intaccatura è più larga della scatola, che quindi appare 'ripiegata'."
+box_air + geom_boxplot(notch = TRUE)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere le intaccature
+
+- Le intaccature servono a **confrontare le mediane** tra scatole: se le intaccature di due scatole **non si sovrappongono**, questa è un'evidenza approssimativa (a un livello di circa il 5%) che le mediane della popolazione siano diverse. Maggio e luglio ne sono un chiaro esempio.
+- Intaccature **sovrapposte** *non* dimostrano che le mediane siano uguali, così come un test non significativo non dimostra "nessuna differenza".
+- Un'intaccatura **non** è, da sola, un intervallo di confidenza per una mediana, e non dice nulla sulle medie.
+- Con gruppi piccoli l'intaccatura può estendersi oltre la scatola (giugno, `r sum(air$Month == "June")` giorni): il confronto è allora molto impreciso. ggplot2 lo segnala con un avviso.
+- La formula presuppone dati approssimativamente simmetrici e osservazioni indipendenti; giorni consecutivi di ozono non sono davvero indipendenti, quindi qui considera le intaccature come un'indicazione visiva. I confronti formali sono in [Test non parametrici](../08-inference/36-nonparametric-tests.qmd).
+:::
+
+## 7. Mostrare i punti: jitter e dot plot
+
+Con qualche decina di osservazioni per gruppo, **mostra ogni osservazione**. I punti nella stessa posizione x si sovrappongono; il **jitter** aggiunge un piccolo spostamento orizzontale casuale:
+
+```{r}
+#| label: fig-jitter
+#| fig-cap: "Boxplot con i singoli giorni. outlier.shape = NA evita di disegnare due volte i valori anomali."
+box_air +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.15, height = 0, alpha = 0.6, colour = "#0072B2")
+```
+
+- `height = 0` è importante: non applicare mai il jitter alla variabile che stai misurando.
+- Poiché il livello con jitter mostra già ogni punto, `outlier.shape = NA` nasconde i punti anomali propri del boxplot (altrimenti comparirebbero due volte).
+- Senza jitter (`geom_point()`), valori con lo stesso ozono nello stesso mese verrebbero disegnati uno sopra l'altro e resterebbero nascosti.
+
+Un **dot plot** impila i punti invece di sparpagliarli:
+
+```{r}
+#| label: fig-dotplot
+#| fig-cap: "Boxplot con un dot plot centrato."
+box_air +
+  geom_boxplot() +
+  geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.6,
+               binwidth = 4)
+```
+
+## 8. Grafici a violino
+
+Un **grafico a violino** disegna per ciascun gruppo una curva di densità specchiata, quindi mostra la **forma** (compresi eventuali picchi multipli) che un boxplot nasconde. Un boxplot stretto all'interno aggiunge i quartili:
+
+```{r}
+#| label: fig-violin
+#| fig-cap: "Grafici a violino della massa corporea dei pinguini per specie, con boxplot stretti all'interno."
+ggplot(penguins, aes(species, body_mass, fill = species)) +
+  geom_violin(alpha = 0.5, na.rm = TRUE) +
+  geom_boxplot(width = 0.12, fill = "white", outlier.shape = NA,
+               na.rm = TRUE) +
+  guides(fill = "none") +
+  labs(x = NULL, y = "Massa corporea (g)")
+```
+
+La larghezza del violino a una data altezza riflette quanti pinguini hanno quella massa. Come i grafici di densità, i violini possono ingannare con gruppi molto piccoli, quindi indica (o mostra) $n$.
+
+## 9. Funzioni di ripartizione empiriche (ECDF)
+
+L'**ECDF** (*empirical cumulative distribution function*, funzione di ripartizione empirica) risponde, per ogni valore $x$, alla domanda: *quale proporzione di osservazioni è minore o uguale a $x$?* È il grafico delle frequenze relative cumulate, e **non richiede né classi né ampiezza di banda**: ogni osservazione viene usata esattamente com'è.
+
+```{r}
+#| label: fig-ecdf
+#| fig-cap: "ECDF della massa corporea per specie. Leggi il valore y in corrispondenza di una data massa come 'proporzione di pinguini che pesano al massimo questo valore'."
+ggplot(penguins, aes(body_mass, colour = species)) +
+  stat_ecdf(linewidth = 1, na.rm = TRUE) +
+  geom_vline(xintercept = 4000, linetype = "dashed") +
+  labs(x = "Massa corporea (g)", y = "Proporzione di pinguini ≤ x", colour = "Specie")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- A 4000 g (linea tratteggiata) le curve di Adelie e Chinstrap sono vicine a 0.78: circa il `r round(100 * mean(penguins$body_mass[penguins$species == "Adelie"] <= 4000, na.rm = TRUE))`% dei pinguini Adelie pesa al massimo 4 kg; la curva dei Gentoo è ancora vicina a 0 (`r round(100 * mean(penguins$body_mass[penguins$species == "Gentoo"] <= 4000, na.rm = TRUE))`%).
+- Leggendo **in orizzontale** si ottengono i quantili: il punto in cui una curva attraversa 0.5 è la mediana di quel gruppo.
+- Una curva più a **destra** indica valori più grandi. I tratti ripidi sono dove si concentrano molte osservazioni; i tratti piatti sono vuoti.
+- In R base: `ecdf(x)` restituisce una funzione, per esempio `ecdf(penguins$body_mass)(4000)`.
+:::
+
+All'inizio le ECDF sono meno intuitive degli istogrammi, ma sono il modo più onesto di confrontare distribuzioni intere, e ricompaiono nei test (Kolmogorov–Smirnov) e nelle simulazioni.
+
+## 10. Scegliere un grafico per una variabile numerica
+
+| Obiettivo | Buona scelta | Attenzione a |
+|---|---|---|
+| Forma di una variabile | Istogramma (prova diverse ampiezze di classe), densità | Ampiezza di classe / di banda |
+| Confrontare 2–4 gruppi in dettaglio | Densità sovrapposte, violini + punti, ECDF | I gruppi piccoli sembrano regolari |
+| Confrontare rapidamente molti gruppi | Boxplot (+ jitter se i punti sono pochi) | I boxplot nascondono la multimodalità |
+| Poche osservazioni (< ~30 per gruppo) | Punti (jitter o dot plot), eventualmente con un boxplot | Densità e violini lisciano troppo |
+| Proporzioni sotto/sopra un valore | ECDF | Meno familiare ai lettori |
+
+Per molti gruppi, un **ridgeline plot** (curve di densità impilate, dal pacchetto `ggridges`: `ggridges::geom_density_ridges()`) è un'altra opzione compatta.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Fidarsi delle 30 classi predefinite.** Il numero di classi può creare o nascondere caratteristiche. Provane diversi, e scegli ampiezze tonde.
+2. **Chiamare le estremità dei baffi "minimo e massimo".** Sono i punti più estremi *entro 1.5 × IQR dalla scatola*; i punti oltre vengono disegnati separatamente.
+3. **Eliminare i "valori anomali" perché un boxplot li ha segnalati.** La regola di 1.5 × IQR è uno strumento di screening, non un verdetto; i dati asimmetrici hanno molti valori segnalati del tutto legittimi.
+4. **Leggere intaccature sovrapposte come "le mediane sono uguali".** L'assenza di evidenza non è evidenza di assenza.
+5. **Applicare il jitter in verticale** (`height` non impostato a 0) in un grafico in cui l'asse y è la misura: stai modificando i dati.
+6. **Disegnare due volte i valori anomali** combinando `geom_boxplot()` con `geom_jitter()` (usa `outlier.shape = NA`).
+:::
+
+## 11. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. In un boxplot la linea della mediana è vicina al lato superiore della scatola e il baffo inferiore è lungo. Che cosa suggerisce questo sulla forma?
+
+Una distribuzione **asimmetrica a sinistra**: la metà inferiore dei dati è più dispersa di quella superiore.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Due istogrammi degli stessi dati hanno un aspetto molto diverso. Com'è possibile?
+
+Usano ampiezze di classe (o estremi delle classi) diversi. I dati sono gli stessi, il raggruppamento no. Ecco perché dovresti provare diverse ampiezze di classe.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. In un grafico ECDF, la curva del gruppo A attraversa 0.5 a 30 e quella del gruppo B a 45. Che cosa concludi?
+
+La mediana di A è circa 30 e quella di B circa 45: i valori di B tendono a essere più grandi (la sua curva sta più a destra).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Perché un grafico a violino è più informativo di un boxplot per le eruzioni di `faithful`?
+
+Il violino mostra la densità, quindi i due picchi (eruzioni brevi e lunghe) sono visibili; il boxplot mostra solo i quartili, che nascondono la bimodalità.
+:::
+
+## 12. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — scegli un'ampiezza di classe.** Disegna un istogramma del tempo di attesa tra le eruzioni (`faithful$waiting`, in minuti). Prova `binwidth = 20`, poi `5`, poi `1`. Quale mostra meglio la forma? Qual è la forma?
+
+```{webr}
+#| exercise: ex_25_1
+library(ggplot2)
+ggplot(faithful, aes(waiting)) +
+  geom_histogram(binwidth = ______, boundary = 40, colour = "white") +
+  labs(x = "Tempo di attesa (minuti)", y = "Conteggio")
+```
+
+::: {.hint exercise="ex_25_1"}
+Sostituisci lo spazio vuoto con un numero ed esegui il codice più volte.
+:::
+
+::: {.solution exercise="ex_25_1"}
+```r
+ggplot(faithful, aes(waiting)) +
+  geom_histogram(binwidth = 5, boundary = 40, colour = "white") +
+  labs(x = "Tempo di attesa (minuti)", y = "Conteggio")
+```
+`binwidth = 5` mostra chiaramente che i tempi di attesa sono **bimodali** (picchi intorno a 50–55 e 75–85 minuti). Con 20 minuti la forma è grossolana; con 1 minuto è rumorosa.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — boxplot più punti.** Usando `ToothGrowth`, disegna i boxplot della lunghezza dei denti (`len`) per ciascuna dose, con punti con jitter sovrapposti e senza valori anomali duplicati. Ricorda che `dose` è numerica.
+
+```{webr}
+#| exercise: ex_25_2
+library(ggplot2)
+ggplot(ToothGrowth, aes(x = ______, y = len)) +
+  geom_boxplot(outlier.shape = ______) +
+  geom_jitter(width = 0.15, height = ______, alpha = 0.6) +
+  labs(x = "Dose (mg/giorno)", y = "Lunghezza dei denti")
+```
+
+::: {.hint exercise="ex_25_2"}
+Usa `factor(dose)` sull'asse x, `outlier.shape = NA` e `height = 0`.
+:::
+
+::: {.solution exercise="ex_25_2"}
+```r
+ggplot(ToothGrowth, aes(x = factor(dose), y = len)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.15, height = 0, alpha = 0.6) +
+  labs(x = "Dose (mg/giorno)", y = "Lunghezza dei denti")
+```
+La lunghezza dei denti aumenta con la dose. Senza `factor()`, ggplot2 tratterebbe la dose come continua e disegnerebbe una sola scatola.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — calcola i baffi.** Calcola a mano dove terminano i baffi di un boxplot di `mtcars$hp` e quali auto vengono segnalate come valori anomali. Poi verifica con un grafico.
+
+```{webr}
+#| exercise: ex_25_3
+x <- mtcars$hp
+q <- quantile(x, c(0.25, 0.75))
+iqr <- ______
+upper_fence <- q[[2]] + ______ * iqr
+max(x[x <= upper_fence])           # fine del baffo superiore
+rownames(mtcars)[x > ______]       # auto segnalate
+```
+
+::: {.hint exercise="ex_25_3"}
+`iqr <- q[[2]] - q[[1]]`, e la soglia è 1.5 IQR sopra Q3.
+:::
+
+::: {.solution exercise="ex_25_3"}
+```r
+iqr <- q[[2]] - q[[1]]
+upper_fence <- q[[2]] + 1.5 * iqr
+max(x[x <= upper_fence])
+rownames(mtcars)[x > upper_fence]
+
+library(ggplot2)
+ggplot(mtcars, aes(x = hp, y = "")) + geom_boxplot()
+```
+La soglia superiore è circa 305.25 hp; il baffo termina all'auto più potente sotto di essa (264 hp) e solo la Maserati Bora (335 hp) viene segnalata.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — confronta distribuzioni con un'ECDF.** Disegna le ECDF della lunghezza delle pinne per le tre specie di pinguini. Usa il grafico per stimare la mediana della lunghezza delle pinne di ciascuna specie, poi verifica con `summarise()`.
+
+```{webr}
+#| exercise: ex_25_4
+library(ggplot2)
+library(dplyr)
+ggplot(penguins, aes(flipper_len, colour = ______)) +
+  ______(na.rm = TRUE) +
+  geom_hline(yintercept = 0.5, linetype = "dashed") +
+  labs(x = "Lunghezza delle pinne (mm)", y = "Proporzione ≤ x")
+
+penguins |>
+  summarise(median = median(flipper_len, na.rm = TRUE), .by = species)
+```
+
+::: {.hint exercise="ex_25_4"}
+Associa `colour = species` e usa `stat_ecdf()`. La mediana è dove ciascuna curva attraversa la linea tratteggiata.
+:::
+
+::: {.solution exercise="ex_25_4"}
+```r
+ggplot(penguins, aes(flipper_len, colour = species)) +
+  stat_ecdf(na.rm = TRUE) +
+  geom_hline(yintercept = 0.5, linetype = "dashed") +
+  labs(x = "Lunghezza delle pinne (mm)", y = "Proporzione ≤ x")
+```
+Le curve attraversano 0.5 a circa 190 mm (Adelie), 196 mm (Chinstrap) e 216 mm (Gentoo), in accordo con le mediane di `summarise()`. La curva dei Gentoo sta interamente a destra: quasi ogni Gentoo ha pinne più lunghe di quasi ogni Adelie.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — quattro viste di una variabile.** Per `bill_len` in `penguins` per specie, disegna (a) densità sovrapposte, (b) violini con boxplot, (c) boxplot con punti con jitter, (d) ECDF. Scrivi due frasi su che cosa mostra meglio ciascun grafico.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+p <- ggplot(penguins, aes(colour = species, fill = species))
+
+p + geom_density(aes(bill_len), alpha = 0.3, na.rm = TRUE)
+
+ggplot(penguins, aes(species, bill_len)) +
+  geom_violin(na.rm = TRUE) +
+  geom_boxplot(width = 0.1, outlier.shape = NA, na.rm = TRUE)
+
+ggplot(penguins, aes(species, bill_len)) +
+  geom_boxplot(outlier.shape = NA, na.rm = TRUE) +
+  geom_jitter(width = 0.15, height = 0, alpha = 0.4, na.rm = TRUE)
+
+p + stat_ecdf(aes(bill_len), na.rm = TRUE)
+```
+I pinguini Adelie hanno becchi chiaramente più corti; Chinstrap e Gentoo si sovrappongono molto (i Chinstrap leggermente più lunghi in media). Densità e violini mostrano le forme, i punti con jitter mostrano i dati effettivi e le dimensioni dei gruppi, e l'ECDF rende facile leggere proporzioni e mediane.
+:::
+:::
+
+## Riepilogo
+
+| Grafico | ggplot2 | Mostra meglio |
+|---|---|---|
+| Istogramma | `geom_histogram(binwidth = , boundary = )` | Forma, mode, vuoti |
+| Densità | `geom_density(adjust = )` | Forma liscia; gruppi sovrapposti |
+| Boxplot | `geom_boxplot()`; `notch = TRUE` | Mediana, IQR, valori anomali; molti gruppi |
+| Punti con jitter | `geom_jitter(width = , height = 0)` | Ogni osservazione, dimensione dei gruppi |
+| Dot plot | `geom_dotplot(binaxis = "y", stackdir = "center")` | Ogni osservazione, impilata |
+| Violino | `geom_violin()` | Forma per gruppo |
+| ECDF | `stat_ecdf()` | Proporzioni ≤ x, quantili, confronto di distribuzioni intere |
+| Sintesi per gruppo | `stat_summary(fun = mean, geom = "point")` | Aggiungere una media a un grafico |
+
+- **Guarda la distribuzione**, non solo una sintesi: la media può trovarsi dove non ci sono dati.
+- Ampiezza di classe e ampiezza di banda sono **scelte**; provane diverse.
+- I baffi del boxplot arrivano al punto più estremo entro **1.5 × IQR**; i punti oltre sono valori anomali *potenziali*.
+- **Intaccature** non sovrapposte suggeriscono mediane diverse; la sovrapposizione non dimostra nulla.
+- Con poche osservazioni, **mostra i punti**.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wilke, C. O., *Fundamentals of Data Visualization*, capitoli "Visualizing distributions", <https://clauswilke.com/dataviz/>
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitolo "Exploratory data analysis", <https://r4ds.hadley.nz>
+- McGill, R., Tukey, J. W. & Larsen, W. A. (1978). Variations of box plots. *The American Statistician*, 32(1), 12–16.
+:::

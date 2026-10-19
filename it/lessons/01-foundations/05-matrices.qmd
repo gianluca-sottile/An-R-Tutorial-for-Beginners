@@ -1,0 +1,452 @@
+---
+title: "Matrici"
+subtitle: "Tabelle bidimensionali di un solo tipo: creare, unire, estrarre e moltiplicare"
+description: "Crea matrici con matrix(), riempiendole per riga o per colonna, aggiungi righe e colonne, dai un nome alle dimensioni, estrai elementi (anche con drop = FALSE) e usa l'aritmetica elemento per elemento e matriciale, la trasposizione, solve() e le sintesi per riga e per colonna."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~50 min]{} [Prerequisiti: [Vettori](04-vectors.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- creare una matrice con `matrix()`, scegliendo come riempirla con `byrow`;
+- ispezionare e impostare le sue dimensioni e i suoi nomi con `dim()` e `dimnames()`;
+- aggiungere righe e colonne con `rbind()` e `cbind()`;
+- estrarre elementi, righe e colonne con `[riga, colonna]`, mantenendo la forma di matrice con `drop = FALSE`;
+- distinguere la moltiplicazione elemento per elemento `*` dalla moltiplicazione matriciale `%*%`, e calcolare sintesi per riga e per colonna.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+# Solo R base: nulla da caricare.
+```
+
+## 1. Perché le matrici?
+
+Un vettore è una singola fila di valori. Molte cose in statistica sono naturalmente **rettangolari**: una tabella di voti d'esame con una riga per studente e una colonna per materia; le frequenze di una tabella di contingenza; una tabella di correlazioni tra variabili; le intensità dei pixel di un'immagine in scala di grigi.
+
+Una **matrice** è un vettore disposto in **righe e colonne**. Come un vettore, ha **un solo tipo**: tutti numeri, oppure tutto testo, oppure tutti valori logici. Questa restrizione rende le matrici veloci ed è ciò che permette l'algebra lineare (la matematica alla base della regressione, della PCA e di molti metodi di machine learning), ma spiega anche perché di solito memorizziamo i *dataset* in data frame (Sezione 8).
+
+## 2. Creare una matrice
+
+```{r}
+#| label: matrix-usage
+#| eval: false
+matrix(data, nrow = 1, ncol = 1, byrow = FALSE, dimnames = NULL)
+```
+
+- `data`: i valori, di solito un vettore;
+- `nrow`, `ncol`: numero di righe e di colonne (basta indicarne uno: R deduce l'altro);
+- `byrow`: se `FALSE` (valore predefinito) i valori riempiono la matrice **colonna per colonna**; se `TRUE`, **riga per riga**;
+- `dimnames`: nomi facoltativi di righe e colonne.
+
+```{r}
+#| label: byrow
+matrix_a <- matrix(1:10, nrow = 5, ncol = 2, byrow = TRUE)
+matrix_a
+
+matrix_b <- matrix(1:10, nrow = 5, ncol = 2, byrow = FALSE)
+matrix_b
+```
+
+Confronta i due output: gli stessi dieci numeri, disposti in modo diverso. In `matrix_a` i numeri 1 e 2 riempiono la prima riga; in `matrix_b` i numeri da 1 a 5 riempiono la prima colonna. **Il riempimento per colonna è il comportamento predefinito di R**, e vale la pena ricordarlo perché spiega anche come R memorizza internamente le matrici: una matrice è solo un vettore, letto una colonna dopo l'altra.
+
+```{r}
+#| label: dim
+m <- matrix(1:12, ncol = 3)
+m
+dim(m)       # righe, colonne
+nrow(m)
+ncol(m)
+length(m)    # numero totale di elementi = righe x colonne
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+Le etichette `[1,]`, `[2,]`, … a sinistra sono gli **indici di riga** e `[,1]`, `[,2]`, … in alto sono gli **indici di colonna**: mostrano esattamente come estrarresti quella riga o quella colonna. `dim(m)` restituisce `r dim(m)`: `r nrow(m)` righe e `r ncol(m)` colonne. Nota che `length()` conta **tutti** gli elementi (`r length(m)`), non le colonne.
+:::
+
+### Nomi di righe e colonne
+
+```{r}
+#| label: dimnames
+marks <- matrix(
+  c(28, 30, 24, 27, 22, 26),
+  nrow = 3,
+  dimnames = list(
+    c("anna", "ben", "carla"),       # nomi delle righe
+    c("statistics", "programming")   # nomi delle colonne
+  )
+)
+marks
+rownames(marks)
+colnames(marks)
+```
+
+`dimnames` è una **lista** di due vettori: prima i nomi delle righe, poi quelli delle colonne. Puoi anche impostarli in seguito con `rownames(m) <- ...` e `colnames(m) <- ...`.
+
+## 3. Aggiungere righe e colonne: `cbind()` e `rbind()`
+
+`cbind()` affianca gli oggetti come **c**olonne (*columns*); `rbind()` li impila come **r**ighe (*rows*).
+
+```{r}
+#| label: cbind
+cbind(matrix_a, 1:5)          # aggiunge una colonna
+```
+
+```{r}
+#| label: rbind
+m2 <- rbind(m, c(100, 200, 300))   # aggiunge una riga in fondo
+m2
+dim(m2)
+```
+
+Due matrici possono essere unite se hanno la forma giusta: lo **stesso numero di righe** per `cbind()`, lo **stesso numero di colonne** per `rbind()`.
+
+```{r}
+#| label: bind-two
+left  <- matrix(1:12,  ncol = 3)   # 4 x 3
+right <- matrix(13:24, ncol = 3)   # 4 x 3
+dim(cbind(left, right))            # 4 x 6
+dim(rbind(left, right))            # 8 x 3
+```
+
+Con argomenti con nome, i nomi diventano nomi di colonna (o di riga): `cbind(marks, history = c(25, 29, 30))` aggiunge una colonna chiamata `history`.
+
+## 4. Estrarre elementi: `[riga, colonna]`
+
+Dentro le parentesi quadre, una **virgola** separa la selezione delle righe (prima) da quella delle colonne (dopo). Lasciare vuoto un lato significa "tutte".
+
+| Codice | Seleziona |
+|---|---|
+| `m[1, 2]` | l'elemento nella riga 1, colonna 2 |
+| `m[1:3, 2:3]` | le righe 1–3 e le colonne 2–3 |
+| `m[, 1]` | tutte le righe della colonna 1 |
+| `m[1, ]` | tutte le colonne della riga 1 |
+| `m[-1, ]` | tutto tranne la riga 1 |
+
+```{r}
+#| label: slice
+m
+m[1, 2]
+m[1:3, 2:3]
+m[, 1]
+m[1, ]
+```
+
+`m[1, 2]` vale `r m[1, 2]`: riga 1, colonna 2. Ogni tecnica di indicizzazione vista in [Vettori](04-vectors.qmd) funziona su ciascun lato della virgola: posizioni negative, condizioni logiche, nomi.
+
+```{r}
+#| label: slice-names
+marks["ben", "programming"]
+marks[marks[, "statistics"] >= 26, ]    # studenti con almeno 26 in statistica
+```
+
+### `drop = FALSE`: mantenere la forma di matrice
+
+Nota che `m[, 1]` ha stampato un semplice **vettore**, non una matrice con una colonna. Quando una selezione ha una sola riga o una sola colonna, R *elimina* (*drop*) la dimensione superflua. Di solito è comodo, ma all'interno delle funzioni può rompere il codice che si aspetta una matrice. Aggiungi `drop = FALSE` per mantenere il risultato bidimensionale:
+
+```{r}
+#| label: drop
+dim(m[, 1])               # NULL: è un vettore
+m[, 1, drop = FALSE]
+dim(m[, 1, drop = FALSE]) # 4 x 1
+```
+
+Senza virgola, un singolo indice tratta la matrice come il vettore sottostante (colonna per colonna): `m[5]` è il 5° elemento contando lungo le colonne, e `m[m > 6]` restituisce tutti i valori maggiori di 6 come vettore.
+
+## 5. Aritmetica matriciale
+
+Gli operatori ordinari lavorano **elemento per elemento**, esattamente come per i vettori:
+
+```{r}
+#| label: elementwise
+A <- matrix(c(2, 1, 1, 3), nrow = 2)
+B <- matrix(1:4, nrow = 2)
+A
+B
+A * B      # elemento per elemento
+A + 10     # 10 viene riciclato su ogni elemento
+```
+
+La **moltiplicazione matriciale** nel senso dell'algebra lineare (righe per colonne) usa un operatore diverso, `%*%`:
+
+```{r}
+#| label: matmult
+A %*% B
+```
+
+L'elemento in alto a sinistra di `A %*% B` è (riga 1 di `A`) · (colonna 1 di `B`) $= 2 \times 1 + 1 \times 2 = 4$. Confondere `*` con `%*%` non produce un errore quando le matrici sono quadrate: dà silenziosamente una risposta diversa.
+
+Altre due operazioni che incontrerai in statistica:
+
+```{r}
+#| label: transpose-solve
+t(B)                  # trasposta: le righe diventano colonne
+solve(A)              # inversa di A
+round(A %*% solve(A), 10)   # matrice identità (arrotondata: virgola mobile!)
+solve(A, c(5, 10))    # risolve il sistema A x = (5, 10)
+```
+
+Abbiamo arrotondato `A %*% solve(A)` perché altrimenti i minuscoli errori di virgola mobile (vedi [Tipi di dati](03-data-types.qmd)) comparirebbero come numeri del tipo $10^{-16}$ invece di zeri esatti.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: moltiplicazione matriciale e sistemi lineari
+
+Per $A$ di dimensione $n \times k$ e $B$ di dimensione $k \times p$, il prodotto $C = AB$ è la matrice $n \times p$ con
+$$
+c_{ij} = \sum_{l=1}^{k} a_{il}\, b_{lj} .
+$$
+Il numero di colonne di $A$ deve essere uguale al numero di righe di $B$. `solve(A, b)` trova il vettore $x$ tale che $Ax = b$; nel nostro esempio,
+$$
+\begin{pmatrix} 2 & 1 \\ 1 & 3 \end{pmatrix}
+\begin{pmatrix} x_1 \\ x_2 \end{pmatrix}
+=
+\begin{pmatrix} 5 \\ 10 \end{pmatrix}
+\quad\Rightarrow\quad x = (1, 3).
+$$
+La regressione ai minimi quadrati ([Regressione semplice](../../../lessons/09-regression/38-simple-regression.qmd)) è, nella sostanza, la soluzione di un sistema di questo tipo: $\hat\beta = (X^\top X)^{-1} X^\top y$. La funzione `lm()` di R usa un metodo numericamente più stabile (una decomposizione QR) invece di calcolare esplicitamente l'inversa.
+:::
+
+## 6. Sintesi per riga e per colonna
+
+Le sintesi per riga o per colonna sono molto comuni, e R ha funzioni dedicate e veloci:
+
+```{r}
+#| label: row-col
+marks
+rowMeans(marks)     # voto medio di ciascuno studente
+colMeans(marks)     # voto medio in ciascuna materia
+rowSums(marks)
+colSums(marks)
+```
+
+Per qualsiasi altra funzione, `apply()` la applica a ogni riga (`MARGIN = 1`) o a ogni colonna (`MARGIN = 2`):
+
+```{r}
+#| label: apply
+apply(marks, 1, max)    # voto migliore di ciascuno studente
+apply(marks, 2, sd)     # variabilità dei voti in ciascuna materia
+```
+
+`apply()` è il tuo primo assaggio di *iterazione senza cicli*; lo approfondiamo in [Iterazione](../03-programming/17-iteration.qmd).
+
+## 7. Un solo tipo
+
+Prova a mettere numeri e testo nella stessa matrice:
+
+```{r}
+#| label: one-type
+matrix(c(1, "a", TRUE, 2), nrow = 2)
+```
+
+Tutto è stato convertito in character (nota le virgolette), secondo le regole viste in [Tipi di dati](03-data-types.qmd). Lo stesso succede se converti un dataset con colonne di tipo diverso:
+
+```{r}
+#| label: one-type-penguins
+as.matrix(penguins[1:3, c("species", "bill_len")])
+```
+
+Le lunghezze del becco ora sono testo: non puoi più calcolarne la media.
+
+## 8. Matrice o data frame?
+
+| | Matrice | Data frame |
+|---|---|---|
+| Tipi | Un solo tipo per tutta la tabella | Un tipo **per colonna** |
+| Uso tipico | Algebra lineare, tabelle numeriche, immagini, tabelle di distanze e correlazioni | **Dataset**: righe = osservazioni, colonne = variabili |
+| Accesso a righe e colonne | `m[i, j]` | `df[i, j]`, `df$col` |
+
+Un dataset reale mescola quasi sempre i tipi (`penguins` ha fattori, come `species`, `island`, `sex`, oltre a decimali e interi), quindi lo memorizziamo come **data frame** ([Data frame](../02-data/08-data-frames.qmd)). Le matrici compaiono quando un metodo ha bisogno di soli numeri: per esempio, le creerai esplicitamente con `as.matrix()` prima di una PCA o di un clustering.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Dimenticare che `matrix()` riempie per colonna.** Se i tuoi dati sono scritti riga per riga, usa `byrow = TRUE`.
+2. **Dimenticare la virgola.** `m[2]` è il 2° *elemento*; `m[2, ]` è la 2ª *riga*.
+3. **Perdita inattesa di dimensione.** `m[, 1]` è un vettore, non una matrice. Usa `drop = FALSE` quando la forma è importante.
+4. **`*` invece di `%*%`.** Il prodotto elemento per elemento e quello matriciale sono diversi; con matrici quadrate R non ti avvisa.
+5. **Tipi mescolati.** Un solo valore di testo trasforma l'intera matrice in testo.
+6. **Riciclo silenzioso in `cbind()`.** `cbind(1:3, 1:2)` si limita a dare un avviso e ricicla. Controlla le dimensioni con `dim()`.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Quanto vale `matrix(1:6, nrow = 2)[2, 3]`?
+
+`6`. Riempita per colonna, la matrice è `1 3 5` nella riga 1 e `2 4 6` nella riga 2; riga 2, colonna 3 è 6.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Se `X` è una matrice 100 x 3, quanto valgono `length(X)` e `dim(t(X))`?
+
+`length(X)` è 300 (tutti gli elementi), e `dim(t(X))` è `3 100`.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Perché `penguins` è un data frame e non una matrice?
+
+Perché le sue colonne hanno tipi diversi (fattori, numeri). Una matrice convertirebbe tutto in character.
+:::
+
+## 10. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — costruisci una matrice.** Crea una matrice `q` 3 x 4 contenente i numeri da 1 a 12 **riempita per riga**. Poi stampa le sue dimensioni e l'elemento nella riga 2, colonna 3.
+
+```{webr}
+#| exercise: ex_05_1
+q <- matrix(1:12, nrow = ______, byrow = ______)
+q
+dim(q)
+q[______, ______]
+```
+
+::: {.hint exercise="ex_05_1"}
+Tre righe, `byrow = TRUE`, e `q[riga, colonna]`.
+:::
+
+::: {.solution exercise="ex_05_1"}
+```r
+q <- matrix(1:12, nrow = 3, byrow = TRUE)
+q
+dim(q)     # 3 4
+q[2, 3]    # 7
+```
+Riempita per riga, la riga 2 contiene 5, 6, 7, 8, quindi il terzo elemento è 7. Con il valore predefinito `byrow = FALSE`, sarebbe 8.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — estrazione e `drop`.** Usando la matrice `marks` qui sotto: (a) estrai i voti di programmazione di tutti gli studenti; (b) estrai la stessa colonna *come matrice con una colonna*; (c) aggiungi una colonna `history` con i voti 25, 29, 30; (d) calcola la media di ciascuno studente.
+
+```{webr}
+#| exercise: ex_05_2
+marks <- matrix(
+  c(28, 30, 24, 27, 22, 26), nrow = 3,
+  dimnames = list(c("anna", "ben", "carla"), c("statistics", "programming"))
+)
+marks[, "programming"]
+marks[, "programming", ______]
+marks <- cbind(marks, ______ = c(25, 29, 30))
+______(marks)
+```
+
+::: {.hint exercise="ex_05_2"}
+Usa `drop = FALSE`; un argomento con nome in `cbind()` diventa il nome della colonna; `rowMeans()` calcola la media di ogni riga.
+:::
+
+::: {.solution exercise="ex_05_2"}
+```r
+marks[, "programming", drop = FALSE]
+marks <- cbind(marks, history = c(25, 29, 30))
+rowMeans(marks)    # anna 26.67, ben 27.00, carla 26.67
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — prevedi l'output: `*` e `%*%`.** Senza eseguire il codice, prevedi l'elemento in alto a sinistra di ciascun risultato. Poi eseguilo.
+
+```{webr}
+#| exercise: ex_05_3
+P <- matrix(c(1, 2, 3, 4), nrow = 2)
+Q <- matrix(c(0, 1, 1, 0), nrow = 2)
+P * Q
+P %*% Q
+Q %*% P
+```
+
+::: {.hint exercise="ex_05_3"}
+`P` è `1 3 / 2 4` (riempita per colonna) e `Q` è `0 1 / 1 0`. Per `%*%`, moltiplica la riga 1 della matrice a sinistra per la colonna 1 di quella a destra e somma.
+:::
+
+::: {.solution exercise="ex_05_3"}
+`P * Q` ha in alto a sinistra $1 \times 0 = 0$. `P %*% Q` ha in alto a sinistra $1 \times 0 + 3 \times 1 = 3$: moltiplicare per `Q` a destra **scambia le colonne** di `P`. `Q %*% P` ha in alto a sinistra $0 \times 1 + 1 \times 2 = 2$: moltiplicare a sinistra **scambia le righe**. Quindi, a differenza dei numeri, `P %*% Q` e `Q %*% P` sono diversi.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — sintesi per colonna su dati reali.** Costruisci una matrice numerica con le quattro colonne di misure di `penguins`, solo per le righe complete, poi calcola la media e la deviazione standard di ogni colonna.
+
+```{webr}
+#| exercise: ex_05_4
+meas <- as.matrix(penguins[, c("bill_len", "bill_dep", "flipper_len", "body_mass")])
+meas <- meas[complete.cases(meas), ]
+dim(meas)
+______(meas)
+apply(meas, ______, sd)
+```
+
+::: {.hint exercise="ex_05_4"}
+`colMeans()` per le medie; `MARGIN = 2` significa "per colonna".
+:::
+
+::: {.solution exercise="ex_05_4"}
+```r
+colMeans(meas)
+apply(meas, 2, sd)
+```
+`complete.cases()` mantiene le 342 righe senza alcun valore mancante. Le colonne sono su scale molto diverse (millimetri e grammi): è per questo che metodi come la PCA di solito standardizzano prima le variabili.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — un sistema lineare.** Un bar vende caffè e cornetti. Lunedì, 3 caffè e 2 cornetti costano 7.30 €; martedì, 1 caffè e 4 cornetti costano 7.10 €. Scrivi il sistema nella forma $A x = b$ e trova i due prezzi con `solve()`. Verifica la risposta con `%*%`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+A <- matrix(c(3, 2,
+              1, 4), nrow = 2, byrow = TRUE)
+b <- c(7.30, 7.10)
+prices <- solve(A, b)
+prices          # caffè 1.50, cornetto 1.40
+A %*% prices    # dovrebbe restituire 7.30 e 7.10
+```
+Ogni riga di `A` è un giorno, ogni colonna un prodotto; `byrow = TRUE` ti permette di scrivere il sistema come lo scriveresti su carta.
+:::
+:::
+
+## Riepilogo
+
+| Funzione | Che cosa fa |
+|---|---|
+| `matrix(x, nrow, ncol, byrow)` | Crea una matrice (riempita per colonna per impostazione predefinita) |
+| `dim()`, `nrow()`, `ncol()` | Dimensioni |
+| `dimnames()`, `rownames()`, `colnames()` | Nomi di righe e colonne |
+| `cbind()`, `rbind()` | Aggiunge colonne / righe |
+| `m[i, j]`, `m[i, ]`, `m[, j]`, `drop = FALSE` | Estrae elementi, righe, colonne |
+| `*` e `%*%` | Prodotto elemento per elemento e prodotto matriciale |
+| `t()`, `solve()` | Trasposta; inversa o soluzione di $Ax = b$ |
+| `rowSums()`, `colMeans()`, `apply()` | Sintesi per riga/colonna |
+
+- Una matrice è un vettore con due dimensioni e **un solo tipo**.
+- `[riga, colonna]`: una virgola separa le righe dalle colonne; un lato vuoto significa "tutte".
+- Righe e colonne singole vengono ridotte a vettori, a meno di usare `drop = FALSE`.
+- Per i dataset con tipi diversi, usa i data frame.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, *Advanced R* (2e), sezione "Attributes" (matrici e array), <https://adv-r.hadley.nz/vectors-chap.html#attributes>
+- *An Introduction to R* (R Core Team), capitolo "Arrays and matrices", <https://cran.r-project.org/doc/manuals/r-release/R-intro.html>
+:::

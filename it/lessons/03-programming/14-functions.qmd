@@ -1,0 +1,731 @@
+---
+title: "Scrivere funzioni"
+subtitle: "Trasforma il codice copiato e incollato in piccoli strumenti collaudati e riutilizzabili"
+description: "Impara l'anatomia di una funzione in R, argomenti e valori predefiniti, valori restituiti, controlli sugli input, scoping e funzioni anonime, con due esempi svolti: il riscalamento in [0, 1] e una suddivisione train/test riproducibile."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Vettori](../01-foundations/04-vectors.qmd), [Liste](../01-foundations/07-lists.qmd), [I verbi di dplyr](../02-data/09-dplyr-verbs.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- scrivere una funzione con argomenti, valori predefiniti e un valore restituito chiaro;
+- restituire più risultati insieme in una lista con nomi;
+- controllare gli input con `stopifnot()` e `stop()` e scrivere messaggi di errore informativi;
+- spiegare dove R cerca una variabile (**scoping lessicale**) e perché le funzioni non modificano le tue variabili globali;
+- usare le funzioni anonime `\(x)` e decidere *quando* un pezzo di codice merita di diventare una funzione.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+```
+
+## 1. Perché scrivere funzioni?
+
+Supponi di voler riscalare tre misure dei pinguini in modo che ciascuna vada da 0 (l'esemplare più piccolo) a 1 (il più grande). Un primo tentativo di solito ha questo aspetto:
+
+```{r}
+#| label: copy-paste
+peng <- penguins[, c("bill_len", "bill_dep", "flipper_len")]
+
+peng$bill_len_01 <- (peng$bill_len - min(peng$bill_len, na.rm = TRUE)) /
+  (max(peng$bill_len, na.rm = TRUE) - min(peng$bill_len, na.rm = TRUE))
+peng$bill_dep_01 <- (peng$bill_dep - min(peng$bill_dep, na.rm = TRUE)) /
+  (max(peng$bill_dep, na.rm = TRUE) - min(peng$bill_len, na.rm = TRUE))
+```
+
+Guarda con attenzione la seconda riga: l'ultimo `min()` usa `bill_len` invece di `bill_dep`. Questo errore da copia-incolla produce numeri sbagliati **senza alcun errore o avviso**:
+
+```{r}
+#| label: copy-paste-check
+range(peng$bill_dep_01, na.rm = TRUE)   # dovrebbe essere 0 e 1!
+```
+
+Una **funzione** è un pezzo di codice con un nome, riutilizzabile. Scrivere la logica *una sola volta* dentro una funzione ha tre vantaggi:
+
+1. **Meno errori**: la formula è scritta in un solo punto.
+2. **Modifiche più facili**: correggi o migliori la funzione e ogni suo utilizzo ne beneficia.
+3. **Codice leggibile**: `rescale01(x)` dice *che cosa* stai facendo; la formula dice solo *come*.
+
+## 2. Funzioni che usi già
+
+Chiami funzioni fin dalla prima lezione: `mean()`, `sum()`, `c()`. Una chiamata di funzione ha la forma `nome(argomento1, argomento2, ...)`. Gli argomenti si possono passare **per posizione** o **per nome**, e molti hanno **valori predefiniti**.
+
+| Tipo | Esempi |
+|---|---|
+| Matematica | `abs(x)`, `sqrt(x)`, `exp(x)`, `log(x)` (logaritmo naturale), `log(x, base = 10)`, `factorial(x)` |
+| Statistica | `mean(x)`, `median(x)`, `var(x)`, `sd(x)`, `quantile(x)`, `summary(x)`, `scale(x)` (punteggi z) |
+| Struttura | `length(x)`, `nrow(df)`, `ncol(df)`, `dim(m)` |
+
+```{r}
+#| label: builtin
+x <- c(-2, 0, 3)
+abs(x)
+log(100, base = 10)
+quantile(cars$speed)
+```
+
+### `length()` dipende dall'oggetto
+
+`length()` conta gli **elementi**. Che cosa sia un elemento dipende dal tipo di oggetto, e questo sorprende spesso:
+
+```{r}
+#| label: length
+m <- matrix(1:12, nrow = 3, ncol = 4)
+length(m)       # una matrice è un vettore con dimensioni: 3 * 4 = 12
+length(cars)    # un data frame è una lista di colonne: numero di colonne
+nrow(cars)      # numero di righe: usa nrow() per i data frame
+length(cars$speed)
+```
+
+Per una **matrice**, `length()` restituisce il numero totale di celle ($n \times m$), non il numero di colonne. Per un **data frame**, restituisce il numero di colonne, perché un data frame è una lista di colonne (vedi [Liste](../01-foundations/07-lists.qmd)). Per evitare ambiguità, usa `nrow()`, `ncol()` e `dim()`.
+
+### `diff()`: una funzione con un valore predefinito utile
+
+`diff()` calcola le differenze tra valori consecutivi. Il suo argomento `lag` ha valore predefinito `1`.
+
+```{r}
+#| label: fig-diff
+#| fig-cap: "Una passeggiata aleatoria (a sinistra) e le sue differenze prime (a destra). Le differenze eliminano il trend e lasciano i passi casuali."
+set.seed(123)
+walk <- cumsum(rnorm(200))
+steps <- diff(walk)          # equivale a diff(walk, lag = 1)
+
+par(mfrow = c(1, 2))
+plot(walk, type = "l", main = "Passeggiata aleatoria", xlab = "Tempo", ylab = "Valore")
+plot(steps, type = "l", main = "Differenze prime", xlab = "Tempo",
+     ylab = "Differenza")
+par(mfrow = c(1, 1))
+```
+
+Per vedere gli argomenti di una funzione e i loro valori predefiniti, scrivi `args(diff)` oppure apri la pagina di aiuto con `?diff`.
+
+## 3. Anatomia di una funzione
+
+Crei una funzione con `function()` e la salvi in un nome con `<-`, esattamente come qualunque altro oggetto.
+
+```{r}
+#| label: anatomy
+square <- function(n) {
+  n^2
+}
+
+square(4)
+square(1:5)    # funziona su vettori interi perché ^ è vettorizzato
+```
+
+Ogni funzione ha tre parti:
+
+| Parte | In `square` | Come vederla |
+|---|---|---|
+| **Nome** | `square` | — |
+| **Argomenti** (input, detti anche *formals*) | `n` | `formals(square)` |
+| **Corpo** (il codice che viene eseguito) | `n^2` | `body(square)` |
+
+Una funzione è un oggetto come gli altri: puoi stamparla, copiarla e rimuoverla.
+
+```{r}
+#| label: rm-function
+rm(square)
+exists("square")
+```
+
+::: {.callout-tip}
+## Dare un nome alle funzioni
+Le funzioni *fanno* cose, quindi dai loro nomi che siano **verbi** in `snake_case`: `rescale01()`, `split_data()`, `compute_bmi()`. Evita nomi che esistono già in R, come `mean`, `c`, `t` o `data`.
+:::
+
+## 4. Argomenti e valori predefiniti
+
+### Corrispondenza per posizione o per nome
+
+```{r}
+#| label: matching
+times <- function(x, y) {
+  x * y
+}
+
+times(2, 4)            # per posizione: x = 2, y = 4
+times(y = 4, x = 2)    # per nome: l'ordine non conta
+```
+
+Una convenzione diffusa: il primo o i primi due argomenti (i *dati*) si passano per posizione, tutti gli altri (i *dettagli*) per nome, come in `mean(x, na.rm = TRUE)`.
+
+### Valori predefiniti
+
+Un valore predefinito viene usato quando chi chiama la funzione non fornisce quell'argomento.
+
+```{r}
+#| label: defaults
+power <- function(x, exponent = 2) {
+  x^exponent
+}
+
+power(3)                 # usa il valore predefinito exponent = 2
+power(3, exponent = 3)   # lo sovrascrive
+```
+
+Metti prima gli argomenti **senza** valore predefinito (sono obbligatori) e dopo quelli **con** valore predefinito.
+
+### Passare argomenti extra con `...`
+
+L'argomento speciale `...` ("punto-punto-punto") raccoglie eventuali argomenti aggiuntivi e ti permette di passarli a un'altra funzione. È comodo per piccoli *wrapper* (funzioni involucro):
+
+```{r}
+#| label: dots
+mean_sd <- function(x, ...) {
+  c(mean = mean(x, ...), sd = sd(x, ...))
+}
+
+mean_sd(penguins$body_mass, na.rm = TRUE)   # na.rm passa attraverso ...
+```
+
+Usa `...` con parsimonia: un argomento scritto male (per esempio `na.mr = TRUE`) viene assorbito in silenzio da `...` invece di produrre un errore.
+
+## 5. Valori restituiti
+
+### Viene restituita l'ultima espressione
+
+Una funzione R restituisce il valore dell'**ultima espressione valutata** nel suo corpo. Non serve scrivere `return()` alla fine.
+
+```{r}
+#| label: implicit-return
+cv <- function(x) {
+  s <- sd(x)
+  m <- mean(x)
+  s / m          # questo valore viene restituito
+}
+
+cv(cars$speed)
+```
+
+### `return()` per un'uscita anticipata
+
+Usa `return()` quando vuoi **fermarti prima**, tipicamente per gestire un caso particolare prima del calcolo principale.
+
+```{r}
+#| label: early-return
+safe_log <- function(x) {
+  if (any(x <= 0, na.rm = TRUE)) {
+    warning("Trovati valori non positivi; per questi si restituisce NA.")
+    x[x <= 0] <- NA
+  }
+  if (all(is.na(x))) {
+    return(x)              # non resta nulla da calcolare: esci subito
+  }
+  log(x)
+}
+
+safe_log(c(1, 10, 100))
+```
+
+### Restituire più risultati: usa una lista
+
+Una funzione restituisce **un solo** oggetto. Quando ti servono più risultati, mettili in una lista con nomi.
+
+```{r}
+#| label: list-return
+describe <- function(x) {
+  x <- x[!is.na(x)]
+  list(
+    n      = length(x),
+    mean   = mean(x),
+    sd     = sd(x),
+    range  = range(x)
+  )
+}
+
+res <- describe(penguins$flipper_len)
+res$mean
+res$range
+```
+
+Chi chiama la funzione sceglie i pezzi che gli servono con `$`. È esattamente così che `t.test()` o `lm()` restituiscono i loro risultati.
+
+## 6. Controllare gli input {#checking-inputs}
+
+Una funzione viene usata da altre persone (compreso te stesso fra sei mesi). Controllare gli input **all'inizio** trasforma un errore confuso, nascosto in profondità nel codice, in un messaggio chiaro.
+
+### `stopifnot()` per controlli rapidi
+
+`stopifnot()` si interrompe con un errore se una qualsiasi condizione non è `TRUE`. Dare un nome a ogni condizione produce un messaggio leggibile:
+
+```{r}
+#| label: stopifnot
+#| error: true
+cv <- function(x) {
+  stopifnot(
+    "`x` deve essere numerico" = is.numeric(x),
+    "`x` deve contenere almeno due valori" = length(x) >= 2
+  )
+  sd(x) / mean(x)
+}
+
+cv(c("a", "b"))
+```
+
+### `stop()` per messaggi personalizzati
+
+Quando il controllo richiede più spiegazioni, usa `if` insieme a `stop()`. L'argomento `call. = FALSE` nasconde la chiamata interna, così l'utente vede solo il tuo messaggio.
+
+```{r}
+#| label: stop
+#| error: true
+cv <- function(x, na.rm = FALSE) {
+  if (!is.numeric(x)) {
+    stop("`x` deve essere numerico, non ", class(x)[1], ".", call. = FALSE)
+  }
+  if (!na.rm && anyNA(x)) {
+    stop("`x` contiene valori mancanti; usa `na.rm = TRUE`.", call. = FALSE)
+  }
+  sd(x, na.rm = na.rm) / mean(x, na.rm = na.rm)
+}
+
+cv(penguins$body_mass)
+cv(penguins$body_mass, na.rm = TRUE)
+```
+
+Un buon messaggio di errore dice **che cosa non va** e, se possibile, **come rimediare**. Usa `warning()` invece di `stop()` quando la funzione può comunque restituire qualcosa di sensato (come in `safe_log()` sopra). Le condizioni sono trattate in dettaglio in [Istruzioni condizionali](15-conditionals.qmd).
+
+## 7. Scoping: dove cerca R una variabile?
+
+Quando R incontra un nome dentro una funzione, lo cerca:
+
+1. prima tra le variabili **proprie** della funzione (argomenti e oggetti creati nel corpo: l'ambiente *locale*);
+2. se non lo trova lì, nell'ambiente in cui la funzione è stata **definita** (per noi, di solito l'ambiente *globale*, cioè il tuo workspace).
+
+Questa regola si chiama **scoping lessicale** (*lexical scoping*).
+
+```{r}
+#| label: scoping-global
+y <- 10
+add_y <- function(x) {
+  x + y          # y non è locale, quindi R usa la y globale
+}
+add_y(5)
+```
+
+Una variabile locale **oscura** (*shadows*) una globale con lo stesso nome, e le modifiche fatte dentro una funzione restano lì dentro:
+
+```{r}
+#| label: scoping-local
+y <- 10
+g <- function(x) {
+  y <- 100       # una nuova y, locale
+  x + y
+}
+g(5)
+y                # la y globale è invariata
+```
+
+Ogni chiamata parte da un ambiente locale nuovo, che viene distrutto quando la funzione termina. Una funzione quindi non può sovrascrivere per sbaglio i tuoi dati: se vuoi conservare un risultato, **restituiscilo** e assegnalo, per esempio `peng <- add_columns(peng)`.
+
+::: {.callout-warning}
+## Evita di dipendere da variabili globali
+`add_y()` funziona, ma il suo risultato dipende da qualunque valore abbia `y` nel tuo workspace in quel momento. Passa tutto ciò che serve a una funzione **come argomento**. Potresti incontrare l'operatore di "super-assegnazione" `<<-`, che modifica una variabile fuori dalla funzione: evitalo nel codice di analisi quotidiano.
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: gli ambienti
+Ogni chiamata di funzione crea un **ambiente** (*environment*), un insieme di associazioni nome–valore il cui *genitore* è l'ambiente in cui la funzione è stata creata. La ricerca di un nome risale questa catena di genitori: locale → ambiente di definizione → … → ambiente globale → pacchetti caricati → base. Puoi esaminarla con `environment(add_y)` (l'ambiente di definizione) e, da dentro una funzione, con `environment()` (l'ambiente della chiamata corrente). È anche il motivo per cui una funzione creata *dentro* un'altra funzione ricorda le variabili della funzione genitrice (una *closure*). Vedi *Advanced R* (2a ed.), capitoli 6–7.
+:::
+
+## 8. Esempio svolto 1: `rescale01()`
+
+Trasformiamo ora il codice copiato e incollato della Sezione 1 in una funzione. La formula è
+
+$$
+\text{rescale}(x_i) = \frac{x_i - \min(x)}{\max(x) - \min(x)} .
+$$
+
+### Una versione allettante ma **sbagliata**
+
+`range(x)` restituisce un vettore di lunghezza 2, `c(min, max)`. Un'idea naturale è usarlo direttamente:
+
+```{r}
+#| label: rescale-bug
+rescale_wrong <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng) / (rng[2] - rng[1])      # BUG: sottrae un vettore di lunghezza 2
+}
+
+rescale_wrong(c(1, 2, 3, 4, 5))
+```
+
+Il risultato è sbagliato e R **non** protesta. `x - rng` *ricicla* `rng`: calcola `1 - 1, 2 - 5, 3 - 1, 4 - 5, 5 - 1`, alternando minimo e massimo. (Quando la lunghezza di `x` è dispari, R dà un avviso; quando è pari, nemmeno quello.)
+
+### La versione corretta
+
+```{r}
+#| label: rescale-ok
+# Riscala un vettore numerico nell'intervallo [0, 1].
+# x:     vettore numerico (può contenere NA)
+# Restituisce un vettore numerico della stessa lunghezza; gli NA restano NA.
+rescale01 <- function(x) {
+  stopifnot("`x` deve essere numerico" = is.numeric(x))
+  rng <- range(x, na.rm = TRUE)
+  width <- rng[2] - rng[1]
+  if (!is.finite(width) || width == 0) {
+    return(rep(0, length(x)))         # input costante o tutto NA
+  }
+  (x - rng[1]) / width
+}
+
+rescale01(c(1, 2, 3, 4, 5))
+rescale01(c(7, 7, 7))
+```
+
+Nota i **commenti sopra la funzione**: che cosa fa, che cosa si aspetta, che cosa restituisce. È tutta la documentazione di cui ha bisogno una piccola funzione di analisi. (Chi scrive pacchetti usa la stessa idea in forma strutturata, i commenti *roxygen*, che iniziano con `#'`.)
+
+Ora le tre colonne si possono riscalare con una sola riga, usando `across()` di [dplyr](../02-data/09-dplyr-verbs.qmd):
+
+```{r}
+#| label: rescale-across
+peng_01 <- penguins |>
+  select(bill_len, bill_dep, flipper_len) |>
+  mutate(across(everything(), rescale01, .names = "{.col}_01"))
+
+peng_01 |>
+  select(ends_with("_01")) |>
+  summary()
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+Ogni colonna riscalata ha `Min.` uguale a 0 e `Max.` uguale a 1: è il controllo rapido che la funzione fa ciò che promette. La riga `NA's` mostra che i valori mancanti sono rimasti mancanti, senza essere trasformati in numeri.
+:::
+
+## 9. Esempio svolto 2: una suddivisione train/test riproducibile
+
+Nel machine learning si divide spesso un insieme di dati in una parte di **addestramento** (*training*, per stimare un modello) e una parte di **test** (per valutarlo). Vogliamo una funzione che
+
+- riceva un data frame e la proporzione di righe da destinare all'addestramento,
+- accetti facoltativamente un **seme** (*seed*), così che la suddivisione sia riproducibile,
+- restituisca **entrambe** le parti.
+
+```{r}
+#| label: split-data
+# Divide casualmente un data frame in un insieme di addestramento e uno di test.
+# df:   un data frame
+# prop: proporzione di righe nell'insieme di addestramento (strettamente tra 0 e 1)
+# seed: intero facoltativo per una suddivisione riproducibile
+# Restituisce una lista con gli elementi `train` e `test`.
+split_data <- function(df, prop = 0.8, seed = NULL) {
+  stopifnot(
+    "`df` deve essere un data frame" = is.data.frame(df),
+    "`prop` deve essere un singolo numero in (0, 1)" =
+      is.numeric(prop) && length(prop) == 1 && prop > 0 && prop < 1
+  )
+  if (!is.null(seed)) set.seed(seed)
+
+  n <- nrow(df)
+  idx_train <- sample.int(n, size = floor(prop * n))
+
+  list(
+    train = df[idx_train, , drop = FALSE],
+    test  = df[-idx_train, , drop = FALSE]
+  )
+}
+```
+
+```{r}
+#| label: split-data-use
+spl <- split_data(penguins, prop = 0.7, seed = 42)
+nrow(spl$train)
+nrow(spl$test)
+nrow(spl$train) + nrow(spl$test) == nrow(penguins)
+```
+
+Ripetendo la chiamata con lo stesso seme si ottengono esattamente le stesse righe:
+
+```{r}
+#| label: split-data-repro
+spl2 <- split_data(penguins, prop = 0.7, seed = 42)
+identical(spl$train, spl2$train)
+```
+
+La funzione usa tutto ciò che abbiamo visto: valori predefiniti (`prop = 0.8`, `seed = NULL`), controlli sugli input, un `if` che viene eseguito solo quando è fornito un seme e una lista come valore restituito. Nella [lezione sul flusso di lavoro del ML](../../../lessons/10-ml/44-ml-workflow.qmd) userai `rsample::initial_split()`, che fa lo stesso lavoro con più opzioni (per esempio la stratificazione).
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: `set.seed()` dentro una funzione
+Chiamare `set.seed()` dentro una funzione modifica lo stato del generatore di numeri casuali della **sessione intera**, non solo della funzione. Per un esempio didattico va bene, ma nel codice di produzione spesso è meglio lasciare la scelta del seme a chi chiama la funzione (chiamando `set.seed()` una volta all'inizio dello script) oppure ripristinare lo stato precedente con `withr::with_seed()`.
+:::
+
+## 10. Funzioni anonime
+
+A volte ti serve una funzione minuscola una sola volta, tipicamente come argomento di un'altra funzione. Non serve darle un nome: scrivila in forma **anonima**. Da R 4.1, `\(x)` è una forma abbreviata di `function(x)`.
+
+```{r}
+#| label: anonymous
+sapply(1:5, \(x) x^2 + 1)
+
+# lo stesso, con la forma estesa
+sapply(1:5, function(x) x^2 + 1)
+```
+
+Le funzioni anonime sono ovunque nell'R moderno: in `across()`, nella famiglia apply e in `purrr::map()` (vedi [Iterazione](17-iteration.qmd)).
+
+```{r}
+#| label: anonymous-across
+penguins |>
+  summarise(across(
+    c(bill_len, body_mass),
+    \(v) round(mean(v, na.rm = TRUE), 1)
+  ))
+```
+
+Se una funzione anonima supera una riga, dalle un nome.
+
+## 11. Quando conviene scrivere una funzione?
+
+Una linea guida utile è la **regola del tre**: *quando hai copiato e incollato lo stesso blocco di codice due volte (quindi compare tre volte), trasformalo in una funzione.*
+
+Altri buoni segnali che una funzione sarebbe utile:
+
+- ti ritrovi a cambiare lo stesso numero o nome in più punti;
+- un blocco di codice svolge un compito chiaro che puoi descrivere con un verbo;
+- vuoi verificare un pezzo di logica su input piccoli costruiti a mano (come `rescale01(c(1, 2, 3))`).
+
+Mantieni le funzioni **piccole e mirate**: una funzione, un compito. Una funzione di 200 righe è difficile da leggere quanto 200 righe di script.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Usare un vettore dove serve un singolo valore.** `x - range(x)` ricicla in silenzio e dà numeri sbagliati (Sezione 8). Usa indici espliciti: `rng[1]`, `rng[2]`.
+2. **Dimenticare di assegnare il risultato.** `rescale01(x)` stampa il risultato ma non modifica `x`. Scrivi `x01 <- rescale01(x)`.
+3. **Dipendere da variabili globali.** Se una funzione usa una variabile che non è un argomento, il suo risultato cambia quando cambia il tuo workspace. Passala come argomento.
+4. **Usare `print()` invece di restituire.** Una funzione che si limita a stampare non può essere usata in calcoli successivi. Restituisci il valore; lascia che sia chi chiama a stamparlo.
+5. **Messaggi di errore vaghi.** `stop("errore")` non aiuta nessuno. Di' che cosa ci si aspettava e che cosa è stato ricevuto.
+6. **Nomi di argomenti sbagliati assorbiti da `...`.** `mean_sd(x, na.mr = TRUE)` non rimuove gli `NA`. Controlla bene i nomi degli argomenti.
+:::
+
+## 12. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Che cosa restituisce `f(3)`, e quanto vale `z` dopo la chiamata?
+
+```r
+z <- 1
+f <- function(x) {
+  z <- x * 2
+  z + 1
+}
+```
+
+`f(3)` restituisce `7` (l'ultima espressione, `6 + 1`). La `z` globale vale ancora `1`: l'assegnazione dentro `f` ha creato una `z` *locale*.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Quanto vale `length(matrix(0, nrow = 4, ncol = 5))`?
+
+`20`. Una matrice è un vettore con un attributo `dim`, e `length()` ne conta tutti gli elementi. Usa `ncol()` per il numero di colonne.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Quando è utile `return()`, visto che R restituisce comunque l'ultima espressione?
+
+Per **uscire prima dalla funzione**, per esempio quando l'input è un caso particolare (vuoto, costante, tutto mancante) e il calcolo principale va saltato.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. La tua funzione deve restituire un modello stimato *e* il suo errore sul test. Come fai?
+
+Restituisci una lista con nomi: `list(model = fit, test_error = err)`. Chi chiama userà poi `res$model` e `res$test_error`.
+:::
+
+## 13. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — la tua prima funzione.** Scrivi una funzione `cv()` che restituisca il **coefficiente di variazione** (deviazione standard divisa per la media) di un vettore numerico, con un argomento `na.rm` che ha valore predefinito `FALSE` e viene passato a `sd()` e `mean()`. Usala su `penguins$body_mass`.
+
+```{webr}
+#| exercise: ex_14_1
+cv <- function(x, na.rm = ______) {
+  sd(x, na.rm = ______) / mean(x, na.rm = ______)
+}
+cv(penguins$body_mass, na.rm = TRUE)
+```
+
+::: {.hint exercise="ex_14_1"}
+Il valore predefinito è `FALSE`; nel corpo, passa a entrambe le funzioni l'*argomento* `na.rm` (non il valore `TRUE`).
+:::
+
+::: {.solution exercise="ex_14_1"}
+```r
+cv <- function(x, na.rm = FALSE) {
+  sd(x, na.rm = na.rm) / mean(x, na.rm = na.rm)
+}
+cv(penguins$body_mass, na.rm = TRUE)   # circa 0.19
+```
+La massa corporea varia di circa il 19% attorno alla sua media. Senza `na.rm = TRUE` il risultato è `NA`, perché per due pinguini la massa non è stata registrata.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — trova il bug.** Questa funzione dovrebbe riscalare un vettore in $[0, 1]$, ma l'output qui sotto è chiaramente sbagliato (alcuni valori sono negativi e il più grande non è 1). Trova e correggi il bug.
+
+```{webr}
+#| exercise: ex_14_2
+normalize01 <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng) / (rng[2] - rng[1])
+}
+out <- normalize01(c(10, 20, 30, 40))
+out
+range(out)
+```
+
+::: {.hint exercise="ex_14_2"}
+`rng` ha due elementi. Quale dei due va sottratto da *ogni* valore di `x`?
+:::
+
+::: {.solution exercise="ex_14_2"}
+```r
+normalize01 <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng[1]) / (rng[2] - rng[1])
+}
+normalize01(c(10, 20, 30, 40))   # 0.000 0.333 0.667 1.000
+```
+`x - rng` ricicla il vettore `c(10, 40)` lungo `x`, sottraendo il minimo nelle posizioni dispari e il massimo in quelle pari. Poiché `x` ha lunghezza pari, R non dà nemmeno un avviso.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — prevedi l'output.** Prima di eseguire il codice, scrivi che cosa stampano le tre righe in fondo. Poi eseguilo e verifica.
+
+```{webr}
+#| exercise: ex_14_3
+n <- 5
+add_n <- function(x, n = 1) {
+  n <- n * 10
+  x + n
+}
+add_n(1)
+add_n(1, n = 2)
+n
+```
+
+::: {.hint exercise="ex_14_3"}
+Dentro la funzione, `n` è l'*argomento* (predefinito 1), non la `n` globale. Le assegnazioni dentro una funzione sono locali.
+:::
+
+::: {.solution exercise="ex_14_3"}
+`add_n(1)` dà `11` (valore predefinito `n = 1`, moltiplicato per 10). `add_n(1, n = 2)` dà `21`. La `n` globale vale ancora `5`: la funzione ha modificato solo la sua copia locale.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — più risultati e controlli sugli input.** Completa `bmi_summary()`: riceve `weight` (kg) e `height` (m), si **interrompe** con un messaggio informativo se i due vettori hanno lunghezze diverse o se qualche altezza non è positiva, e restituisce una lista con il vettore dei valori di BMI (`bmi = weight / height^2`) e la loro media.
+
+```{webr}
+#| exercise: ex_14_4
+bmi_summary <- function(weight, height) {
+  stopifnot(
+    "`weight` e `height` devono avere la stessa lunghezza" = ______,
+    "tutte le altezze devono essere positive" = ______
+  )
+  bmi <- weight / height^2
+  list(bmi = ______, mean_bmi = ______)
+}
+res <- bmi_summary(c(60, 75, 90), c(1.65, 1.80, 1.75))
+res$mean_bmi
+bmi_summary(c(60, 75), c(1.65, 1.80, 1.75))   # deve fermarsi con un errore chiaro
+```
+
+::: {.hint exercise="ex_14_4"}
+Usa `length(weight) == length(height)` e `all(height > 0)`. Gli elementi della lista sono `bmi` e `mean(bmi)`.
+:::
+
+::: {.solution exercise="ex_14_4"}
+```r
+bmi_summary <- function(weight, height) {
+  stopifnot(
+    "`weight` e `height` devono avere la stessa lunghezza" =
+      length(weight) == length(height),
+    "tutte le altezze devono essere positive" = all(height > 0)
+  )
+  bmi <- weight / height^2
+  list(bmi = bmi, mean_bmi = mean(bmi))
+}
+res <- bmi_summary(c(60, 75, 90), c(1.65, 1.80, 1.75))
+res$mean_bmi   # circa 24.9
+```
+La seconda chiamata si ferma con *"`weight` e `height` devono avere la stessa lunghezza"*. Senza il controllo, R riciclerebbe `weight` e restituirebbe un BMI sbagliato per la terza persona, con un semplice avviso.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — estendi `split_data()`.** Aggiungi un argomento `strata` (il nome di una colonna, predefinito `NULL`). Quando viene fornito, esegui la suddivisione **all'interno di ciascun livello** di quella colonna, così che, per esempio, ogni specie di pinguino abbia circa il 70% dei suoi esemplari nell'insieme di addestramento. Controlla il risultato con `table(spl$train$species) / table(penguins$species)`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+split_data <- function(df, prop = 0.8, seed = NULL, strata = NULL) {
+  stopifnot(is.data.frame(df), prop > 0, prop < 1)
+  if (!is.null(seed)) set.seed(seed)
+
+  if (is.null(strata)) {
+    groups <- list(seq_len(nrow(df)))
+  } else {
+    stopifnot("`strata` deve essere una colonna di `df`" = strata %in% names(df))
+    groups <- split(seq_len(nrow(df)), df[[strata]])
+  }
+  idx_train <- unlist(lapply(groups, \(idx) {
+    idx[sample.int(length(idx), size = floor(prop * length(idx)))]
+  }))
+
+  list(train = df[idx_train, , drop = FALSE],
+       test  = df[-idx_train, , drop = FALSE])
+}
+
+spl <- split_data(penguins, prop = 0.7, seed = 1, strata = "species")
+table(spl$train$species) / table(penguins$species)   # tutti vicini a 0.7
+```
+Usiamo l'indicizzazione `idx[sample.int(length(idx), ...)]` invece di `sample(idx, ...)` perché `sample()` si comporta diversamente quando `idx` ha lunghezza 1 (campionerebbe da `1:idx`).
+:::
+:::
+
+## Riepilogo
+
+| Idea | Codice |
+|---|---|
+| Definire una funzione | `f <- function(x, y = 1) { ... }` |
+| Valore predefinito | `y = 1` nella lista degli argomenti |
+| Restituire l'ultimo valore / uscire prima | ultima espressione / `return(value)` |
+| Più risultati | `list(a = ..., b = ...)` |
+| Controllare gli input | `stopifnot("messaggio" = condizione)`, `stop("...", call. = FALSE)` |
+| Passare argomenti extra | `function(x, ...) mean(x, ...)` |
+| Funzione anonima | `\(x) x^2` |
+| Struttura degli oggetti | `length()`, `nrow()`, `ncol()`, `dim()` |
+
+- Una funzione ha un **nome, degli argomenti e un corpo**; restituisce la sua **ultima espressione**.
+- Le funzioni vedono le variabili globali ma **non possono modificarle**: restituisci i risultati e assegnali.
+- **Controlla gli input subito** e scrivi messaggi di errore che spieghino come risolvere il problema.
+- Attenzione al **riciclo silenzioso** quando usi un vettore dove serve un singolo numero.
+- Segui la **regola del tre**: hai copiato e incollato due volte? Scrivi una funzione.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitolo "Functions", <https://r4ds.hadley.nz/functions.html>
+- Wickham, *Advanced R* (2a ed.), capitoli "Functions" ed "Environments", <https://adv-r.hadley.nz>
+- La guida di stile del tidyverse, sezione sulle funzioni, <https://style.tidyverse.org/functions.html>
+:::

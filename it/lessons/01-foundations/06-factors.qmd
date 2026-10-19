@@ -1,0 +1,441 @@
+---
+title: "Fattori e tipi di variabili"
+subtitle: "Nominali, ordinali, discrete, continue: e come R memorizza le categorie"
+description: "Il primo concetto statistico del corso: i quattro tipi di variabili. Poi i fattori in R: livelli, etichette, fattori ordinati, tabelle di frequenza, riordinare e raggruppare i livelli con forcats, eliminare i livelli inutilizzati, la trappola di as.numeric() e perché i fattori contano nei modelli statistici."
+format:
+  live-html:
+    webr:
+      packages: ["forcats"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(forcats)
+```
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Vettori](04-vectors.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- classificare una variabile come **nominale**, **ordinale**, **discreta** o **continua**, e spiegare perché il tipo è importante;
+- creare fattori con `factor()`, controllando `levels`, `labels` e `ordered`;
+- contare le categorie con `table()` e riordinare i livelli con `relevel()` e `forcats`;
+- evitare la classica trappola di `as.numeric(factor)` ed eliminare i livelli inutilizzati;
+- spiegare come un fattore entra in un modello statistico tramite la codifica con variabili dummy.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(forcats)
+```
+
+## 1. Perché i tipi di variabili sono importanti?
+
+Supponi che in un questionario tu codifichi la risposta a "Su quale isola vivi?" come `1 = Biscoe`, `2 = Dream`, `3 = Torgersen`. La colonna ora contiene numeri, e R ne calcolerà volentieri la media: 1.8, per esempio. Ma "l'isola media è 1.8" non significa **nulla**. I numeri sono solo etichette.
+
+Considera ora una domanda sulla soddisfazione codificata `1 = molto insoddisfatto` … `5 = molto soddisfatto`. Qui l'ordine ha un significato (4 è più soddisfatto di 2), ma il passo da 1 a 2 è uguale a quello da 4 a 5? Non necessariamente.
+
+E la massa corporea in grammi? Una differenza di 100 g ha lo stesso significato in qualunque punto della scala, e 0 g significa "nessuna massa": possiamo calcolarne la media, fare rapporti, tutto.
+
+Il **tipo** di una variabile decide quali sintesi, grafici e metodi statistici hanno senso. È il primo concetto statistico di questo corso, e lo userai in tutte le lezioni successive.
+
+## 2. I quattro tipi di variabili
+
+Gli statistici dividono le variabili in due famiglie, ciascuna con due membri.
+
+| Famiglia | Tipo | I valori sono… | Esempio con i pinguini / in R | Sintesi sensate |
+|---|---|---|---|---|
+| **Categoriali** (qualitative) | **Nominale** | categorie **senza ordine** | `species`, `island`, `sex` | frequenze, proporzioni, moda |
+| | **Ordinale** | categorie con un **ordine naturale** | risposte a un questionario *in disaccordo < neutrale < d'accordo*; classi d'età in `esoph$agegp` | frequenze, proporzioni, mediana, percentili |
+| **Numeriche** (quantitative) | **Discreta** | **conteggi**: numeri interi, con salti tra i valori possibili | numero di insetti in `InsectSprays$count`; numero di pulcini in un nido | tutto quanto sopra + media, deviazione standard |
+| | **Continua** | **misure**: qualsiasi valore in un intervallo, limitato solo dalla precisione | `bill_len`, `flipper_len`, `body_mass` | tutto quanto sopra + media, deviazione standard |
+
+Alcune osservazioni che spesso confondono gli studenti:
+
+- **Un numero non è sempre una variabile numerica.** I codici postali, i numeri di matricola e i codici delle isole 1/2/3 visti sopra sono *nominali*: sono nomi scritti con le cifre.
+- **Arrotondare non rende discreta una variabile.** `flipper_len` è memorizzata come numero intero di millimetri, ma la lunghezza della pinna è una grandezza continua che è stata semplicemente misurata al millimetro.
+- **Le variabili binarie** (due categorie, come `sex` o le risposte sì/no) sono un caso particolare di variabili nominali. Sono molto comuni, e nella [Regressione logistica](../../../lessons/09-regression/41-logistic-regression.qmd) diventano la variabile risposta di un modello.
+- **`year`** in `penguins` è un istante temporale. Con soli tre valori (`r paste(sort(unique(penguins$year)), collapse = ", ")`) viene spesso trattato come una categoria nelle analisi.
+
+::: {.callout-tip}
+## Una regola di decisione rapida
+
+1. Puoi **fare operazioni aritmetiche** con i valori e ottenere qualcosa di sensato? Se **no** → categoriale. C'è un **ordine** naturale? Sì → ordinale; no → nominale.
+2. Se **sì** → numerica. I valori sono **conteggi** di qualcosa? Sì → discreta; altrimenti (misure) → continua.
+:::
+
+In R le variabili numeriche sono memorizzate come vettori `numeric` o `integer` (vedi [Tipi di dati](03-data-types.qmd)). Le variabili categoriali sono memorizzate come **fattori**. Guarda come `penguins` memorizza le sue colonne:
+
+```{r}
+#| label: str-penguins
+str(penguins)
+```
+
+`species`, `island` e `sex` sono fattori; le misure sono numeri.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: scale a intervalli e scale di rapporti
+
+Una classificazione più fine (dovuta a S. S. Stevens) divide le variabili numeriche in scale **a intervalli**, in cui le differenze hanno significato ma lo zero è arbitrario (la temperatura in °C: 20 °C non è "il doppio più caldo" di 10 °C), e scale **di rapporti**, con uno zero vero (massa, lunghezza, reddito: 4 kg *sono* il doppio di 2 kg). La maggior parte delle misure in questo corso è su una scala di rapporti. La distinzione conta per le affermazioni sui rapporti e per alcune trasformazioni (ad es. i logaritmi richiedono valori positivi su una scala di rapporti).
+:::
+
+## 3. Creare fattori
+
+Un **fattore** è un vettore di categorie. Memorizza una sola volta ogni categoria distinta (questi sono i suoi **livelli**) e poi registra, per ogni osservazione, a quale livello appartiene.
+
+```{r}
+#| label: factor-basic
+sex <- c("male", "female", "female", "male", "male")
+class(sex)
+
+sex_f <- factor(sex)
+sex_f
+levels(sex_f)
+nlevels(sex_f)
+```
+
+Per impostazione predefinita i livelli sono ordinati alfabeticamente. Puoi sceglierli, e sceglierne l'ordine, con `levels`:
+
+```{r}
+#| label: factor-levels
+answer <- c("yes", "no", "yes", "yes")
+factor(answer, levels = c("yes", "no"))
+```
+
+Un valore che non è tra i livelli diventa `NA`. È un'utile rete di sicurezza contro gli errori di battitura:
+
+```{r}
+#| label: factor-typo
+factor(c("yes", "no", "Yes"), levels = c("yes", "no"))
+```
+
+### Codici con etichette
+
+Spesso i dati sono memorizzati come codici numerici. `labels` li trasforma in categorie leggibili: la prima etichetta va con il primo livello, e così via:
+
+```{r}
+#| label: factor-labels
+sex_code <- c(1, 0, 0, 1, 1)
+factor(sex_code, levels = c(0, 1), labels = c("female", "male"))
+```
+
+## 4. Fattori ordinati (variabili ordinali)
+
+Per le variabili ordinali, imposta `ordered = TRUE` e indica i livelli **nell'ordine giusto**:
+
+```{r}
+#| label: ordered
+satisfaction <- factor(
+  c("agree", "neutral", "strongly agree", "disagree", "agree"),
+  levels = c("strongly disagree", "disagree", "neutral",
+             "agree", "strongly agree"),
+  ordered = TRUE
+)
+satisfaction
+```
+
+I segni `<` nei livelli stampati mostrano l'ordine. Ora i confronti hanno senso:
+
+```{r}
+#| label: ordered-compare
+satisfaction >= "agree"
+mean(satisfaction >= "agree")    # proporzione di chi è d'accordo o molto d'accordo
+max(satisfaction)
+```
+
+Con un fattore non ordinato, `>=` restituirebbe `NA` con un avviso, perché "maggiore di" non ha senso per categorie nominali. Anche R include dati ordinali: nel dataset `esoph`, le classi d'età sono un fattore ordinato.
+
+```{r}
+#| label: esoph
+levels(esoph$agegp)
+class(esoph$agegp)
+```
+
+## 5. Contare le categorie: `table()`
+
+La sintesi naturale di una variabile categoriale è una **tabella di frequenza**:
+
+```{r}
+#| label: table
+table(penguins$species)
+table(penguins$sex, useNA = "ifany")    # mostra anche i valori mancanti
+table(penguins$species, penguins$island)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+La tabella a doppia entrata conta i pinguini per ogni combinazione di specie e isola. Gli zeri sono informativi: i pinguini Chinstrap sono stati trovati solo su Dream, i Gentoo solo su Biscoe, mentre gli Adelie vivono su tutte e tre le isole. `useNA = "ifany"` rivela `r sum(is.na(penguins$sex))` pinguini di sesso sconosciuto, che `table()` per impostazione predefinita nasconde. Le tabelle di frequenza sono approfondite in [Tabelle di frequenza](../05-descriptive/21-frequency-tables.qmd).
+:::
+
+`summary()` applicato a un fattore dà gli stessi conteggi. Nota che l'ordine dei livelli decide l'ordine delle righe nelle tabelle e delle barre nei grafici, il che ci porta al riordinamento.
+
+## 6. Cambiare l'ordine dei livelli
+
+Il primo livello ha un ruolo speciale: è la categoria di **riferimento** nei modelli statistici (Sezione 8) e la prima barra nei grafici. La funzione `relevel()` di R base cambia il riferimento:
+
+```{r}
+#| label: relevel
+levels(relevel(penguins$species, ref = "Gentoo"))
+```
+
+Il pacchetto `forcats` (parte del tidyverse) offre una famiglia coerente di funzioni `fct_*()` per tutto il resto:
+
+| Funzione | Che cosa fa |
+|---|---|
+| `fct_relevel(f, "a", "b")` | sposta in testa i livelli indicati, in quell'ordine |
+| `fct_infreq(f)` | ordina i livelli per frequenza, dal più comune |
+| `fct_rev(f)` | inverte l'ordine |
+| `fct_lump_n(f, n)` | mantiene gli `n` livelli più comuni e raggruppa il resto in `"Other"` |
+| `fct_recode(f, new = "old")` | rinomina i livelli |
+| `fct_drop(f)` | elimina i livelli inutilizzati |
+
+```{r}
+#| label: forcats
+species <- penguins$species
+levels(fct_relevel(species, "Gentoo", "Chinstrap"))
+levels(fct_infreq(species))
+table(fct_lump_n(species, n = 1))
+```
+
+`fct_infreq()` è particolarmente utile prima di un grafico a barre: le barre ordinate per altezza sono molto più facili da leggere ([Grafici per variabili categoriali](../06-visualization/26-categorical-plots.qmd)). `fct_lump_n()` aiuta quando una variabile ha decine di categorie rare.
+
+## 7. Due trappole classiche
+
+### Trappola 1: convertire un fattore di numeri
+
+Internamente, un fattore memorizza dei **codici interi** (1, 2, 3, …) che puntano ai suoi livelli. `as.numeric()` restituisce quei codici, **non** i numeri scritti nelle etichette:
+
+```{r}
+#| label: as-numeric-trap
+dose <- factor(c("10", "20", "10", "5"))
+dose
+as.numeric(dose)                  # SBAGLIATO: i codici interni
+as.numeric(as.character(dose))    # GIUSTO: passa prima dal testo
+```
+
+I livelli sono `"10"`, `"20"`, `"5"` (ordinati alfabeticamente, come testo!), quindi i codici sono 1, 2, 1, 3. Non viene dato alcun avviso. Succede in pratica quando una colonna numerica viene letta per errore come fattore a causa di un valore di testo isolato.
+
+### Trappola 2: i livelli inutilizzati restano
+
+Filtrare le righe **non** rimuove i livelli:
+
+```{r}
+#| label: drop-levels
+no_chinstrap <- penguins[penguins$species != "Chinstrap", ]
+table(no_chinstrap$species)               # Chinstrap è ancora un livello, con 0 animali
+table(droplevels(no_chinstrap$species))   # elimina il livello vuoto
+```
+
+I livelli vuoti producono barre vuote nei grafici e gruppi con frequenza zero nelle tabelle o nei test. Usa `droplevels()` (su un vettore o su un intero data frame) o `forcats::fct_drop()` dopo aver filtrato.
+
+## 8. Perché i fattori contano nei modelli
+
+I modelli statistici lavorano con numeri. Quando un fattore entra in un modello, R lo trasforma automaticamente in **variabili dummy** (dette anche variabili indicatrici): una colonna 0/1 per ogni livello **tranne quello di riferimento**. Puoi vederlo con `model.matrix()`, qui per un pinguino Adelie, uno Gentoo e uno Chinstrap:
+
+```{r}
+#| label: dummy
+model.matrix(~ species, data = penguins)[c(1, 153, 277), ]
+```
+
+Adelie, il primo livello, è il riferimento: ha 0 in entrambe le colonne dummy. Un modello lineare della massa corporea in funzione della specie stima quindi la media degli Adelie (l'intercetta) e le **differenze** delle altre specie rispetto agli Adelie:
+
+```{r}
+#| label: lm-preview
+coef(lm(body_mass ~ species, data = penguins))
+```
+
+L'intercetta è la massa media dei pinguini Adelie, e `speciesGentoo` dice che i pinguini Gentoo sono in media `r round(coef(lm(body_mass ~ species, data = penguins))[3])` g più pesanti. Cambiare il riferimento con `relevel()` cambia ciò che i coefficienti confrontano, ma non le previsioni del modello. Studierai questo argomento in [Regressione multipla](../../../lessons/09-regression/39-multiple-regression.qmd).
+
+È anche per questo che i codici vanno memorizzati come fattori: `lm(mpg ~ cyl, data = mtcars)` tratta il numero di cilindri come un numero continuo (una sola pendenza), mentre `lm(mpg ~ factor(cyl), data = mtcars)` stima una media separata per 4, 6 e 8 cilindri.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Trattare i codici come numeri.** Codici delle isole, identificativi e codici postali sono nominali; la loro media non ha senso. Convertili con `factor()`.
+2. **`as.numeric()` su un fattore** restituisce i codici interni. Usa `as.numeric(as.character(f))`.
+3. **Dimenticare `ordered = TRUE`** (o indicare i livelli in ordine alfabetico invece che logico) per le variabili ordinali: "high" < "low" < "medium" non è ciò che intendevi.
+4. **Livelli inutilizzati dopo un filtro.** Chiama `droplevels()`.
+5. **Errori di battitura che diventano `NA`.** `factor(x, levels = ...)` trasforma silenziosamente in `NA` qualsiasi valore non presente in `levels` (ad es. `"Yes"` invece di `"yes"`). Controlla con `table(x, useNA = "ifany")`.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Classifica: (a) gruppo sanguigno; (b) numero di fratelli; (c) dolore su una scala nessuno/lieve/moderato/forte; (d) tempo di reazione in ms.
+
+(a) nominale; (b) discreta; (c) ordinale; (d) continua.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Che cosa restituisce `as.numeric(factor(c("3", "1", "2")))`? E `as.numeric(factor(c("30", "100")))`?
+
+`3 1 2`: qui i codici coincidono per caso con i valori, perché i livelli `"1" "2" "3"` si ordinano allo stesso modo come testo e come numeri. Il secondo dà `2 1`: come testo, `"100"` viene prima di `"30"`. La trappola è pericolosa proprio perché a volte *sembra* funzionare.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. In `lm(body_mass ~ species)`, perché non c'è un coefficiente per Adelie?
+
+Adelie è il livello di riferimento: la sua media è l'intercetta, e gli altri coefficienti sono differenze rispetto a essa.
+:::
+
+## 10. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — dai codici alle etichette.** In un questionario, l'abitudine al fumo è codificata `0 = never` (mai), `1 = former` (ex fumatore), `2 = current` (fumatore attuale). Trasforma i codici in un fattore con etichette leggibili e conta ciascuna categoria.
+
+```{webr}
+#| exercise: ex_06_1
+smoke <- c(0, 2, 1, 0, 0, 2, 1, 0)
+smoke_f <- factor(smoke, levels = ______, labels = ______)
+smoke_f
+table(smoke_f)
+```
+
+::: {.hint exercise="ex_06_1"}
+`levels = c(0, 1, 2)` e `labels = c("never", "former", "current")`.
+:::
+
+::: {.solution exercise="ex_06_1"}
+```r
+smoke_f <- factor(smoke, levels = c(0, 1, 2),
+                  labels = c("never", "former", "current"))
+table(smoke_f)    # never 4, former 2, current 2
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — una variabile ordinale.** Crea un fattore ordinato `size` a partire dai valori qui sotto, con livelli `small < medium < large`. Poi (a) trova il valore più grande, (b) conta quanti sono almeno `"medium"`.
+
+```{webr}
+#| exercise: ex_06_2
+x <- c("medium", "small", "large", "medium", "small", "large", "large")
+size <- factor(x, levels = ______, ordered = ______)
+size
+max(size)
+sum(size >= ______)
+```
+
+::: {.hint exercise="ex_06_2"}
+Indica i livelli in ordine crescente e imposta `ordered = TRUE`. Confronta con il testo `"medium"`.
+:::
+
+::: {.solution exercise="ex_06_2"}
+```r
+size <- factor(x, levels = c("small", "medium", "large"), ordered = TRUE)
+max(size)               # large
+sum(size >= "medium")   # 5
+```
+Senza `ordered = TRUE`, `max()` fallirebbe con un errore: il massimo di categorie nominali non è definito.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi la conversione.** Una colonna di dosi è stata letta come fattore. Il codice qui sotto calcola la dose media, ma la risposta è sbagliata. Correggilo.
+
+```{webr}
+#| exercise: ex_06_3
+dose <- factor(c("0.5", "1", "2", "0.5", "2", "10"))
+mean(as.numeric(dose))
+```
+
+::: {.hint exercise="ex_06_3"}
+Stampa `levels(dose)` e `as.numeric(dose)`. Che cosa sono quei numeri?
+:::
+
+::: {.solution exercise="ex_06_3"}
+```r
+mean(as.numeric(as.character(dose)))   # 2.667
+```
+`as.numeric(dose)` restituisce i codici interni dei livelli `"0.5" "1" "10" "2"` (ordine alfabetico come testo), cioè `1 2 4 1 4 3`, la cui media (2.5) non ha nulla a che vedere con le dosi.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — riordinare e raggruppare con `forcats`.** (a) Riordina i livelli di `penguins$species` per frequenza. (b) Rendi Chinstrap il livello di riferimento. (c) Mantieni solo la specie più comune e raggruppa le altre in `"Other"`; contale.
+
+```{webr}
+#| exercise: ex_06_4
+library(forcats)
+sp <- penguins$species
+levels(______(sp))
+levels(fct_relevel(sp, ______))
+table(fct_lump_n(sp, n = ______))
+```
+
+::: {.hint exercise="ex_06_4"}
+`fct_infreq()` ordina per frequenza; `fct_relevel(sp, "Chinstrap")`; `n = 1`.
+:::
+
+::: {.solution exercise="ex_06_4"}
+```r
+levels(fct_infreq(sp))                # Adelie, Gentoo, Chinstrap
+levels(fct_relevel(sp, "Chinstrap"))  # Chinstrap, Adelie, Gentoo
+table(fct_lump_n(sp, n = 1))          # Adelie 152, Other 192
+```
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — tipi e modelli.** (a) Per ogni colonna di `mtcars`, stabilisci se è nominale, ordinale, discreta o continua (usa `?mtcars`). (b) Stima `lm(mpg ~ cyl, data = mtcars)` e `lm(mpg ~ factor(cyl), data = mtcars)`. Quanti coefficienti ha ciascun modello, e che cosa significano? (c) Confronta i coefficienti del secondo modello con `tapply(mtcars$mpg, mtcars$cyl, mean)`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+coef(lm(mpg ~ cyl, data = mtcars))
+coef(lm(mpg ~ factor(cyl), data = mtcars))
+tapply(mtcars$mpg, mtcars$cyl, mean)
+```
+(a) Continue: `mpg`, `disp`, `hp`, `drat`, `wt`, `qsec`. Conteggi discreti: `cyl`, `gear`, `carb` (avendo pochi valori, spesso trattate come categorie). Nominali (binarie): `vs` (forma del motore) e `am` (tipo di cambio).
+
+(b) Il primo modello ha 2 coefficienti: assume che ogni cilindro in più cambi `mpg` della stessa quantità (una retta). Il secondo ne ha 3: l'intercetta è la media di `mpg` delle auto a 4 cilindri, e gli altri due sono le differenze delle auto a 6 e a 8 cilindri rispetto a essa.
+
+(c) Intercetta ≈ 26.7 = media delle auto a 4 cilindri; 26.7 − 6.9 ≈ 19.7 (6 cilindri); 26.7 − 11.6 ≈ 15.1 (8 cilindri).
+:::
+:::
+
+## Riepilogo
+
+| Funzione / idea | Che cosa fa |
+|---|---|
+| Nominale / ordinale / discreta / continua | I quattro tipi di variabili |
+| `factor(x, levels, labels, ordered)` | Crea un fattore |
+| `levels()`, `nlevels()` | Ispeziona i livelli |
+| `table(x, useNA = "ifany")` | Tabella di frequenza |
+| `relevel(f, ref)` | Cambia il livello di riferimento |
+| `fct_relevel()`, `fct_infreq()`, `fct_rev()`, `fct_lump_n()` | Riordina o raggruppa i livelli (forcats) |
+| `droplevels()`, `fct_drop()` | Rimuove i livelli inutilizzati |
+| `as.numeric(as.character(f))` | Conversione corretta fattore → numero |
+| `model.matrix()` | Mostra la codifica dummy usata dai modelli |
+
+- Il **tipo** di una variabile decide quali sintesi e metodi hanno senso.
+- Le variabili categoriali sono memorizzate come **fattori**; quelle ordinali come fattori **ordinati**.
+- Il **primo livello** è il riferimento nei modelli e la prima barra nei grafici.
+- Non chiamare mai `as.numeric()` direttamente su un fattore.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- *R for Data Science* (2e), capitolo "Factors", <https://r4ds.hadley.nz/factors.html>
+- Documentazione di `forcats`, <https://forcats.tidyverse.org>
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), capitolo "Hello data" (tipi di variabili), <https://openintro-ims.netlify.app>
+:::

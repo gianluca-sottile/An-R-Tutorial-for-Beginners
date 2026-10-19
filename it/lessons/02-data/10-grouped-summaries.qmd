@@ -1,0 +1,507 @@
+---
+title: "Sintesi per gruppi"
+subtitle: "Da una riga per unità a una riga per gruppo: summarise(), group_by() e across()"
+description: "Calcola sintesi con summarise(), suddividile per gruppo con group_by() o .by, riassumi molte colonne in una volta con across(), ed evita gli errori classici legati ai valori mancanti e ai gruppi rimasti attivi."
+format:
+  live-html:
+    webr:
+      packages: ["dplyr", "tibble"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+library(tibble)
+```
+
+::: {.lesson-meta}
+[Livello 1 · Fondamenti]{.level-1} [⏱ ~60 min]{} [Prerequisiti: [Manipolazione dei dati con dplyr](09-dplyr-verbs.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- ridurre un data frame a statistiche di sintesi con `summarise()`, `n()` e `n_distinct()`;
+- calcolare le stesse sintesi **per ciascun gruppo** con `group_by()` o con l'argomento `.by`;
+- applicare più funzioni a più colonne in una volta con `across()` e controllare i nomi con `.names`;
+- usare `mutate()` per gruppi per confrontare ogni unità con il proprio gruppo (es. centratura entro il gruppo);
+- riconoscere ed evitare i due errori classici: i valori mancanti e i dati raggruppati che "trapelano" nei passaggi successivi.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(tibble)
+```
+
+## 1. Perché sintetizzare?
+
+Una tabella con 344 pinguini è troppo lunga da *leggere*. Per rispondere a domande come "i pinguini Gentoo sono più pesanti degli Adelie?" dobbiamo **comprimere** molte righe in pochi numeri: una media, una deviazione standard, un conteggio, cioè un insieme di numeri per ciascuna specie.
+
+È il primo passo della **statistica descrittiva**: descrivere una variabile con poche sintesi ben scelte, separatamente per ogni gruppo che vogliamo confrontare. Le statistiche vere e proprie (media contro mediana, deviazione standard, IQR…) sono discusse in [Statistiche di sintesi](../05-descriptive/22-summary-statistics.qmd); qui impariamo gli **strumenti** per calcolarle.
+
+```{r}
+#| label: data
+penguins <- as_tibble(penguins)
+```
+
+## 2. `summarise()`: da molte righe a una
+
+```{r}
+#| label: summarise-na
+penguins |>
+  summarise(mean_mass = mean(body_mass))
+```
+
+Il risultato è `NA`: due pinguini hanno la massa corporea mancante, e la media di un insieme di numeri che include un numero sconosciuto è sconosciuta. Dobbiamo dire esplicitamente che i valori mancanti vanno rimossi:
+
+```{r}
+#| label: summarise-basic
+penguins |>
+  summarise(
+    mean_mass = mean(body_mass, na.rm = TRUE),
+    sd_mass   = sd(body_mass, na.rm = TRUE),
+    n         = n(),
+    n_mass    = sum(!is.na(body_mass))
+  )
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- L'output ha **una riga**, perché abbiamo sintetizzato l'intera tabella, e una colonna per ogni sintesi.
+- `n()` conta le **righe** (`r nrow(penguins)`), comprese quelle con massa mancante; `sum(!is.na(body_mass))` conta i **valori non mancanti** (`r sum(!is.na(penguins$body_mass))`). La media è stata calcolata sul secondo numero: è questa la numerosità campionaria da riportare.
+:::
+
+`summarise()` accetta qualsiasi funzione che restituisca **un solo valore**: `mean()`, `median()`, `sd()`, `min()`, `max()`, `quantile(x, 0.9)`, e anche `n()` (numero di righe) e `n_distinct()` (numero di valori diversi).
+
+## 3. Sintesi per gruppo
+
+La vera potenza arriva quando dividiamo la tabella in gruppi, sintetizziamo ciascun gruppo e impiliamo i risultati. Questa idea si chiama **split–apply–combine** (dividi, applica, ricombina).
+
+### `group_by()` + `summarise()`
+
+```{r}
+#| label: group-by
+penguins |>
+  group_by(species) |>
+  summarise(
+    mean_mass = mean(body_mass, na.rm = TRUE),
+    sd_mass   = sd(body_mass, na.rm = TRUE),
+    n         = n()
+  )
+```
+
+Ora c'è **una riga per specie**. In media i pinguini Gentoo sono circa `r round(mean(penguins$body_mass[penguins$species == "Gentoo"], na.rm = TRUE) - mean(penguins$body_mass[penguins$species == "Adelie"], na.rm = TRUE), -2)` g più pesanti degli Adelie. Se una differenza del genere possa essere dovuta al caso è una domanda per i [test t](../08-inference/34-t-tests.qmd).
+
+### L'argomento `.by`
+
+Da dplyr 1.1 puoi raggruppare **per una singola operazione** con `.by`:
+
+```{r}
+#| label: by-arg
+penguins |>
+  summarise(
+    mean_mass = mean(body_mass, na.rm = TRUE),
+    n = n(),
+    .by = species
+  )
+```
+
+I numeri sono gli stessi. Ci sono due differenze: il risultato **non è mai raggruppato** dopo l'operazione (vedi la sezione 6), e i gruppi compaiono nell'ordine in cui si presentano per la prima volta nei dati, non in ordine alfabetico. Aggiungi `arrange(species)` se ti serve una tabella ordinata.
+
+### Più variabili di raggruppamento
+
+```{r}
+#| label: two-groups
+penguins |>
+  filter(!is.na(sex)) |>
+  summarise(
+    mean_flipper = mean(flipper_len, na.rm = TRUE),
+    n = n(),
+    .by = c(species, sex)
+  ) |>
+  arrange(species, sex)
+```
+
+Ogni riga è ora una **combinazione** di specie e sesso. In ogni specie i maschi hanno in media pinne più lunghe: un esempio di andamento che si vede solo dopo aver raggruppato.
+
+### `n_distinct()`
+
+```{r}
+#| label: n-distinct
+penguins |>
+  summarise(
+    n_islands = n_distinct(island),
+    n_years   = n_distinct(year),
+    .by = species
+  )
+```
+
+Solo i pinguini Adelie sono stati campionati su tutte e tre le isole; tienilo a mente prima di confrontare le isole, perché isola e specie sono **confuse** (mescolate tra loro, cioè confondenti l'una per l'altra).
+
+## 4. Molte colonne in una volta: `across()`
+
+Scrivere `mean(..., na.rm = TRUE)` per ogni colonna è noioso e soggetto a errori. `across()` applica una o più funzioni a un insieme di colonne:
+
+```{r}
+#| label: across-one
+penguins |>
+  summarise(
+    across(starts_with("bill"), \(x) mean(x, na.rm = TRUE)),
+    .by = species
+  )
+```
+
+Il primo argomento di `across()` seleziona le colonne (con una qualsiasi delle funzioni ausiliarie di `select()`); il secondo è la funzione. `\(x) mean(x, na.rm = TRUE)` è una **funzione anonima**: "prendi una colonna `x` e restituisci la sua media senza i valori mancanti".
+
+Con **più funzioni**, assegna loro un nome in una lista; `.names` costruisce i nomi delle colonne a partire dalla colonna (`{.col}`) e dal nome della funzione (`{.fn}`):
+
+```{r}
+#| label: across-many
+penguins |>
+  summarise(
+    across(
+      c(bill_len, flipper_len),
+      list(mean = \(x) mean(x, na.rm = TRUE),
+           sd   = \(x) sd(x, na.rm = TRUE)),
+      .names = "{.col}_{.fn}"
+    ),
+    .by = species
+  )
+```
+
+`across()` funziona anche dentro `mutate()`, per esempio per arrotondare tutte le colonne numeriche: `mutate(across(where(is.numeric), \(x) round(x, 1)))`. Sostituisce le vecchie `summarise_at()`, `mutate_if()` e funzioni simili, che potresti ancora incontrare nel codice meno recente.
+
+## 5. `mutate()` per gruppi: confrontare un'unità con il suo gruppo
+
+`summarise()` restituisce una riga per gruppo. `mutate()` con i gruppi tiene **tutte le righe**, ma calcola le statistiche di gruppo per ciascuna riga. Un uso tipico è la **centratura entro il gruppo**: di quanto ogni pinguino è più pesante della media della propria specie?
+
+```{r}
+#| label: grouped-mutate
+centred <- penguins |>
+  mutate(
+    species_mean  = mean(body_mass, na.rm = TRUE),
+    mass_centred  = body_mass - species_mean,
+    .by = species
+  ) |>
+  select(species, body_mass, species_mean, mass_centred)
+
+centred
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `species_mean` è uguale per tutti i pinguini di una specie: viene ripetuto su ogni riga.
+- `mass_centred` è positivo per i pinguini più pesanti della media della loro specie, negativo per quelli più leggeri. All'interno di ogni specie, la sua media è zero (a meno di arrotondamenti).
+- Un Gentoo con `mass_centred = 0` è "nella media per un Gentoo", anche se è molto più pesante di qualsiasi Adelie medio. La centratura elimina le differenze *tra* i gruppi per concentrarsi sulla variabilità *entro* i gruppi.
+:::
+
+Altri `mutate()` per gruppi molto comuni: la quota di ciascuna unità sul totale del gruppo (`x / sum(x)`), il rango entro il gruppo (`min_rank(desc(x))`) o un **punteggio z entro il gruppo** (`(x - mean(x)) / sd(x)`), che ritroverai nella statistica descrittiva.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: variabilità entro i gruppi e tra gruppi
+
+Indichiamo con $x_{ij}$ la massa del pinguino $i$ della specie $j$, con $\bar x_j$ la media della specie e con $\bar x$ la media complessiva. Allora
+
+$$
+x_{ij} - \bar x \;=\; \underbrace{(\bar x_j - \bar x)}_{\text{tra gruppi}} \;+\; \underbrace{(x_{ij} - \bar x_j)}_{\text{entro il gruppo (centrato)}} .
+$$
+
+Sommando i quadrati di ciascuna parte su tutti i pinguini, la variabilità totale si scompone in una parte tra gruppi e una parte entro i gruppi. Questa scomposizione è il cuore dell'[ANOVA](../08-inference/37-anova.qmd).
+:::
+
+## 6. Data frame raggruppati e `ungroup()`
+
+`group_by()` attacca il raggruppamento **al data frame**, e lì rimane. È comodo, ma è anche la fonte di un bug sottile. Supponiamo di volere la proporzione di ciascuna combinazione specie–sesso sul *totale* dei pinguini:
+
+```{r}
+#| label: leak
+penguins |>
+  filter(!is.na(sex)) |>
+  group_by(species, sex) |>
+  summarise(n = n()) |>
+  mutate(prop = n / sum(n))
+```
+
+Le proporzioni sommano a 1 **all'interno di ogni specie**, non complessivamente. Dopo `summarise()`, il risultato è ancora raggruppato per `species` (summarise rimuove solo l'*ultima* variabile di raggruppamento), quindi `sum(n)` è stato calcolato per specie. Ecco tre modi per essere espliciti:
+
+```{r}
+#| label: leak-fix
+# 1. rimuovi il raggruppamento
+penguins |>
+  filter(!is.na(sex)) |>
+  group_by(species, sex) |>
+  summarise(n = n()) |>
+  ungroup() |>
+  mutate(prop = n / sum(n))
+```
+
+```{r}
+#| label: leak-fix-2
+# 2. elimina i gruppi dentro summarise()
+penguins |>
+  filter(!is.na(sex)) |>
+  group_by(species, sex) |>
+  summarise(n = n(), .groups = "drop") |>
+  mutate(prop = n / sum(n))
+
+# 3. usa .by, che non lascia mai gruppi attivi
+penguins |>
+  filter(!is.na(sex)) |>
+  summarise(n = n(), .by = c(species, sex)) |>
+  mutate(prop = n / sum(n))
+```
+
+Nessuno dei due risultati è "sbagliato": le proporzioni entro la specie e le proporzioni sul totale rispondono a **domande diverse**. Il bug consiste nell'ottenere l'una quando intendevi l'altra. Quando un tibble è raggruppato, la sua stampa inizia con una riga come `# Groups: species [3]`: impara a cercarla.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Dimenticare `na.rm = TRUE`.** Un solo valore mancante trasforma media, sd, min, max e somma in `NA`.
+2. **Riportare `n()` come numerosità campionaria** quando la variabile ha valori mancanti. Usa `sum(!is.na(x))` per il numero di valori effettivamente usati.
+3. **Dati raggruppati che trapelano nei passaggi successivi.** Dopo `group_by()`, ogni `mutate()`, `summarise()` e `slice_*()` successivo lavora per gruppo. Usa `.by`, `.groups = "drop"` o `ungroup()`.
+4. **Usare `mutate()` quando volevi `summarise()`** (o viceversa). `summarise()` dà una riga per gruppo; `mutate()` tiene tutte le righe.
+5. **Confrontare le medie dei gruppi senza guardarne la numerosità.** Una media basata su 5 unità è molto meno affidabile di una basata su 150; riporta sempre `n` accanto alla media.
+:::
+
+## 7. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Quante righe restituisce `penguins |> summarise(m = mean(bill_len, na.rm = TRUE), .by = c(species, island))`?
+
+Una per ogni combinazione specie–isola **presente nei dati**: Adelie su tre isole, Chinstrap su una, Gentoo su una, quindi 5 righe.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Qual è la differenza tra queste due righe?
+
+`penguins |> summarise(m = mean(body_mass, na.rm = TRUE), .by = species)` e `penguins |> mutate(m = mean(body_mass, na.rm = TRUE), .by = species)`
+
+La prima restituisce 3 righe (una per specie). La seconda restituisce tutte le 344 righe, con la media della specie ripetuta su ogni riga.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Dopo `group_by(species, sex) |> summarise(n = n())`, per quale variabile il risultato è ancora raggruppato?
+
+Per `species`. `summarise()` elimina solo l'ultima variabile di raggruppamento (`sex`). Usa `.groups = "drop"` per eliminarle tutte.
+:::
+
+## 8. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+```{webr}
+#| setup: true
+#| exercise: ex_10_1
+penguins <- tibble::as_tibble(penguins)
+```
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — sintesi per specie.** Per ogni specie calcola la mediana della massa corporea, la deviazione standard della massa corporea e il numero di valori non mancanti della massa corporea.
+
+```{webr}
+#| exercise: ex_10_1
+penguins |>
+  summarise(
+    median_mass = median(body_mass, ______),
+    sd_mass     = ______,
+    n_mass      = sum(!is.na(______)),
+    .by = ______
+  )
+```
+
+::: {.hint exercise="ex_10_1"}
+Ogni funzione ha bisogno di `na.rm = TRUE`. Raggruppa con `.by = species`.
+:::
+
+::: {.solution exercise="ex_10_1"}
+```r
+penguins |>
+  summarise(
+    median_mass = median(body_mass, na.rm = TRUE),
+    sd_mass     = sd(body_mass, na.rm = TRUE),
+    n_mass      = sum(!is.na(body_mass)),
+    .by = species
+  )
+```
+I Gentoo hanno la mediana della massa più alta; i conteggi sono 151 (Adelie), 123 (Gentoo) e 68 (Chinstrap).
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_10_2
+penguins <- tibble::as_tibble(penguins)
+```
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — `across()`.** Calcola per ogni specie la media di **tutte le misure numeriche** tranne `year` (cioè `bill_len`, `bill_dep`, `flipper_len`, `body_mass`), con nomi di colonna come `bill_len_mean`.
+
+```{webr}
+#| exercise: ex_10_2
+penguins |>
+  summarise(
+    across(
+      c(bill_len:body_mass),
+      list(mean = ______),
+      .names = ______
+    ),
+    .by = species
+  )
+```
+
+::: {.hint exercise="ex_10_2"}
+La funzione è `\(x) mean(x, na.rm = TRUE)`; lo schema dei nomi è `"{.col}_{.fn}"`.
+:::
+
+::: {.solution exercise="ex_10_2"}
+```r
+penguins |>
+  summarise(
+    across(
+      c(bill_len:body_mass),
+      list(mean = \(x) mean(x, na.rm = TRUE)),
+      .names = "{.col}_{.fn}"
+    ),
+    .by = species
+  )
+```
+I pinguini Chinstrap hanno in media il becco più lungo (circa 48.8 mm), i Gentoo il meno profondo (circa 15.0 mm) ma le pinne più lunghe.
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_10_3
+penguins <- tibble::as_tibble(penguins)
+```
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi le proporzioni.** L'obiettivo è la proporzione di pinguini su ciascuna isola **sul totale dei pinguini**, ma la colonna `prop` contiene solo uni. Perché? Correggi il codice.
+
+```{webr}
+#| exercise: ex_10_3
+penguins |>
+  group_by(island) |>
+  summarise(n = n()) |>
+  group_by(island) |>
+  mutate(prop = n / sum(n))
+```
+
+::: {.hint exercise="ex_10_3"}
+All'interno di ogni gruppo-isola c'è una sola riga, quindi `n / sum(n)` vale sempre 1. Rimuovi il secondo `group_by()` (oppure usa `.by` in `summarise()`).
+:::
+
+::: {.solution exercise="ex_10_3"}
+```r
+penguins |>
+  summarise(n = n(), .by = island) |>
+  mutate(prop = n / sum(n))
+```
+Biscoe ospita la quota più grande del campione (circa il 49%), Torgersen la più piccola (circa il 15%).
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_10_4
+penguins <- tibble::as_tibble(penguins)
+```
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — punteggi z entro la specie.** Aggiungi una colonna `z_mass` con la massa corporea standardizzata **entro la specie**: sottrai la media della specie e dividi per la deviazione standard della specie. Poi verifica che, all'interno di ogni specie, `z_mass` abbia media 0 e deviazione standard 1.
+
+```{webr}
+#| exercise: ex_10_4
+penguins |>
+  mutate(
+    z_mass = ______,
+    .by = species
+  ) |>
+  summarise(
+    mean_z = mean(z_mass, na.rm = TRUE),
+    sd_z   = sd(z_mass, na.rm = TRUE),
+    .by = species
+  )
+```
+
+::: {.hint exercise="ex_10_4"}
+`(body_mass - mean(body_mass, na.rm = TRUE)) / sd(body_mass, na.rm = TRUE)`.
+:::
+
+::: {.solution exercise="ex_10_4"}
+```r
+penguins |>
+  mutate(
+    z_mass = (body_mass - mean(body_mass, na.rm = TRUE)) /
+      sd(body_mass, na.rm = TRUE),
+    .by = species
+  ) |>
+  summarise(
+    mean_z = mean(z_mass, na.rm = TRUE),
+    sd_z   = sd(z_mass, na.rm = TRUE),
+    .by = species
+  )
+```
+Le medie vengono stampate come 0 (o come numeri minuscoli tipo `1e-16`, che sono errori di arrotondamento) e le deviazioni standard come 1. Un pinguino con `z_mass = 2` è di due deviazioni standard più pesante della media della *propria* specie.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — ozono mensile.** Con `airquality`, calcola per ogni `Month`: la media di `Ozone`, il numero di giorni, il numero di giorni con `Ozone` mancante e il massimo di `Temp`. Quale mese ha più valori di ozono mancanti? Perché è importante quando si confrontano le medie mensili?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+airquality |>
+  summarise(
+    mean_ozone = mean(Ozone, na.rm = TRUE),
+    n_days     = n(),
+    n_missing  = sum(is.na(Ozone)),
+    max_temp   = max(Temp),
+    .by = Month
+  )
+```
+Giugno (`Month == 6`) ha 21 valori di ozono mancanti su 30 giorni, quindi la sua media si basa su soli 9 giorni ed è molto meno affidabile delle altre. Se i giorni mancanti non sono un sottoinsieme casuale (per esempio, se lo strumento si è guastato in particolari tipi di giornate), la media di giugno potrebbe anche essere distorta: vedi [Dati mancanti](../04-io/20-missing-data.qmd).
+:::
+:::
+
+## Riepilogo
+
+| Strumento | Che cosa fa | Esempio |
+|---|---|---|
+| `summarise()` | molte righe → una riga (per gruppo) | `summarise(m = mean(x, na.rm = TRUE))` |
+| `n()`, `n_distinct()` | numero di righe / di valori distinti | `summarise(n = n(), k = n_distinct(g))` |
+| `.by =` | raggruppa per una sola operazione | `summarise(..., .by = c(g1, g2))` |
+| `group_by()` | attacca i gruppi ai dati | `group_by(g)`, poi `summarise(...)` |
+| `across()` | stessa/e funzione/i su molte colonne | `across(where(is.numeric), list(mean = mean))` |
+| `mutate()` per gruppi | statistica di gruppo su ogni riga | `mutate(xc = x - mean(x), .by = g)` |
+| `ungroup()`, `.groups = "drop"` | rimuove i gruppi | `summarise(..., .groups = "drop")` |
+
+- `summarise()` comprime, `mutate()` tiene tutte le righe: scegli in base alla domanda.
+- Usa sempre `na.rm = TRUE` in modo consapevole, e riporta il numero di valori non mancanti.
+- Preferisci `.by`: raggruppa per un solo passaggio ed evita gruppi rimasti attivi.
+- Le sintesi per gruppo sono la materia prima della [statistica descrittiva](../05-descriptive/22-summary-statistics.qmd) e dei [confronti tra gruppi](../05-descriptive/23-two-variables.qmd).
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitolo "Data transformation" (gruppi), <https://r4ds.hadley.nz>
+- Vignette di dplyr "Column-wise operations" (`across()`), <https://dplyr.tidyverse.org/articles/colwise.html>
+- Documentazione di dplyr sul raggruppamento per singola operazione (`.by`), <https://dplyr.tidyverse.org/reference/dplyr_by.html>
+:::

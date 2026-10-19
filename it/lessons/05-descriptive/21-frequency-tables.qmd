@@ -1,0 +1,530 @@
+---
+title: "Tabelle di frequenza"
+subtitle: "Quanto spesso compare ciascun valore? Conteggi, percentuali e classi"
+description: "Descrivere la distribuzione di variabili categoriali e discrete con frequenze assolute, relative e cumulate, usando table(), prop.table(), dplyr::count() e janitor::tabyl(), e raggruppare una variabile continua in classi con cut()."
+format:
+  live-html:
+    webr:
+      packages: ["dplyr"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+```
+
+::: {.lesson-meta}
+[Livello 2 · Descrivere ed esplorare]{.level-2} [⏱ ~60 min]{} [Prerequisiti: [Fattori](../01-foundations/06-factors.qmd), [Riepiloghi per gruppi](../02-data/10-grouped-summaries.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- costruire tabelle di frequenza **assolute**, **relative** e **cumulate** in R base e con `dplyr`;
+- produrre tabelle a una via pronte per la pubblicazione con `janitor::tabyl()` e le funzioni ausiliarie `adorn_*()`;
+- trovare la **moda** di una variabile categoriale o discreta;
+- raggruppare una variabile continua in **classi** con `cut()` e spiegare perché la scelta delle classi è importante;
+- leggere una tabella di frequenza con occhio critico (denominatori, valori mancanti, arrotondamenti).
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(janitor)
+```
+
+## 1. Perché contare?
+
+Il dataset `penguins` contiene `r nrow(penguins)` pinguini. Se qualcuno chiede *"quali specie hanno studiato i ricercatori?"*, stampare la colonna `species` ti restituisce `r nrow(penguins)` parole in fila: corretto, ma inutile. Quello che vogliamo davvero sapere è:
+
+> Quali valori compaiono, e **quanto spesso** compare ciascuno?
+
+L'elenco dei valori insieme alla frequenza con cui compaiono si chiama **distribuzione** di una variabile. Una **tabella di frequenza** è il modo più semplice per mostrare una distribuzione. Di solito è la prima cosa che uno statistico guarda per qualsiasi variabile categoriale, ed è la base da cui si costruiscono ogni grafico a barre, ogni istogramma e ogni percentuale di un report.
+
+## 2. Quale tabella per quale variabile?
+
+Ricorda i quattro tipi di variabili visti nella lezione sui [Fattori](../01-foundations/06-factors.qmd):
+
+| Tipo | Esempio in `penguins` | I valori hanno un ordine? | Sintesi tipica |
+|---|---|---|---|
+| **Nominale** (categoriale, non ordinata) | `species`, `island`, `sex` | No | Conteggi, percentuali, moda |
+| **Ordinale** (categoriale, ordinata) | una classe di taglia "piccola / media / grande" | Sì | Conteggi, percentuali, percentuali **cumulate**, categoria mediana |
+| Numerica **discreta** (pochi valori distinti) | `year` (2007, 2008, 2009) | Sì | Come per le ordinali |
+| Numerica **continua** | `body_mass`, `flipper_len` | Sì | Tabella di frequenza solo dopo il raggruppamento in **classi** (Sezione 9) |
+
+Le tabelle di frequenza funzionano direttamente per i primi tre tipi. Per una variabile continua quasi tutti i valori sono diversi, quindi una tabella dei singoli valori avrebbe centinaia di righe con frequenza 1: prima dobbiamo raggruppare i valori.
+
+## 3. Frequenze assolute con `table()`
+
+La **frequenza assoluta** $n_i$ di un valore è semplicemente il numero di osservazioni che assumono quel valore.
+
+```{r}
+#| label: table-species
+table(penguins$species)
+```
+
+L'output elenca ogni livello del fattore e quanti pinguini vi appartengono. La somma dei conteggi è pari al numero di osservazioni:
+
+```{r}
+#| label: table-sum
+sum(table(penguins$species))
+```
+
+### Valori mancanti
+
+Per impostazione predefinita `table()` **scarta in silenzio gli `NA`**. La variabile `sex` ha valori mancanti, e dall'output predefinito non te ne accorgeresti mai:
+
+```{r}
+#| label: table-sex
+table(penguins$sex)
+table(penguins$sex, useNA = "ifany")
+```
+
+`useNA = "ifany"` aggiunge una colonna `NA` solo quando ci sono valori mancanti. Prendi l'abitudine di usarlo: una tabella che nasconde `r sum(is.na(penguins$sex))` pinguini di sesso ignoto racconta una storia diversa da una che li mostra.
+
+## 4. Frequenze relative con `prop.table()`
+
+I conteggi sono difficili da confrontare tra dataset di dimensioni diverse: 50 su 100 è tanto, 50 su 10.000 no. La **frequenza relativa** divide ciascun conteggio per il totale:
+
+$$
+f_i = \frac{n_i}{n}.
+$$
+
+```{r}
+#| label: prop-species
+tab_species <- table(penguins$species)
+prop.table(tab_species)
+round(100 * prop.table(tab_species), 1)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- La prima tabella fornisce le **proporzioni** (comprese tra 0 e 1), la cui somma è 1.
+- La seconda moltiplica per 100 e arrotonda: sono le **percentuali**. Circa il `r round(100 * prop.table(tab_species)[["Adelie"]])`% dei pinguini nei dati appartiene alla specie Adelie.
+- A causa dell'arrotondamento, le percentuali arrotondate non sempre sommano esattamente a 100 (per esempio 99.9 o 100.1). È normale: segnalalo in una nota invece di "correggere" un numero a mano.
+- Sono percentuali **dei pinguini di questo dataset**, non di tutti i pinguini dell'Antartide. Che descrivano o meno una popolazione più ampia dipende da come sono stati campionati: è una questione da [Livello 3](../07-probability/30-sampling-distributions.qmd).
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: notazione per le distribuzioni di frequenza
+
+Supponi che una variabile assuma $K$ valori (o categorie) distinti $x_1, \dots, x_K$ in un campione di numerosità $n$. Allora
+
+- frequenze assolute: $n_1, \dots, n_K$ con $\sum_{i=1}^K n_i = n$;
+- frequenze relative: $f_i = n_i / n$ con $0 \le f_i \le 1$ e $\sum_{i=1}^K f_i = 1$;
+- per valori ordinati $x_1 < x_2 < \dots < x_K$, frequenze cumulate: $N_j = \sum_{i \le j} n_i$ e $F_j = \sum_{i \le j} f_i = N_j / n$, così che $F_K = 1$.
+
+La successione $F_1, \dots, F_K$ è la **funzione di ripartizione empirica** valutata nei valori osservati; la ritroverai sotto forma di grafico in [Grafici per le distribuzioni](../06-visualization/25-distribution-plots.qmd).
+:::
+
+## 5. L'approccio tidy: `dplyr::count()`
+
+Quando i dati sono in un data frame (di solito è così), `dplyr::count()` fornisce le stesse informazioni sotto forma di data frame con cui puoi continuare a lavorare:
+
+```{r}
+#| label: count-island
+penguins |>
+  count(island) |>
+  mutate(prop = n / sum(n),
+         percent = round(100 * prop, 1))
+```
+
+`count(island)` è una scorciatoia per `group_by(island) |> summarise(n = n())`. Il `mutate()` aggiunge la frequenza relativa. Due opzioni utili:
+
+```{r}
+#| label: count-sort
+penguins |>
+  count(sex, sort = TRUE)   # prima il gruppo più numeroso; NA resta come riga a sé
+```
+
+Nota una differenza rispetto a `table()`: `count()` **mantiene i valori mancanti** come riga. Quindi `n / sum(n)` usa *tutti* i pinguini come denominatore. Se vuoi la percentuale tra i pinguini di sesso noto, elimina prima i valori mancanti (`filter(!is.na(sex))`). Entrambe le scelte sono legittime, ma devi dichiarare quale riporti.
+
+## 6. Tabelle pronte per la pubblicazione con `janitor::tabyl()`
+
+Il pacchetto `janitor` racchiude tutto questo in una sola funzione, il cui output è un data frame con conteggi e percentuali:
+
+```{r}
+#| label: tabyl-sex
+penguins |>
+  tabyl(sex)
+```
+
+`tabyl()` riporta `percent` (denominatore: tutti i pinguini, `NA` compresi) **e** `valid_percent` (denominatore: pinguini con valore noto). Le funzioni `adorn_*()` rifiniscono poi la tabella per un report:
+
+```{r}
+#| label: tabyl-adorn
+penguins |>
+  tabyl(species) |>
+  adorn_totals("row") |>
+  adorn_pct_formatting(digits = 1)
+```
+
+`adorn_totals("row")` aggiunge una riga *Total* e `adorn_pct_formatting()` trasforma le proporzioni in percentuali formattate. Le percentuali formattate sono **testo**: fallo quindi solo come ultimissimo passo, dopo tutti i calcoli.
+
+## 7. La moda
+
+La **moda** è il valore più frequente. È l'unico "valore medio" che abbia senso per una variabile nominale (non puoi calcolare la media di `"Adelie"`, `"Gentoo"` e `"Chinstrap"`). R non ha una funzione predefinita per la moda statistica (`mode()` restituisce il tipo di *memorizzazione* di un oggetto!), ma è facile ricavarla da una tabella:
+
+```{r}
+#| label: mode
+tab_island <- table(penguins$island)
+names(tab_island)[tab_island == max(tab_island)]
+```
+
+Confrontiamo con `max()` invece di usare `which.max()` perché una distribuzione può avere **due o più mode** (pareggi); `which.max()` restituirebbe in silenzio solo la prima.
+
+## 8. Variabili ordinali e discrete: frequenze cumulate
+
+Quando i valori hanno un ordine naturale, diventa sensata una nuova domanda: *"quante osservazioni assumono **al massimo** questo valore?"* La **frequenza cumulata** risponde sommando i conteggi dal valore più piccolo verso l'alto.
+
+Il numero di marce in avanti in `mtcars` è una variabile discreta:
+
+```{r}
+#| label: cumulative-gear
+tab_gear <- table(mtcars$gear)
+data.frame(
+  gears    = names(tab_gear),
+  n        = as.vector(tab_gear),
+  percent  = round(100 * as.vector(prop.table(tab_gear)), 1),
+  cum_perc = round(100 * cumsum(as.vector(prop.table(tab_gear))), 1)
+)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+Leggi l'ultima colonna come "*al massimo* questo numero di marce": il `r round(100 * cumsum(prop.table(tab_gear))[["4"]], 1)`% delle auto ha **4 marce o meno**. L'ultima percentuale cumulata è sempre 100. Una colonna cumulata non avrebbe senso per `species`, perché "al massimo Chinstrap" non significa nulla quando le categorie non hanno un ordine.
+:::
+
+### L'ordine dei livelli conta
+
+`cumsum()` somma i conteggi **nell'ordine in cui compaiono nella tabella**, e per un fattore questo è l'ordine dei suoi livelli. Per dati testuali tale ordine è alfabetico, il che di solito è sbagliato per risposte ordinali. Ecco un piccolo questionario:
+
+```{r}
+#| label: survey-wrong
+answers <- c("Agree", "Neutral", "Disagree", "Agree", "Strongly agree",
+             "Agree", "Neutral", "Strongly agree", "Disagree", "Agree")
+table(answers)    # ordine alfabetico: Agree, Disagree, Neutral, Strongly agree
+```
+
+Una percentuale cumulata calcolata su questa tabella mescolerebbe la scala. Dichiara l'ordine in modo esplicito con un **fattore ordinato**:
+
+```{r}
+#| label: survey-right
+likert <- c("Strongly disagree", "Disagree", "Neutral",
+            "Agree", "Strongly agree")
+answers_f <- factor(answers, levels = likert, ordered = TRUE)
+
+tab_ans <- table(answers_f)
+round(100 * cumsum(prop.table(tab_ans)), 1)
+```
+
+Nota che ora la categoria vuota "Strongly disagree" compare con conteggio 0: è una risposta possibile che nessuno ha scelto, e anche questa è un'informazione. Dalle percentuali cumulate possiamo leggere la **categoria mediana**: la prima categoria la cui percentuale cumulata raggiunge il 50%, in questo caso `r names(tab_ans)[which(cumsum(prop.table(tab_ans)) >= 0.5)[1]]`.
+
+## 9. Variabili continue: raggruppare in classi con `cut()`
+
+Per tabulare `body_mass` dobbiamo raggruppare i valori in **classi** (dette anche *bin* o *intervalli*). La funzione `cut()` fa proprio questo:
+
+```{r}
+#| label: cut-500
+mass_class <- cut(penguins$body_mass,
+                  breaks = seq(2500, 6500, by = 500),
+                  dig.lab = 4)
+table(mass_class, useNA = "ifany")
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- `(3000,3500]` significa "più di 3000 g e **fino a 3500 g incluso**". Per impostazione predefinita le classi sono aperte a sinistra e chiuse a destra (`right = TRUE`); usa `right = FALSE` per ottenere `[3000,3500)`.
+- `breaks` deve coprire l'intero campo di variazione dei dati, altrimenti i valori esterni diventano `NA`. Aggiungi `include.lowest = TRUE` se il minimo coincide con il primo estremo.
+- `dig.lab = 4` impedisce a R di scrivere gli estremi in notazione scientifica (`3e+03`).
+:::
+
+Puoi dare alle classi nomi leggibili con `labels`, ottenendo così anche una variabile ordinale:
+
+```{r}
+#| label: cut-labels
+size_class <- cut(penguins$body_mass,
+                  breaks = c(-Inf, 3500, 4500, Inf),
+                  labels = c("small", "medium", "large"),
+                  ordered_result = TRUE)
+table(size_class, useNA = "ifany")
+```
+
+### Perché la scelta delle classi è importante
+
+Raggruppare comporta sempre una perdita di informazione, e **classi diverse possono raccontare storie diverse**. Confronta le classi da 500 g viste sopra con classi più larghe, da 900 g:
+
+```{r}
+#| label: cut-900
+table(cut(penguins$body_mass,
+          breaks = seq(2700, 6300, by = 900),
+          include.lowest = TRUE, dig.lab = 4))
+```
+
+Con classi da 500 g vedi che le masse più comuni sono tra 3500 e 4000 g e che c'è una lunga "spalla" di pinguini più pesanti (soprattutto Gentoo). Con quattro classi larghe questo dettaglio scompare e la distribuzione sembra soltanto una collina regolare. Alcune regole pratiche:
+
+- Usa estremi **tondi e di uguale ampiezza**, facili da leggere (500, 1000, …).
+- Punta a circa 5–15 classi per una tabella; di più per un istogramma con molti dati.
+- Decidi le classi **prima** di cercare un particolare risultato. Scegliere gli estremi per far comparire o scomparire un andamento è una forma silenziosa di imbroglio.
+- Se devi usare ampiezze diverse (per esempio fasce di reddito), confronta le classi usando la **densità** = frequenza relativa ÷ ampiezza, non i conteggi grezzi: una classe più larga raccoglie più osservazioni semplicemente perché è più larga.
+
+Ritroverai lo stesso problema, in forma grafica, con l'ampiezza delle classi dell'istogramma in [Grafici per le distribuzioni](../06-visualization/25-distribution-plots.qmd).
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: regole pratiche per il numero di classi
+
+Diverse formule suggeriscono un numero di classi $k$ per $n$ osservazioni: **Sturges** $k = \lceil \log_2 n \rceil + 1$ (il valore predefinito di R per `hist()`, tramite `nclass.Sturges()`), **Scott** (ampiezza $h = 3.49\, s\, n^{-1/3}$) e **Freedman–Diaconis** (ampiezza $h = 2\,\mathrm{IQR}\, n^{-1/3}$, robusta rispetto ai valori anomali). Per i nostri dati:
+
+```{r}
+#| label: nclass
+mass <- penguins$body_mass[!is.na(penguins$body_mass)]
+c(sturges = nclass.Sturges(mass), scott = nclass.scott(mass),
+  fd = nclass.FD(mass))
+```
+
+Sono punti di partenza, non leggi: esamina sempre qualche alternativa.
+:::
+
+## 10. Leggere correttamente una tabella di frequenza
+
+Prima di fidarti di una tabella di frequenza (o di pubblicarla), chiediti:
+
+1. **Qual è il denominatore?** Tutte le osservazioni o solo quelle con valore noto? I valori mancanti sono mostrati?
+2. **Quante osservazioni ci sono dietro le percentuali?** "Il 67% degli intervistati" significa cose molto diverse quando $n = 3$ e quando $n = 3000$. Riporta sempre $n$.
+3. **Le categorie sono esaustive e mutuamente esclusive?** Ogni osservazione deve ricadere esattamente in una riga.
+4. **Per dati ordinali, le categorie sono nell'ordine giusto?** Altrimenti le colonne cumulate non hanno senso.
+5. **Per dati continui raggruppati, quali sono gli estremi delle classi** e le classi sono chiuse a sinistra o a destra?
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Dimenticare `useNA = "ifany"`.** `table()` scarta i valori mancanti senza avvisare, quindi le percentuali vengono calcolate in silenzio su un denominatore più piccolo.
+2. **Cumulare una variabile nominale**, o una variabile ordinale i cui livelli sono in ordine alfabetico. Imposta i livelli in modo esplicito con `factor(..., levels = ...)`.
+3. **Usare `mode()` per ottenere la moda statistica.** `mode(x)` restituisce `"numeric"` o `"character"`: il tipo di memorizzazione, non il valore più frequente.
+4. **Formattare troppo presto.** Dopo `adorn_pct_formatting()` o `paste0(x, "%")` i numeri sono testo: non puoi più sommarli né rappresentarli in un grafico.
+5. **`cut()` con estremi che non coprono i dati.** I valori fuori dagli estremi diventano `NA`; controlla con `table(..., useNA = "ifany")`.
+:::
+
+## 11. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. In una tabella del colore degli occhi, "Marrone" ha frequenza relativa 0.37. Che cosa significa questo numero?
+
+Il 37% delle osservazioni nei dati ha gli occhi marroni: è il conteggio di "Marrone" diviso per il numero totale di osservazioni usate nella tabella (verifica se i valori mancanti sono stati inclusi in quel totale).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Per quali di queste variabili ha senso una percentuale cumulata: colore preferito, titolo di studio (elementare / superiore / laurea), numero di fratelli?
+
+Titolo di studio (ordinale) e numero di fratelli (discreta). Il colore preferito è nominale: le sue categorie non hanno un ordine, quindi "al massimo blu" non significa nulla.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Qual è la differenza tra `percent` e `valid_percent` in un `tabyl()`?
+
+`percent` divide per tutte le osservazioni, `NA` compresi; `valid_percent` divide solo per le osservazioni con valore noto. Differiscono solo quando ci sono valori mancanti.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D4. Due colleghi raggruppano in classi gli stessi dati sul reddito e ottengono tabelle con forme diverse. Possono avere ragione entrambi?
+
+Sì: entrambe descrivono gli stessi dati a risoluzioni diverse. Proprio per questo gli estremi delle classi vanno riportati, scelti in anticipo e, idealmente, verificati con più di una scelta.
+:::
+
+## 12. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — conteggi e percentuali.** Costruisci la tabella di frequenza del numero di cilindri (`cyl`) in `mtcars`, poi le percentuali arrotondate a un decimale.
+
+```{webr}
+#| exercise: ex_21_1
+tab <- table(______)
+tab
+round(100 * ______(tab), 1)
+```
+
+::: {.hint exercise="ex_21_1"}
+Usa `mtcars$cyl` dentro `table()`, e `prop.table()` per trasformare i conteggi in proporzioni.
+:::
+
+::: {.solution exercise="ex_21_1"}
+```r
+tab <- table(mtcars$cyl)
+tab
+round(100 * prop.table(tab), 1)
+```
+Le auto a 8 cilindri sono il gruppo più frequente (14 su 32, circa il 44%): 8 è la **moda**.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — l'approccio tidy, con e senza `NA`.** Usando `dplyr`, calcola la percentuale di pinguini maschi e femmine (a) su **tutti** i pinguini, (b) sui pinguini di sesso **noto**.
+
+```{webr}
+#| exercise: ex_21_2
+library(dplyr)
+
+# (a) tutti i pinguini
+penguins |>
+  count(sex) |>
+  mutate(percent = ______)
+
+# (b) solo i pinguini di sesso noto
+penguins |>
+  filter(______) |>
+  count(sex) |>
+  mutate(percent = ______)
+```
+
+::: {.hint exercise="ex_21_2"}
+La percentuale è `100 * n / sum(n)`. Per tenere solo i valori noti usa `!is.na(sex)`.
+:::
+
+::: {.solution exercise="ex_21_2"}
+```r
+penguins |>
+  count(sex) |>
+  mutate(percent = 100 * n / sum(n))
+
+penguins |>
+  filter(!is.na(sex)) |>
+  count(sex) |>
+  mutate(percent = 100 * n / sum(n))
+```
+In (a) le percentuali di femmine e maschi sono ciascuna un po' sotto il 50% perché 11 pinguini sono `NA`. In (b) sono vicine al 50%. Nessuna delle due è sbagliata; un report deve dichiarare quale denominatore è stato usato.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — classi e percentuali cumulate.** Il dataset `faithful` registra il tempo di attesa (in minuti) tra le eruzioni del geyser Old Faithful. Raggruppa `waiting` in classi di 10 minuti da 40 a 100, costruisci la tabella e aggiungi le percentuali cumulate. Quale percentuale dei tempi di attesa è di 70 minuti o meno?
+
+```{webr}
+#| exercise: ex_21_3
+w_class <- cut(faithful$waiting, breaks = seq(______, ______, by = ______))
+tab <- table(w_class, useNA = "ifany")
+tab
+round(100 * cumsum(prop.table(tab)), 1)
+```
+
+::: {.hint exercise="ex_21_3"}
+`seq(40, 100, by = 10)`. Le classi sono della forma `(60,70]`, quindi "70 o meno" è la percentuale cumulata nella riga `(60,70]`.
+:::
+
+::: {.solution exercise="ex_21_3"}
+```r
+w_class <- cut(faithful$waiting, breaks = seq(40, 100, by = 10))
+tab <- table(w_class, useNA = "ifany")
+tab
+round(100 * cumsum(prop.table(tab)), 1)
+```
+Circa il 39% dei tempi di attesa è al massimo di 70 minuti. Osserva la forma dei conteggi: ci sono **due picchi** (intorno a 50–60 e a 70–90 minuti) con meno valori in mezzo. È una distribuzione *bimodale*, che una singola media nasconderebbe.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — trova l'errore nella tabella cumulata.** Un collega riporta che "il 50% dei clienti ha valutato il servizio *Fair* (discreto) o peggio". Esegui il codice e trova l'errore.
+
+```{webr}
+#| exercise: ex_21_4
+ratings <- c("Good", "Poor", "Fair", "Good", "Excellent", "Fair",
+             "Good", "Excellent", "Good", "Excellent")
+tab <- table(ratings)
+cumsum(prop.table(tab))
+```
+
+::: {.hint exercise="ex_21_4"}
+Guarda l'ordine delle categorie in `tab`. È l'ordine naturale della scala?
+:::
+
+::: {.solution exercise="ex_21_4"}
+```r
+ratings_f <- factor(ratings,
+                    levels = c("Poor", "Fair", "Good", "Excellent"),
+                    ordered = TRUE)
+tab <- table(ratings_f)
+cumsum(prop.table(tab))
+```
+Con dati di tipo carattere le categorie vengono ordinate **alfabeticamente** (Excellent, Fair, Good, Poor), quindi il 50% del collega è la quota di "Excellent" *più* "Fair": una somma priva di significato. Con l'ordine corretto, solo il 30% delle valutazioni è "Fair" o peggio, e il 70% è "Good" o peggio.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — una tabella pronta per un report.** Con `janitor`, costruisci una tabella a una via di `island` in `penguins` con una riga dei totali e percentuali formattate con un decimale. Poi fai lo stesso per `year`. Quale isola è la moda? Il numero di pinguini è simile nei diversi anni?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+penguins |>
+  tabyl(island) |>
+  adorn_totals("row") |>
+  adorn_pct_formatting(digits = 1)
+
+penguins |>
+  tabyl(year) |>
+  adorn_totals("row") |>
+  adorn_pct_formatting(digits = 1)
+```
+Biscoe è la moda (168 pinguini, circa il 49%). I tre anni hanno numeri di pinguini simili (110, 114 e 120).
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 6 — come le classi cambiano la storia.** Raggruppa `penguins$flipper_len` in classi di ampiezza 5 mm, 10 mm e 25 mm (scegli punti di inizio e di fine sensati che coprano il campo di variazione dei dati). Per ogni scelta, descrivi in una frase la forma della distribuzione. Quale scelta useresti in un report, e perché?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+range(penguins$flipper_len, na.rm = TRUE)   # da 172 a 231
+
+for (w in c(5, 10, 25)) {
+  br <- seq(170, 235, by = w)
+  if (max(br) < 231) br <- c(br, max(br) + w)
+  print(table(cut(penguins$flipper_len, breaks = br)))
+}
+```
+Con classi strette la tabella mostra due gruppi di valori (intorno a 190 mm e intorno a 215 mm: Adelie/Chinstrap contro Gentoo). Con classi da 25 mm le classi sono solo tre e i due gruppi scompaiono. Classi di circa 10 mm conservano la caratteristica principale restando leggibili.
+:::
+:::
+
+## Riepilogo
+
+| Compito | R base | Tidyverse / janitor |
+|---|---|---|
+| Frequenze assolute | `table(x, useNA = "ifany")` | `count(df, x)` |
+| Frequenze relative | `prop.table(table(x))` | `mutate(prop = n / sum(n))` |
+| Percentuali per un report | `round(100 * prop.table(t), 1)` | `tabyl(df, x) \|> adorn_pct_formatting()` |
+| Totali | `addmargins(t)` | `adorn_totals("row")` |
+| Frequenze cumulate | `cumsum(prop.table(t))` | `mutate(cum = cumsum(prop))` |
+| Moda | `names(t)[t == max(t)]` | `count(df, x, sort = TRUE)` |
+| Classi per una variabile continua | `cut(x, breaks = ..., labels = ...)` | `mutate(cls = cut(x, ...))` |
+
+- Una tabella di frequenza mostra la **distribuzione** di una variabile: quali valori compaiono e quanto spesso.
+- Conosci (e riporta) sempre il tuo **denominatore** e quante osservazioni ci sono dietro ogni percentuale.
+- Le frequenze cumulate hanno senso solo per valori **ordinati**: controlla l'ordine dei livelli del fattore.
+- Raggruppare una variabile continua fa perdere informazione; la **scelta delle classi** può cambiare l'impressione, quindi falla con criterio e in anticipo.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitolo "Factors", <https://r4ds.hadley.nz>
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2a ed.), capitolo "Exploring categorical data", <https://openintro-ims.netlify.app>
+- Documentazione di `janitor`, "tabyls: a tidy, fully-featured approach to counting things", <https://sfirke.github.io/janitor/>
+:::

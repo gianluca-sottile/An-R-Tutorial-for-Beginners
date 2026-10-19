@@ -1,0 +1,401 @@
+---
+title: "Test non parametrici"
+subtitle: "Test basati sui ranghi, correlazione per ranghi e test di permutazione — e quando servono davvero"
+description: "Scopri che cosa fanno i test basati sui ranghi, esegui in R i test di Wilcoxon, Mann–Whitney, Kruskal–Wallis e Spearman, comprendi quali ipotesi verificano davvero e usa i test di permutazione come alternativa flessibile."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 3 · Inferenza]{.level-3} [⏱ ~70 min]{} [Prerequisiti: [Test t](34-t-tests.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- spiegare che cosa significano "non parametrico" e "basato sui ranghi";
+- eseguire il **test dei ranghi con segno di Wilcoxon**, il **test della somma dei ranghi di Wilcoxon (Mann–Whitney)** e il **test di Kruskal–Wallis**, proseguendo con confronti a coppie con correzione;
+- dire che cosa verificano realmente questi test (e perché non si tratta semplicemente de "le mediane");
+- confrontare i test di correlazione di **Pearson** e di **Spearman** con `cor.test()`;
+- scrivere un **test di permutazione** per qualsiasi statistica e decidere quando un metodo non parametrico è davvero necessario.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+```
+
+## 1. Perché un'altra famiglia di test?
+
+Il test t visto in [Test t](34-t-tests.qmd) confronta **medie** e usa la distribuzione t come distribuzione sotto l'ipotesi nulla. Funziona bene quando i campioni sono grandi o i dati sono approssimativamente normali. Può funzionare male quando:
+
+- i campioni sono **piccoli** *e* i dati sono chiaramente **asimmetrici** o contengono **valori anomali** (outlier): un solo valore estremo può trascinare la media e gonfiare la deviazione standard;
+- i dati sono **ordinali** — punteggi come "1 = scarso … 5 = eccellente", in cui le differenze tra categorie non sono distanze uguali, per cui una media è difficile da interpretare.
+
+I metodi **non parametrici** fanno meno assunzioni sulla forma della distribuzione (non assumono che appartenga a una famiglia descritta da pochi *parametri*, come la normale). Quelli classici lavorano sui **ranghi** invece che sui valori originali.
+
+## 2. Dai valori ai ranghi
+
+```{r}
+#| label: ranks
+x <- c(3.1, 10, 2.5, 2.5, 7, 250)
+rank(x)
+```
+
+Il valore più piccolo riceve rango 1, il successivo rango 2 e così via; i valori uguali (*ties*, pareggi) condividono la media dei loro ranghi (i due 2.5 ricevono 1.5 ciascuno). Osserva l'ultimo valore: che sia 250 o 11, il suo rango è 6. **I ranghi sono insensibili a quanto è estremo un valore anomalo** — è da qui che deriva la robustezza dei test basati sui ranghi. Il prezzo da pagare è che una parte dell'informazione sulle distanze va persa.
+
+## 3. Test dei ranghi con segno di Wilcoxon (un campione o dati appaiati)
+
+I dati `sleep` (usati in [Test t](34-t-tests.qmd)) riportano le ore di sonno aggiuntive per gli stessi 10 pazienti sotto due farmaci. Il test t per dati appaiati lavora sulle differenze; il test **dei ranghi con segno** assegna i ranghi alle differenze in valore assoluto e poi confronta la somma dei ranghi delle differenze positive con quella delle differenze negative.
+
+```{r}
+#| label: signed-rank
+drug1 <- sleep$extra[sleep$group == 1]
+drug2 <- sleep$extra[sleep$group == 2]
+
+wsr <- wilcox.test(drug2, drug1, paired = TRUE)
+wsr
+t.test(drug2, drug1, paired = TRUE)$p.value
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **V** è la somma dei ranghi delle differenze positive (`r wsr$statistic`). Qui 9 pazienti su 10 hanno dormito di più con il farmaco 2 e uno non ha avuto variazioni, quindi la somma dei ranghi deriva interamente da differenze positive. (Il trattamento delle differenze nulle varia da un metodo all'altro; vedi `?wilcox.test`.)
+- **p-value**: `r round(wsr$p.value, 4)`. Se le differenze fossero simmetriche attorno a 0, una somma dei ranghi così sbilanciata sarebbe rara.
+- **"true location shift is not equal to 0"** (il vero spostamento di posizione è diverso da 0): $H_0$ è che le differenze siano simmetriche attorno a 0.
+- Il test t per dati appaiati giunge alla stessa conclusione. Con dati "puliti" i due test di solito concordano.
+:::
+
+Per un singolo campione, `wilcox.test(x, mu = m0)` verifica se la distribuzione è simmetrica attorno a `m0`.
+
+## 4. Somma dei ranghi di Wilcoxon = test di Mann–Whitney (due gruppi indipendenti)
+
+I dati `chickwts` riportano il peso di pulcini alimentati con diete diverse. Confrontiamo *horsebean* (fava) con *linseed* (semi di lino):
+
+```{r}
+#| label: chicks
+chicks2 <- chickwts |>
+  filter(feed %in% c("horsebean", "linseed")) |>
+  droplevels()
+
+tapply(chicks2$weight, chicks2$feed, median)
+```
+
+Il test della **somma dei ranghi** unisce i due gruppi, assegna i ranghi a tutte le osservazioni insieme e verifica se i ranghi di un gruppo sono sistematicamente più alti. Lo stesso test è noto come **test U di Mann–Whitney**.
+
+```{r}
+#| label: rank-sum
+mw <- wilcox.test(weight ~ feed, data = chicks2, conf.int = TRUE)
+mw
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **W** = `r mw$statistic` conta, su tutte le `r 10 * 12` coppie horsebean–linseed, quante volte il pulcino horsebean è più pesante. Quindi $W / (n_1 n_2)$ = `r round(mw$statistic / 120, 2)` stima **$P(\text{horsebean} > \text{linseed})$**. Sotto $H_0$ questa probabilità sarebbe 0.5.
+- **p-value** `r round(mw$p.value, 4)`: i pulcini horsebean tendono a essere più leggeri.
+- **difference in location** (differenza di posizione, `r round(mw$estimate, 1)` g) con il suo IC (per i test esatti R riporta il livello di confidenza effettivamente raggiungibile, che può essere leggermente superiore al 95%): è la stima di *Hodges–Lehmann*, la mediana di tutte le differenze a coppie. È una sintesi ragionevole dello spostamento **se** le due distribuzioni hanno la stessa forma.
+:::
+
+### Che cosa verifica davvero il test della somma dei ranghi?
+
+Si dice spesso che il test di Mann–Whitney "confronta le mediane". Questo è vero solo sotto un'assunzione aggiuntiva: che le due distribuzioni abbiano **la stessa forma** e differiscano solo per uno spostamento. In generale, il test verifica se **un gruppo tende a produrre valori più grandi dell'altro**, cioè se $P(X > Y) \neq 0.5$ (*dominanza stocastica*).
+
+Una simulazione rende visibile la differenza. Qui sotto, entrambi i gruppi hanno **esattamente la stessa mediana (0)**, ma uno è asimmetrico a destra e l'altro a sinistra:
+
+```{r}
+#| label: same-median
+set.seed(10)
+reject <- replicate(2000, {
+  x <- rexp(100) - log(2)       # mediana 0, coda lunga a destra
+  y <- -(rexp(100) - log(2))    # mediana 0, coda lunga a sinistra
+  wilcox.test(x, y)$p.value < 0.05
+})
+mean(reject)
+```
+
+Il test rifiuta nel `r round(100 * mean(reject))`% dei campioni, benché le mediane siano uguali. Non sbaglia: $X$ tende davvero a essere più grande di $Y$. Semplicemente non risponde a una domanda sulle mediane. **Di' "i valori nel gruppo A tendono a essere più grandi", non "le mediane sono diverse"**, a meno che le forme non appaiano simili.
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: le statistiche
+
+- **Ranghi con segno:** si assegnano i ranghi a $|d_i|$ per le differenze non nulle; $V = \sum_{d_i > 0} \text{rango}(|d_i|)$. Sotto $H_0$ ogni segno è + o − con probabilità 1/2, quindi la distribuzione sotto l'ipotesi nulla di $V$ può essere enumerata esattamente ($n$ piccolo) o approssimata con una normale.
+- **Somma dei ranghi:** $W = \sum_{i}\sum_{j} \mathbf 1(x_i > y_j)$ (i pareggi contano 1/2). Questa è la $W$ di R; è uguale alla somma dei ranghi del primo campione meno $n_1(n_1+1)/2$. Sotto $H_0$ (stessa distribuzione), $E[W] = n_1 n_2 / 2$.
+- **Efficienza:** per dati normali, i test basati sui ranghi perdono poco: la loro efficienza relativa asintotica rispetto al test t è $3/\pi \approx 0.955$. Per dati con code pesanti possono essere molto più potenti del test t.
+:::
+
+## 5. Test di Kruskal–Wallis (tre o più gruppi)
+
+È la versione basata sui ranghi dell'ANOVA a una via (vedi [ANOVA](37-anova.qmd)): tutti i gruppi provengono dalla stessa distribuzione?
+
+```{r}
+#| label: fig-chickwts
+#| fig-cap: "Peso dei pulcini per tipo di alimentazione (71 pulcini, sei diete)."
+ggplot(chickwts, aes(reorder(feed, weight, FUN = median), weight)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.5) +
+  labs(x = "Alimentazione (ordinata per peso mediano)", y = "Peso (g)")
+```
+
+```{r}
+#| label: kruskal
+kw <- kruskal.test(weight ~ feed, data = chickwts)
+kw
+```
+
+Il p-value (`r format.pval(kw$p.value, digits = 2)`) dice che almeno un'alimentazione differisce dalle altre. Per vedere **quali coppie** differiscono, usa test della somma dei ranghi a coppie con una correzione per test multipli (vedi [La logica del test d'ipotesi](33-hypothesis-testing.qmd)):
+
+```{r}
+#| label: pairwise
+pairwise.wilcox.test(chickwts$weight, chickwts$feed,
+                     p.adjust.method = "holm", exact = FALSE)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+Ogni cella è un p-value corretto con il metodo di Holm per una coppia di alimentazioni. Per esempio, *horsebean* differisce da *casein* e *sunflower* (p corretto ben sotto 0.01), mentre *casein* e *sunflower* sono indistinguibili. `exact = FALSE` usa l'approssimazione normale, che evita gli avvisi quando ci sono pareggi.
+:::
+
+## 6. Correlazione: Pearson e Spearman a confronto
+
+`cor.test()` verifica $H_0$: "nessuna correlazione". La correlazione di **Pearson** misura l'associazione *lineare*; la correlazione di **Spearman** è la correlazione di Pearson calcolata sui **ranghi**, quindi misura l'associazione *monotona* (una variabile tende ad aumentare con l'altra, non necessariamente lungo una retta). Vedi [Correlazione](../06-visualization/27-correlation.qmd) per l'aspetto descrittivo.
+
+```{r}
+#| label: cor-tests
+pear <- cor.test(~ Ozone + Temp, data = airquality)
+spear <- cor.test(~ Ozone + Temp, data = airquality,
+                  method = "spearman", exact = FALSE)
+c(pearson = unname(pear$estimate), spearman = unname(spear$estimate))
+c(pearson = pear$p.value, spearman = spear$p.value)
+pear$conf.int
+```
+
+Entrambe indicano una forte associazione positiva tra temperatura e ozono. Il $\rho$ di Spearman (`r round(spear$estimate, 2)`) è un po' più alto dell'$r$ di Pearson (`r round(pear$estimate, 2)`) perché la relazione curva verso l'alto: è monotona ma non lineare. In `cor.test()` solo il test di Pearson fornisce un intervallo di confidenza.
+
+La differenza diventa drammatica in presenza di un **valore anomalo**:
+
+```{r}
+#| label: cor-outlier
+set.seed(4)
+x <- 1:20
+y <- x + rnorm(20, sd = 3)
+y[20] <- -40                      # un valore estremo
+c(pearson  = cor(x, y),
+  spearman = cor(x, y, method = "spearman"))
+```
+
+Un solo punto distrugge la correlazione di Pearson (che scende a `r round(cor(x, y), 2)`), mentre quella di Spearman ($\rho =$ `r round(cor(x, y, method = "spearman"), 2)`) vede ancora il chiaro andamento crescente negli altri 19 punti. **Fai sempre un grafico** prima di calcolare una correlazione.
+
+## 7. Test di permutazione: un'alternativa flessibile
+
+Il test di permutazione visto in [La logica del test d'ipotesi](33-hypothesis-testing.qmd) funziona con **qualsiasi** statistica tu scelga. Supponi che ti interessi davvero la **differenza tra le mediane** dei pulcini horsebean e linseed:
+
+```{r}
+#| label: perm-median
+med_diff <- function(y, g) {
+  m <- tapply(y, g, median)
+  unname(m["linseed"] - m["horsebean"])
+}
+obs <- med_diff(chicks2$weight, chicks2$feed)
+
+set.seed(1)
+perm <- replicate(10000, med_diff(chicks2$weight, sample(chicks2$feed)))
+p_perm <- mean(abs(perm) >= abs(obs))
+c(observed = obs, p_value = p_perm)
+```
+
+La differenza osservata tra le mediane è `r obs` g, e solo il `r round(100 * p_perm, 1)`% dei dataset rimescolati ne produce una almeno altrettanto grande. La ricetta è sempre la stessa: **scegli una statistica → rimescola sotto $H_0$ → confronta**. Funziona per mediane, medie troncate, rapporti di varianze, correlazioni e altro ancora. Due requisiti: sotto $H_0$ le etichette rimescolate devono essere scambiabili (per esempio, unità indipendenti), e il rimescolamento deve rispettare il disegno dello studio (per dati appaiati, scambia i valori *all'interno* di ciascuna coppia, invece di rimescolare liberamente).
+
+## 8. Quando usare che cosa
+
+| Situazione | Parametrico | Basato sui ranghi | Note |
+|---|---|---|---|
+| Un campione o differenze appaiate | `t.test(x, mu = )`, `t.test(..., paired = TRUE)` | `wilcox.test(x, mu = )`, `wilcox.test(..., paired = TRUE)` | I ranghi con segno assumono differenze simmetriche |
+| Due gruppi indipendenti | `t.test(y ~ g)` (Welch) | `wilcox.test(y ~ g)` | La somma dei ranghi verifica $P(X > Y) = 0.5$ |
+| Tre o più gruppi | `aov()`, `oneway.test()` | `kruskal.test()` + `pairwise.wilcox.test()` | Vedi [ANOVA](37-anova.qmd) |
+| Associazione tra due variabili numeriche | `cor.test()` (Pearson) | `cor.test(method = "spearman")` | Spearman: monotona, robusta ai valori anomali |
+| Qualsiasi statistica, qualsiasi disegno | — | Test di permutazione | Rimescola secondo il disegno |
+
+### "I miei dati non sono normali" non è automaticamente un motivo per cambiare test
+
+- **Con campioni moderati o grandi**, il test t è robusto: riguarda la *distribuzione campionaria della media*, che il teorema del limite centrale rende approssimativamente normale (vedi [Distribuzioni campionarie](../07-probability/30-sampling-distributions.qmd)). Il test di Welch gestisce anche varianze diverse.
+- **I test rispondono a domande diverse.** Il test t riguarda le medie; il test della somma dei ranghi riguarda $P(X > Y)$. Se ciò che conta è la media (costo totale, resa totale), un test basato sui ranghi risponde alla domanda sbagliata.
+- **Un test formale di normalità è una cattiva guida**: con campioni piccoli raramente rileva la non normalità, con campioni grandi segnala scostamenti innocui. Guarda i grafici e ragiona sui dati.
+- **Esistono altre opzioni**: una trasformazione (per esempio il logaritmo per dati positivi asimmetrici a destra), un IC bootstrap ([Il bootstrap](../07-probability/31-bootstrap.qmd)) o un test di permutazione sulla media.
+- **I test basati sui ranghi sono una buona scelta** per campioni piccoli con valori anomali o forte asimmetria, per dati ordinali e quando la domanda naturale è "tende a essere più grande".
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Dire "le mediane sono diverse" dopo un test di Mann–Whitney.** È giustificato solo se le distribuzioni hanno forme simili.
+2. **Pensare che non parametrico significhi privo di assunzioni.** I test basati sui ranghi assumono comunque osservazioni indipendenti; il test dei ranghi con segno assume differenze simmetriche.
+3. **Cambiare test dopo aver visto quale dà il p-value più piccolo.** Scegli il test in base alla domanda e al disegno, prima dell'analisi.
+4. **Usare il test della somma dei ranghi su dati appaiati** (o il test dei ranghi con segno su gruppi indipendenti). Come per i test t, decide il disegno.
+5. **Dimenticare la correzione per confronti multipli** dopo un test di Kruskal–Wallis significativo.
+6. **Riportare solo un p-value.** Riporta anche un effetto: lo spostamento di Hodges–Lehmann con il suo IC, $P(X > Y)$, oppure il $\rho$ di Spearman.
+:::
+
+## 9. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Perché un test basato sui ranghi è poco influenzato da un singolo valore estremamente grande?
+
+Perché il valore più grande riceve il rango più alto qualunque sia la sua grandezza: sostituire 250 con 2.500 non cambia alcun rango.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Un test di Mann–Whitney dà W = 90 con n1 = 10 e n2 = 12. Che cosa stima W / (n1·n2) e quanto vale sotto H0?
+
+Stima $P(X > Y)$, la probabilità che un'osservazione casuale del gruppo 1 superi una del gruppo 2: qui 90/120 = 0.75. Sotto $H_0$ sarebbe 0.5.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Sugli stessi dati, r di Pearson = 0.05 e ρ di Spearman = 0.64. Che cosa sospetteresti?
+
+Un valore anomalo (oppure una relazione fortemente non lineare ma monotona) nasconde l'associazione all'r di Pearson. Fai un grafico dei dati.
+:::
+
+## 10. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — due gruppi indipendenti.** Confronta `mpg` tra le auto con cambio automatico (`am == 0`) e manuale (`am == 1`) in `mtcars` con un test della somma dei ranghi e con un test t di Welch. Concordano?
+
+```{webr}
+#| exercise: ex_36_1
+wilcox.test(______ ~ ______, data = mtcars)
+t.test(mpg ~ am, data = mtcars)$p.value
+```
+
+::: {.hint exercise="ex_36_1"}
+La formula è `risposta ~ gruppo`, come in `t.test()`.
+:::
+
+::: {.solution exercise="ex_36_1"}
+```r
+wilcox.test(mpg ~ am, data = mtcars)
+```
+Entrambi i test trovano una differenza netta (p circa 0.001 sia per il test della somma dei ranghi sia per Welch): le auto con cambio manuale tendono ad avere `mpg` più alto. Con effetti chiari e dati di forma ragionevole, i due approcci concordano.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — Kruskal–Wallis e analisi successive.** I dati `InsectSprays` riportano il numero di insetti su appezzamenti trattati con sei insetticidi (A–F). I conteggi sono asimmetrici e le varianze differiscono molto tra gli insetticidi. Esegui un test di Kruskal–Wallis e i confronti a coppie con correzione di Holm. Quali insetticidi sembrano più efficaci (conteggi più bassi)?
+
+```{webr}
+#| exercise: ex_36_2
+tapply(InsectSprays$count, InsectSprays$spray, median)
+kruskal.test(______ ~ ______, data = InsectSprays)
+pairwise.wilcox.test(InsectSprays$count, InsectSprays$spray,
+                     p.adjust.method = "______", exact = FALSE)
+```
+
+::: {.hint exercise="ex_36_2"}
+La risposta è `count` e il gruppo è `spray`; il metodo di correzione è `"holm"`.
+:::
+
+::: {.solution exercise="ex_36_2"}
+```r
+kruskal.test(count ~ spray, data = InsectSprays)
+pairwise.wilcox.test(InsectSprays$count, InsectSprays$spray,
+                     p.adjust.method = "holm", exact = FALSE)
+```
+Il test di Kruskal–Wallis è altamente significativo. Gli insetticidi **C, D ed E** hanno le mediane più basse, e ciascuno di essi differisce da A, B e F (p corretto < 0.001). Tra C, D ed E, solo il confronto C vs D raggiunge la significatività (circa 0.016).
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — un valore anomalo e due correlazioni.** Esegui il codice e confronta i test di Pearson e di Spearman. Poi rimuovi il valore anomalo (`x[-20]`, `y[-20]`) e ripeti il test di Pearson. Che cosa cambia?
+
+```{webr}
+#| exercise: ex_36_3
+set.seed(4)
+x <- 1:20
+y <- x + rnorm(20, sd = 3)
+y[20] <- -40
+cor.test(x, y)$p.value
+cor.test(x, y, method = "______")$p.value
+cor.test(x[______], y[______])$estimate
+```
+
+::: {.hint exercise="ex_36_3"}
+Usa `method = "spearman"` e `-20` per eliminare il 20° elemento.
+:::
+
+::: {.solution exercise="ex_36_3"}
+```r
+cor.test(x, y)$p.value                        # circa 0.85
+cor.test(x, y, method = "spearman")$p.value   # circa 0.003
+cor.test(x[-20], y[-20])$estimate             # circa 0.9
+```
+Con il valore anomalo, Pearson non vede alcuna associazione; Spearman rileva l'andamento. Senza il valore anomalo, l'r di Pearson torna alto. Non eliminare mai punti solo per ottenere un risultato — ma indagali sempre: è un errore di inserimento dei dati, oppure un'osservazione reale e interessante?
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — un test di permutazione per dati appaiati.** Per i dati `sleep`, scrivi un test di permutazione per la **differenza media appaiata** (farmaco 2 − farmaco 1). Sotto $H_0$ ogni differenza ha la stessa probabilità di essere positiva o negativa, quindi inverti a caso i segni delle differenze invece di rimescolare le etichette. Confronta con il test t per dati appaiati.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+d <- sleep$extra[sleep$group == 2] - sleep$extra[sleep$group == 1]
+obs <- mean(d)
+
+set.seed(1)
+perm <- replicate(10000, {
+  signs <- sample(c(-1, 1), length(d), replace = TRUE)
+  mean(signs * d)
+})
+mean(abs(perm) >= abs(obs))
+t.test(d)$p.value
+```
+Il p-value ottenuto invertendo i segni è vicino al p-value del test t per dati appaiati (entrambi ben sotto 0.01: circa 0.004 e 0.003). Rimescolare liberamente tra i due gruppi romperebbe l'appaiamento — la permutazione deve seguire il disegno.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — scegli il test.** Per ciascuna situazione, indica un test adatto e spiega perché. (a) Punteggi di dolore (0–10) per 12 pazienti prima e dopo la fisioterapia. (b) Reddito di 800 uomini e 800 donne, molto asimmetrico a destra; la domanda riguarda il reddito medio. (c) Valutazioni di soddisfazione (1–5) per quattro diversi team di assistenza clienti.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+(a) Dati ordinali appaiati con $n$ piccolo: **test dei ranghi con segno di Wilcoxon** (`paired = TRUE`). (b) La domanda riguarda le **medie** e $n$ è grande: **test t di Welch** (si applica il teorema del limite centrale); un IC bootstrap per la differenza tra le medie, o un'analisi su scala logaritmica (che confronta medie geometriche), sono buoni complementi. Un test basato sui ranghi risponderebbe a una domanda diversa. (c) Risposta ordinale, quattro gruppi indipendenti: **Kruskal–Wallis**, seguito da test di Wilcoxon a coppie con correzione di Holm.
+:::
+:::
+
+## Riepilogo
+
+| Test | R | Verifica se… |
+|---|---|---|
+| Ranghi con segno | `wilcox.test(x, mu = )` / `wilcox.test(a, b, paired = TRUE)` | (le differenze) sono simmetriche attorno al valore di riferimento |
+| Somma dei ranghi / Mann–Whitney | `wilcox.test(y ~ g, conf.int = TRUE)` | un gruppo tende a dare valori più grandi ($P(X>Y) \ne 0.5$) |
+| Kruskal–Wallis | `kruskal.test(y ~ g)` + `pairwise.wilcox.test()` | tutti i gruppi provengono dalla stessa distribuzione |
+| Pearson / Spearman | `cor.test(x, y)` / `cor.test(x, y, method = "spearman")` | associazione lineare / monotona |
+| Permutazione | `replicate()` + `sample()` | la statistica che hai scelto è più grande di quanto darebbe il caso |
+
+- I test basati sui ranghi sostituiscono i valori con i ranghi: sono robusti ai valori anomali e adatti ai dati ordinali.
+- Il test della somma dei ranghi **non** è un test sulle mediane, a meno che le forme non siano uguali.
+- Spearman è Pearson calcolato sui ranghi: coglie andamenti monotoni e resiste ai valori anomali.
+- I test di permutazione sono flessibili; rimescola in modo da rispettare il disegno.
+- Dati non normali con una numerosità campionaria discreta non richiedono automaticamente un test non parametrico — pensa prima alla domanda.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2a ed.), capitoli sui test di randomizzazione, <https://openintro-ims.netlify.app>
+- Lakens, D., *Improving Your Statistical Inferences*, <https://lakens.github.io/statistical_inferences/>
+- Documentazione di R: `?wilcox.test`, `?kruskal.test`, `?cor.test`
+:::

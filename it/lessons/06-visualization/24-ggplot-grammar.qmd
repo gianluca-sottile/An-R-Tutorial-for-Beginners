@@ -1,0 +1,565 @@
+---
+title: "La grammatica dei grafici"
+subtitle: "Costruire qualsiasi grafico livello per livello con ggplot2, a partire dal grafico a dispersione"
+description: "Impara le componenti di un grafico ggplot2 (dati, estetiche, geom, scale, faccette, coordinate, temi), costruisci passo per passo grafici a dispersione, aggiungi rette interpolanti, usa scale logaritmiche, etichetta, suddividi in faccette, scegli un tema e salva le tue figure, seguendo i principi dei buoni grafici."
+format:
+  live-html:
+    webr:
+      packages: ["ggplot2", "dplyr"]
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(ggplot2)
+library(dplyr)
+```
+
+::: {.lesson-meta}
+[Livello 2 · Descrivere ed esplorare]{.level-2} [⏱ ~75 min]{} [Prerequisiti: [Data frame](../02-data/08-data-frames.qmd), [I verbi di dplyr](../02-data/09-dplyr-verbs.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- nominare le componenti della **grammatica dei grafici** e riconoscerle in qualsiasi ggplot;
+- costruire un grafico **livello per livello**, distinguendo l'**associazione** (*mapping*) di un'estetica a una variabile dalla sua **impostazione** a un valore fisso (*setting*);
+- aggiungere correttamente rette interpolanti, **scale logaritmiche**, etichette, faccette e limiti delle coordinate;
+- cambiare l'aspetto generale con i **temi** e salvare una figura con `ggsave()`;
+- applicare alcuni principi di **grafici efficaci e accessibili**.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(ggplot2)
+library(dplyr)
+```
+
+## 1. Perché una "grammatica" dei grafici?
+
+I grafici sono una parte fondamentale di ogni fase dell'analisi dei dati: li usiamo per **esplorare** i dati (e trovare errori), per **verificare** i modelli e per **comunicare** i risultati. Un buon grafico può rendere evidente in pochi secondi un andamento che una tabella di numeri impiegherebbe una pagina a descrivere.
+
+Molti strumenti grafici offrono un menu di *tipi* di grafico ("dispersione", "barre", "torta"). **ggplot2** funziona in modo diverso. Si basa sulla *Grammar of Graphics* di Leland Wilkinson (2005): come le frasi si costruiscono con nomi, verbi e aggettivi, ogni grafico si costruisce a partire da un piccolo insieme di componenti indipendenti. Una volta note le componenti, puoi costruire quasi qualsiasi grafico, compresi quelli a cui nessuno ha ancora dato un nome.
+
+| Componente | Domanda a cui risponde | Funzione ggplot2 |
+|---|---|---|
+| **Dati** | Quale data frame? | `ggplot(data = ...)` |
+| **Estetiche** (*aesthetics*) | Quali variabili vanno a quale proprietà visiva (x, y, colore, dimensione, forma…)? | `aes()` |
+| **Geom** | Quale oggetto geometrico rappresenta ciascuna osservazione (punti, linee, barre…)? | `geom_*()` |
+| **Stat** | I dati vengono trasformati prima di essere disegnati (conteggi, lisciatori, densità)? | `stat_*()`, oppure dentro i geom |
+| **Scale** | Come vengono tradotti i valori dei dati in posizioni, colori, dimensioni? | `scale_*()` |
+| **Faccette** (*facet*) | I dati vanno suddivisi in piccoli grafici multipli? | `facet_wrap()`, `facet_grid()` |
+| **Coordinate** | In quale sistema di coordinate vengono disegnate le posizioni? | `coord_*()` |
+| **Tema** | Che aspetto hanno gli elementi non legati ai dati (caratteri, sfondo, griglia)? | `theme_*()`, `theme()` |
+
+Lo schema generale è:
+
+```{r}
+#| label: template
+#| eval: false
+ggplot(data, aes(x = var1, y = var2)) +
+  geom_something() +
+  other_components()
+```
+
+Le componenti si **aggiungono** con `+` (non con la pipe `|>`).
+
+## 2. Costruire un grafico livello per livello
+
+I pinguini più pesanti hanno pinne più lunghe? Costruiamo la risposta un livello alla volta.
+
+**Solo dati ed estetiche**: la tela e gli assi sono pronti, ma niente dice a ggplot2 *come* disegnare le osservazioni:
+
+```{r}
+#| label: fig-layer1
+#| fig-cap: "Solo dati e associazione delle estetiche: una tela vuota con gli assi."
+p <- ggplot(penguins, aes(x = flipper_len, y = body_mass))
+p
+```
+
+**Aggiungi un geom**: ogni pinguino diventa un punto:
+
+```{r}
+#| label: fig-layer2
+#| fig-cap: "Un grafico a dispersione: un punto per pinguino."
+p + geom_point(na.rm = TRUE)
+```
+
+Un **grafico a dispersione** mostra la relazione tra due variabili numeriche. Qui la nuvola sale da sinistra verso destra: a pinne più lunghe corrispondono corpi più pesanti. (`na.rm = TRUE` serve solo a silenziare l'avviso sui `r sum(is.na(penguins$flipper_len))` pinguini con misure mancanti.)
+
+**Associa una terza variabile al colore**:
+
+```{r}
+#| label: fig-layer3
+#| fig-cap: "Lo stesso grafico a dispersione con la specie associata al colore."
+p + geom_point(aes(colour = species), na.rm = TRUE)
+```
+
+I colori rivelano una struttura che era nascosta: il grande gruppo sulla destra è la specie Gentoo. ggplot2 ha creato automaticamente una **legenda**, perché un'associazione richiede sempre una chiave di lettura. I colori sono quelli della tavolozza Okabe–Ito, adatta a chi ha difficoltà nella visione dei colori, impostata per tutto il corso nel file di setup.
+
+## 3. Associare o impostare un'estetica
+
+Questa è la distinzione più importante in ggplot2:
+
+- **Associare** (*mapping*, dentro `aes()`): una proprietà visiva *dipende da una variabile*. `aes(colour = species)` significa "colora ogni punto in base alla sua specie".
+- **Impostare** (*setting*, fuori da `aes()`): una proprietà visiva è *fissa* per tutti i punti. `colour = "steelblue"` significa "rendi ogni punto blu acciaio".
+
+```{r}
+#| label: fig-mapping-setting
+#| fig-cap: "A sinistra: colore impostato a una costante fuori da aes(). A destra: l'errore comune di mettere la costante dentro aes()."
+#| fig-asp: 0.45
+#| fig-subcap:
+#|   - "Impostare un colore costante"
+#|   - "Una costante dentro aes()"
+#| layout-ncol: 2
+ggplot(penguins, aes(flipper_len, body_mass)) +
+  geom_point(colour = "steelblue", alpha = 0.6, size = 2, na.rm = TRUE) +
+  labs(title = "Impostare: colour = \"steelblue\"")
+
+ggplot(penguins, aes(flipper_len, body_mass)) +
+  geom_point(aes(colour = "steelblue"), na.rm = TRUE) +
+  labs(title = "Errore: aes(colour = \"steelblue\")")
+```
+
+Nel secondo grafico, ggplot2 tratta `"steelblue"` come un *valore dei dati* (una variabile costante con una sola categoria chiamata "steelblue"), le assegna il primo colore della tavolozza e aggiunge una legenda inutile. Se il colore o la legenda hanno un aspetto strano, controlla che cosa c'è dentro `aes()`.
+
+### Altre estetiche: forma, dimensione e trasparenza
+
+```{r}
+#| label: fig-aesthetics
+#| fig-cap: "Specie associata sia al colore sia alla forma (codifica ridondante), lunghezza del becco associata alla dimensione."
+ggplot(penguins, aes(flipper_len, body_mass)) +
+  geom_point(aes(colour = species, shape = species, size = bill_len),
+             alpha = 0.6, na.rm = TRUE)
+```
+
+- `shape` funziona per variabili categoriali (sono leggibili fino a circa sei categorie).
+- `size` funziona per variabili numeriche, ma i nostri occhi confrontano male le dimensioni: usala con parsimonia.
+- `alpha` (trasparenza, da 0 a 1) di solito si **imposta**, per rivelare i punti sovrapposti.
+
+Associare la stessa variabile al colore **e** alla forma si chiama *codifica ridondante*: il grafico resta leggibile in bianco e nero e per chi ha difficoltà nella visione dei colori.
+
+### Dove mettere `aes()`
+
+Le estetiche indicate in `ggplot()` vengono ereditate da **tutti** i livelli; quelle indicate dentro un `geom_*()` valgono solo per quel livello. Questo conta non appena aggiungi un secondo livello.
+
+## 4. Aggiungere una retta interpolante: `geom_smooth()`
+
+Un **lisciatore** (*smoother*) sintetizza l'andamento in un grafico a dispersione. Con `method = "lm"` disegna la retta dei minimi quadrati (argomento di [Regressione semplice](../../../lessons/09-regression/38-simple-regression.qmd)).
+
+```{r}
+#| label: fig-smooth-groups
+#| fig-cap: "Poiché il colore è associato in ggplot(), entrambi i livelli sono suddivisi per specie: una retta per specie."
+ggplot(penguins, aes(flipper_len, body_mass, colour = species)) +
+  geom_point(alpha = 0.5, na.rm = TRUE) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE, na.rm = TRUE)
+```
+
+```{r}
+#| label: fig-smooth-overall
+#| fig-cap: "Colore associato solo nel livello dei punti: una sola retta per tutti i pinguini."
+ggplot(penguins, aes(flipper_len, body_mass)) +
+  geom_point(aes(colour = species), alpha = 0.5, na.rm = TRUE) +
+  geom_smooth(method = "lm", formula = y ~ x, colour = "black",
+              linewidth = 1, na.rm = TRUE)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questi grafici
+
+- Nel primo grafico `colour = species` viene ereditato da `geom_smooth()`, che quindi stima **una retta per specie**. Nel secondo, solo i punti sono colorati e viene stimata un'unica retta complessiva.
+- La banda grigia (`se = TRUE`, il valore predefinito) è una banda di confidenza per la retta stimata, non un intervallo in cui cade la maggior parte dei punti; imparerai a interpretarla in [Intervalli di confidenza](../08-inference/32-confidence-intervals.qmd).
+- `linewidth` controlla lo spessore delle linee (`size` serve per punti e testo).
+- Senza `method`, `geom_smooth()` usa una curva flessibile (LOESS per pochi dati), utile per individuare andamenti non lineari.
+:::
+
+## 5. Scale: dai dati alle proprietà visive
+
+Ogni estetica ha una **scala** che controlla come i valori dei dati diventano posizioni, colori o dimensioni, e come vengono etichettati l'asse o la legenda. Le funzioni di scala si chiamano `scale_<estetica>_<tipo>()`.
+
+### Tacche degli assi
+
+Il dataset `mtcars` descrive 32 automobili del 1974. Qui rappresentiamo il consumo di carburante (miglia per gallone) rispetto al rapporto al ponte posteriore (`drat`), con il numero di marce come categoria:
+
+```{r}
+#| label: fig-breaks
+#| fig-cap: "Tacche dell'asse personalizzate con scale_x_continuous()."
+cars_plot <- ggplot(mtcars, aes(drat, mpg, colour = factor(gear))) +
+  geom_point(size = 2) +
+  labs(x = "Rapporto al ponte posteriore", y = "Miglia per gallone", colour = "Marce")
+
+cars_plot +
+  scale_x_continuous(breaks = seq(2.75, 5, by = 0.25))
+```
+
+`factor(gear)` trasforma il numero di marce in una categoria, così ggplot2 usa colori distinti invece di un gradiente di colore continuo.
+
+### Scale logaritmiche
+
+Alcune variabili coprono diversi ordini di grandezza. Il dataset `msleep` (incluso in ggplot2) riporta il peso corporeo e il peso del cervello di `r nrow(msleep)` mammiferi, da pochi grammi a diverse tonnellate:
+
+```{r}
+#| label: fig-log-raw
+#| fig-cap: "Su assi lineari, pochi animali molto grandi schiacciano tutti gli altri nell'angolo."
+ggplot(msleep, aes(bodywt, brainwt)) +
+  geom_point(na.rm = TRUE) +
+  labs(x = "Peso corporeo (kg)", y = "Peso del cervello (kg)")
+```
+
+```{r}
+#| label: fig-log-scale
+#| fig-cap: "Gli stessi dati con entrambi gli assi in scala log10: la relazione diventa una chiara linea retta."
+ggplot(msleep, aes(bodywt, brainwt)) +
+  geom_point(na.rm = TRUE) +
+  scale_x_log10() +
+  scale_y_log10() +
+  labs(x = "Peso corporeo (kg, scala log)", y = "Peso del cervello (kg, scala log)")
+```
+
+Su una scala logaritmica, **distanze uguali corrispondono a rapporti uguali**: da 1 a 10 kg c'è la stessa distanza che da 100 a 1000 kg. Due buoni motivi per usarne una:
+
+1. i dati sono positivi e **asimmetrici a destra**, e coprono diversi ordini di grandezza (redditi, popolazioni, concentrazioni, dimensioni corporee);
+2. contano più le differenze **relative** (moltiplicative) che quelle assolute.
+
+Preferisci `scale_x_log10()` a scrivere `aes(x = log(bodywt))`: i punti si trovano esattamente nello stesso posto, ma con la scala le etichette dell'asse restano nelle **unità originali** (0.01, 1, 100 kg), che i lettori capiscono. Le scale logaritmiche non possono mostrare valori nulli o negativi.
+
+## 6. Etichette: rendi il grafico autoesplicativo
+
+Un lettore dovrebbe capire una figura senza leggere il codice. `labs()` imposta in un unico punto titolo, sottotitolo, didascalia, titoli degli assi e titoli delle legende. Le etichette possono anche essere calcolate:
+
+```{r}
+#| label: fig-labels
+#| fig-cap: "Un grafico completamente etichettato. Il sottotitolo è calcolato dai dati."
+mean_mpg <- mean(mtcars$mpg)
+
+cars_plot +
+  geom_smooth(aes(group = 1), method = "lm", formula = y ~ x,
+              se = FALSE, colour = "grey30", linewidth = 0.8) +
+  labs(
+    title = "Le auto con rapporto al ponte più alto tendono a consumare meno",
+    subtitle = paste("Consumo medio:", round(mean_mpg, 1), "miglia per gallone"),
+    caption = "Fonte: mtcars (Motor Trend, 1974)",
+    x = "Rapporto al ponte posteriore (drat)",
+    y = "Miglia per gallone",
+    colour = "Marce avanti"
+  )
+```
+
+`aes(group = 1)` dice a `geom_smooth()` di ignorare i gruppi definiti dal colore e di stimare un'unica retta. Un buon titolo enuncia il **messaggio** del grafico, non solo le variabili ("A contro B").
+
+## 7. Faccette: piccoli multipli
+
+Le **faccette** suddividono i dati in sottoinsiemi e disegnano lo stesso grafico per ciascuno, con assi condivisi. Spesso è più chiaro che mettere molti colori in un solo grafico.
+
+```{r}
+#| label: fig-facet-wrap
+#| fig-cap: "Un pannello per isola."
+#| fig-asp: 0.4
+ggplot(penguins, aes(flipper_len, body_mass, colour = species)) +
+  geom_point(alpha = 0.6, na.rm = TRUE) +
+  facet_wrap(~ island) +
+  labs(x = "Lunghezza delle pinne (mm)", y = "Massa corporea (g)", colour = "Specie")
+```
+
+`facet_grid(righe ~ colonne)` incrocia due variabili:
+
+```{r}
+#| label: fig-facet-grid
+#| fig-cap: "Righe: sesso; colonne: specie."
+penguins |>
+  filter(!is.na(sex)) |>
+  ggplot(aes(bill_len, bill_dep)) +
+  geom_point(alpha = 0.6) +
+  facet_grid(sex ~ species) +
+  labs(x = "Lunghezza del becco (mm)", y = "Profondità del becco (mm)")
+```
+
+Gli assi condivisi rendono onesti i confronti tra pannelli. Puoi renderli liberi con `scales = "free"`, ma allora i lettori devono controllare l'asse di ogni pannello.
+
+## 8. Coordinate: ingrandire senza perdere dati
+
+Per concentrarsi su una parte del grafico ci sono due strumenti molto diversi:
+
+- `coord_cartesian(xlim = ...)` **ingrandisce**, come una lente: tutti i dati vengono comunque usati.
+- I limiti di scala (`xlim()`, `scale_x_continuous(limits = ...)`) **eliminano** i dati fuori dai limiti *prima* di qualsiasi calcolo.
+
+```{r}
+#| label: fig-zoom
+#| fig-cap: "A sinistra: ingrandire con coord_cartesian() mantiene la retta stimata su tutte le auto. A destra: xlim() scarta le auto fuori dalla finestra, quindi la retta cambia."
+#| fig-asp: 0.5
+#| fig-subcap:
+#|   - "coord_cartesian(): ingrandimento"
+#|   - "xlim(): dati eliminati"
+#| layout-ncol: 2
+base <- ggplot(mtcars, aes(wt, mpg)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  labs(x = "Peso (migliaia di libbre)", y = "Miglia per gallone")
+
+base + coord_cartesian(xlim = c(2, 4)) + labs(title = "coord_cartesian()")
+base + xlim(2, 4) + labs(title = "xlim()")
+```
+
+Altri sistemi di coordinate: `coord_flip()` scambia x e y, `coord_fixed()` impone che un'unità sull'asse x sia lunga quanto un'unità sull'asse y, e `coord_polar()` produce grafici circolari (vedi [Grafici per variabili categoriali](26-categorical-plots.qmd)).
+
+## 9. Temi
+
+Il **tema** controlla tutto ciò che non è dato: sfondo, linee della griglia, caratteri, posizione della legenda. Questo corso imposta un tema globale (`theme_minimal()` con qualche ritocco) nel file di setup, quindi raramente dovrai intervenire. I temi completi sostituiscono tutte le impostazioni del tema in un colpo solo:
+
+```{r}
+#| label: fig-themes
+#| fig-cap: "Lo stesso grafico con theme_classic() (a sinistra) e theme_bw() (a destra)."
+#| fig-asp: 0.6
+#| fig-subcap:
+#|   - "theme_classic()"
+#|   - "theme_bw()"
+#| layout-ncol: 2
+cars_plot + theme_classic() + labs(title = "theme_classic()")
+cars_plot + theme_bw() + labs(title = "theme_bw()")
+```
+
+Usa `theme()` per modificare singoli elementi, dopo un eventuale tema completo:
+
+```{r}
+#| label: fig-theme-tweak
+#| fig-cap: "Regolazione fine di singoli elementi del tema."
+cars_plot +
+  theme_classic(base_size = 14) +
+  theme(legend.position = "top",
+        axis.title.y = element_text(angle = 0, vjust = 0.5))
+```
+
+Altri temi predefiniti sono `theme_gray()` (il predefinito di ggplot2), `theme_light()`, `theme_dark()` e `theme_void()`.
+
+## 10. Salvare un grafico
+
+Memorizza il grafico in un oggetto e passalo esplicitamente a `ggsave()` (per impostazione predefinita `ggsave()` salva l'*ultimo grafico visualizzato*, ed è facile sbagliare):
+
+```{r}
+#| label: ggsave
+#| eval: false
+final_plot <- cars_plot + labs(title = "Consumo di carburante e rapporto al ponte")
+
+ggsave(
+  filename = "figures/fuel-economy.png",  # l'estensione determina il formato
+  plot = final_plot,
+  width = 7, height = 4.5, units = "in",
+  dpi = 300
+)
+```
+
+(Il chunk qui non viene eseguito perché scrive un file.) Il percorso è relativo alla cartella del progetto, mai un percorso assoluto. Usa `.png` per presentazioni e pagine web, e un formato vettoriale (`.pdf`, `.svg`) per documenti stampati e articoli: la grafica vettoriale resta nitida a qualsiasi ingrandimento. Fissa `width` e `height` in modo che il testo abbia la stessa dimensione ogni volta che salvi.
+
+## 11. Principi dei buoni grafici
+
+1. **Mostra i dati.** Quando possibile, preferisci grafici che mostrino le singole osservazioni o le distribuzioni complete, invece di una sola sintesi.
+2. **Massimizza il rapporto dati-inchiostro** (Tufte): ogni goccia di inchiostro dovrebbe portare informazione. Elimina sfondi pesanti, effetti 3D, legende ridondanti e decorazioni.
+3. **Usa la posizione per il confronto più importante.** Giudichiamo le posizioni su un asse comune in modo molto più accurato di colori, aree o angoli.
+4. **Usa il colore con uno scopo e in modo accessibile.** Circa un uomo su 12 ha qualche forma di deficit nella visione dei colori. Usa tavolozze adatte (Okabe–Ito, predefinita in questo corso; `scale_colour_viridis_d()` per molte categorie), evita contrasti rosso–verde e aggiungi codifiche ridondanti (forma, etichette).
+5. **Etichetta tutto** con le unità di misura, ed enuncia il messaggio nel titolo.
+6. **Non distorcere.** Le barre devono partire da zero; usa gli stessi assi nei pannelli che vuoi far confrontare; dichiara quando un asse è logaritmico.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Costante dentro `aes()`**: `aes(colour = "red")` associa una variabile fittizia: i punti non sono rossi e compare una legenda inutile. Imposta le costanti fuori da `aes()`.
+2. **Usare `|>` invece di `+`** tra i livelli di ggplot2. La pipe passa i dati *dentro* `ggplot()`; i livelli si aggiungono con `+`.
+3. **Dimenticare `factor()`** per un codice numerico (marce, cilindri) usato come categoria: ottieni un gradiente di colore continuo invece di colori distinti.
+4. **Ingrandire con `xlim()`** quando volevi solo ingrandire: i punti esterni vengono eliminati e le rette stimate cambiano. Usa `coord_cartesian()`.
+5. **`size` per lo spessore delle linee.** Nelle versioni attuali di ggplot2 usa `linewidth` per linee e bordi.
+6. **Chiamare `ggsave()` senza `plot =`**: salva l'ultimo grafico visualizzato, qualunque sia.
+:::
+
+## 12. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. In `ggplot(df, aes(x, y)) + geom_point(colour = "blue")`, il colore è associato o impostato? E in `geom_point(aes(colour = group))`?
+
+Il primo **imposta** il colore (tutti i punti blu). Il secondo **associa** il colore alla variabile `group` (un colore per gruppo, con una legenda).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. Perché useresti `scale_y_log10()` invece di `aes(y = log10(income))`?
+
+I punti sono nelle stesse posizioni, ma la scala mantiene le etichette dell'asse nelle unità originali (per esempio 1.000, 10.000, 100.000), che i lettori comprendono direttamente.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Aggiungi `geom_smooth(method = "lm")` a un grafico con `aes(colour = species)` in `ggplot()`. Quante rette ottieni, e come ne ottieni una sola?
+
+Una retta per specie, perché il raggruppamento per colore viene ereditato. Associa il colore solo in `geom_point()`, oppure aggiungi `aes(group = 1)` a `geom_smooth()`.
+:::
+
+## 13. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — il tuo primo grafico a dispersione.** Usando `mtcars`, rappresenta `mpg` (y) rispetto al peso dell'auto `wt` (x), colorando i punti in base al numero di cilindri trattato come categoria. Aggiungi le etichette degli assi.
+
+```{webr}
+#| exercise: ex_24_1
+library(ggplot2)
+ggplot(mtcars, aes(x = ______, y = ______, colour = ______)) +
+  geom_point(size = 2) +
+  labs(x = "Peso (migliaia di libbre)", y = "Miglia per gallone", colour = "Cilindri")
+```
+
+::: {.hint exercise="ex_24_1"}
+`x = wt`, `y = mpg` e `colour = factor(cyl)`, così che i cilindri siano trattati come categorie.
+:::
+
+::: {.solution exercise="ex_24_1"}
+```r
+ggplot(mtcars, aes(x = wt, y = mpg, colour = factor(cyl))) +
+  geom_point(size = 2) +
+  labs(x = "Peso (migliaia di libbre)", y = "Miglia per gallone", colour = "Cilindri")
+```
+Le auto più pesanti percorrono meno miglia per gallone, e le auto a 8 cilindri sono le più pesanti e le meno economiche.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — trova gli errori.** L'autore voleva punti arancioni, semitrasparenti e *nessuna* legenda. Correggi il codice.
+
+```{webr}
+#| exercise: ex_24_2
+library(ggplot2)
+ggplot(penguins, aes(bill_len, bill_dep)) |>
+  geom_point(aes(colour = "orange", alpha = 0.5))
+```
+
+::: {.hint exercise="ex_24_2"}
+Ci sono due errori: uno nel modo in cui si combinano i livelli, uno nel punto in cui sono scritte le estetiche costanti.
+:::
+
+::: {.solution exercise="ex_24_2"}
+```r
+ggplot(penguins, aes(bill_len, bill_dep)) +
+  geom_point(colour = "orange", alpha = 0.5, na.rm = TRUE)
+```
+I livelli si aggiungono con `+`, non con `|>`; e le estetiche costanti si *impostano* fuori da `aes()`. Dentro `aes()` "orange" e 0.5 verrebbero trattati come valori dei dati, producendo colori e legende predefiniti.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — faccette e rette interpolanti.** Rappresenta `bill_dep` rispetto a `bill_len` per i pinguini, con un pannello per specie e una retta stimata in ciascun pannello. All'interno delle specie la relazione sale o scende?
+
+```{webr}
+#| exercise: ex_24_3
+library(ggplot2)
+ggplot(penguins, aes(bill_len, bill_dep)) +
+  geom_point(alpha = 0.5, na.rm = TRUE) +
+  geom_smooth(method = ______, formula = y ~ x, na.rm = TRUE) +
+  facet_wrap(~ ______) +
+  labs(x = "Lunghezza del becco (mm)", y = "Profondità del becco (mm)")
+```
+
+::: {.hint exercise="ex_24_3"}
+`method = "lm"` e `facet_wrap(~ species)`.
+:::
+
+::: {.solution exercise="ex_24_3"}
+```r
+ggplot(penguins, aes(bill_len, bill_dep)) +
+  geom_point(alpha = 0.5, na.rm = TRUE) +
+  geom_smooth(method = "lm", formula = y ~ x, na.rm = TRUE) +
+  facet_wrap(~ species) +
+  labs(x = "Lunghezza del becco (mm)", y = "Profondità del becco (mm)")
+```
+In ogni specie, i becchi più lunghi sono anche più profondi (le rette **salgono**). Prova a togliere le faccette e il colore: mettendo insieme tutte le specie, la retta complessiva **scende**! La specie è un confondente: è lo stesso paradosso di Simpson visto in [Descrivere due variabili](../05-descriptive/23-two-variables.qmd). Ne riparleremo in [Correlazione](27-correlation.qmd).
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — scala logaritmica.** In `msleep`, rappresenta il sonno totale (`sleep_total`, in ore) rispetto al peso corporeo (`bodywt`). Metti l'asse x in scala logaritmica. Descrivi la relazione.
+
+```{webr}
+#| exercise: ex_24_4
+library(ggplot2)
+ggplot(msleep, aes(bodywt, sleep_total)) +
+  geom_point() +
+  ______ +
+  labs(x = "Peso corporeo (kg, scala log)", y = "Sonno totale (ore al giorno)")
+```
+
+::: {.hint exercise="ex_24_4"}
+Usa `scale_x_log10()`.
+:::
+
+::: {.solution exercise="ex_24_4"}
+```r
+ggplot(msleep, aes(bodywt, sleep_total)) +
+  geom_point() +
+  scale_x_log10() +
+  labs(x = "Peso corporeo (kg, scala log)", y = "Sonno totale (ore al giorno)")
+```
+Sulla scala logaritmica diventa visibile un andamento decrescente: i mammiferi più grandi tendono a dormire meno ore, con molta dispersione. Su una scala lineare quasi tutti gli animali sarebbero schiacciati contro l'asse y.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 5 — una figura pronta per la pubblicazione.** Crea un grafico a dispersione di `body_mass` rispetto a `flipper_len` con colore *e* forma associati alla specie, una retta stimata per specie senza banda di confidenza, un titolo che enunci il messaggio, una didascalia con la fonte dei dati, etichette degli assi con le unità di misura, la legenda in alto e `theme_classic()`. Salvalo come `penguins.png` (7 × 4.5 pollici, 300 dpi) e come `penguins.pdf`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+fig <- ggplot(penguins, aes(flipper_len, body_mass,
+                            colour = species, shape = species)) +
+  geom_point(alpha = 0.7, na.rm = TRUE) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE, na.rm = TRUE) +
+  labs(title = "In ogni specie, i pinguini con pinne più lunghe sono più pesanti",
+       caption = "Fonte: penguins (Gorman et al., 2014; R datasets)",
+       x = "Lunghezza delle pinne (mm)", y = "Massa corporea (g)",
+       colour = "Specie", shape = "Specie") +
+  theme_classic() +
+  theme(legend.position = "top")
+
+ggsave("penguins.png", plot = fig, width = 7, height = 4.5, dpi = 300)
+ggsave("penguins.pdf", plot = fig, width = 7, height = 4.5)
+```
+Associando colore e forma alla stessa variabile con lo stesso titolo, le due legende si fondono in una sola.
+:::
+:::
+
+## Riepilogo
+
+| Componente | Codice tipico |
+|---|---|
+| Dati + estetiche | `ggplot(df, aes(x, y, colour = g))` |
+| Grafico a dispersione | `+ geom_point()` |
+| Associare o impostare | `geom_point(aes(colour = g))` contro `geom_point(colour = "blue")` |
+| Retta interpolante | `+ geom_smooth(method = "lm", formula = y ~ x, se = FALSE)` |
+| Asse logaritmico | `+ scale_x_log10()` |
+| Tacche degli assi | `+ scale_x_continuous(breaks = ...)` |
+| Etichette | `+ labs(title, subtitle, caption, x, y, colour)` |
+| Faccette | `+ facet_wrap(~ g)`, `+ facet_grid(r ~ c)` |
+| Ingrandimento | `+ coord_cartesian(xlim = ...)` |
+| Tema | `+ theme_classic()`, `+ theme(legend.position = "top")` |
+| Salvataggio | `ggsave("file.png", plot = p, width, height, dpi)` |
+
+- Ogni ggplot è **dati + associazioni delle estetiche + livelli**, rifiniti da scale, faccette, coordinate e un tema.
+- **Associa** le variabili dentro `aes()`; **imposta** le costanti fuori.
+- Usa le **scale logaritmiche** per dati positivi e asimmetrici che coprono più ordini di grandezza; mantieni le etichette nelle unità originali.
+- Ingrandisci con `coord_cartesian()`; i limiti di scala **eliminano** dati.
+- I buoni grafici mostrano i dati, etichettano tutto e sono leggibili da chiunque.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2a ed.), capitoli "Data visualization" e "Layers", <https://r4ds.hadley.nz>
+- Wickham, Navarro & Pedersen, *ggplot2: Elegant Graphics for Data Analysis* (3a ed.), <https://ggplot2-book.org>
+- Wilke, C. O., *Fundamentals of Data Visualization*, <https://clauswilke.com/dataviz/>
+:::

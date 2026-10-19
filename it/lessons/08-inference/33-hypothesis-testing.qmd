@@ -1,0 +1,482 @@
+---
+title: "La logica del test d'ipotesi"
+subtitle: "Ipotesi nulla, p-value, errori e potenza — costruiti a partire da una simulazione"
+description: "Capisci che cosa fa un test d'ipotesi costruendo a mano un test di permutazione, poi collegalo ai test standard; scopri errori di I e II tipo, potenza, dimensione dell'effetto, test multipli e come leggere correttamente i p-value."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 3 · Inferenza]{.level-3} [⏱ ~90 min]{} [Prerequisiti: [Intervalli di confidenza](32-confidence-intervals.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- formulare un'ipotesi nulla e un'ipotesi alternativa e scegliere una statistica test;
+- eseguire un **test di permutazione** per simulazione e calcolarne il p-value;
+- spiegare gli errori di I e II tipo, il livello di significatività e la **potenza**;
+- calcolare potenza e numerosità campionaria con `power.t.test()` e per simulazione;
+- riconoscere il problema dei test multipli e correggere i p-value con `p.adjust()`;
+- interpretare correttamente un p-value e spiegarne il legame con gli intervalli di confidenza.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+```
+
+## 1. Perché serve un test?
+
+I dati `PlantGrowth`, già disponibili in R, riportano il peso secco di piante coltivate in una condizione di controllo e con due trattamenti, 10 piante per gruppo. Confrontiamo il controllo con il trattamento 2.
+
+```{r}
+#| label: plants
+plants <- PlantGrowth |>
+  filter(group %in% c("ctrl", "trt2")) |>
+  droplevels()
+
+group_means <- tapply(plants$weight, plants$group, mean)
+group_means
+obs_diff <- unname(group_means["trt2"] - group_means["ctrl"])
+obs_diff
+```
+
+Le piante con il trattamento 2 sono in media più pesanti, di `r round(obs_diff, 3)` unità. Ma abbiamo solo 10 piante per gruppo, e le piante variano molto. **Una differenza così grande potrebbe comparire per puro caso, anche se il trattamento non facesse nulla?** Un test d'ipotesi risponde esattamente a questa domanda.
+
+## 2. La logica in quattro passi
+
+1. **Ipotesi.** L'*ipotesi nulla* $H_0$ è la spiegazione "noiosa": *il trattamento non ha effetto; ogni differenza è dovuta al caso.* L'*ipotesi alternativa* $H_1$: *il trattamento modifica il peso medio.*
+2. **Statistica test.** Un numero che misura quanto i dati si discostano da ciò che $H_0$ prevede. Qui: la differenza tra le medie.
+3. **Distribuzione sotto l'ipotesi nulla.** I valori che la statistica assumerebbe **se $H_0$ fosse vera**, su molte ripetizioni ipotetiche dello studio.
+4. **p-value.** La proporzione della distribuzione sotto l'ipotesi nulla che è **almeno tanto estrema** quanto ciò che abbiamo osservato. Un p-value piccolo significa: *se $H_0$ fosse vera, dati come i nostri sarebbero rari.*
+
+Il passo più difficile è il terzo. Ora costruiamo la distribuzione sotto l'ipotesi nulla con una simulazione.
+
+## 3. Un test di permutazione, a mano
+
+Se il trattamento non ha effetto, le etichette "ctrl" e "trt2" sono solo nomi arbitrari: ogni pianta avrebbe avuto lo stesso peso, qualunque etichetta avesse ricevuto. Possiamo quindi **mescolare le etichette** a caso, ricalcolare la differenza tra le medie e ripetere molte volte. Ogni rimescolamento è un "mondo in cui $H_0$ è vera".
+
+```{r}
+#| label: permutation
+set.seed(123)
+perm_diffs <- replicate(10000, {
+  shuffled <- sample(plants$group)          # rimescola le etichette
+  m <- tapply(plants$weight, shuffled, mean)
+  unname(m["trt2"] - m["ctrl"])
+})
+```
+
+```{r}
+#| label: fig-null
+#| fig-cap: "Distribuzione sotto l'ipotesi nulla della differenza tra le medie, ottenuta rimescolando 10.000 volte le etichette dei gruppi. Le linee arancioni indicano la differenza osservata e la sua immagine speculare."
+ggplot(tibble(diff = perm_diffs), aes(diff)) +
+  geom_histogram(bins = 40, fill = "grey70", colour = "white") +
+  geom_vline(xintercept = c(-obs_diff, obs_diff),
+             colour = "#D55E00", linewidth = 1) +
+  labs(x = "Differenza tra le medie (trt2 - ctrl) dopo il rimescolamento",
+       y = "Numero di rimescolamenti")
+```
+
+L'istogramma è centrato sullo zero — come deve essere sotto "nessun effetto". La differenza osservata si trova nella coda. Quanto lontano? Contiamo:
+
+```{r}
+#| label: perm-p
+p_perm <- mean(abs(perm_diffs) >= abs(obs_diff))
+p_perm
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo risultato
+
+Solo il `r round(100 * p_perm, 1)`% dei dataset rimescolati ha dato una differenza almeno grande quanto quella osservata (in entrambe le direzioni). Questa proporzione **è il p-value**: `r round(p_perm, 3)`. Se il trattamento non facesse nulla, una differenza di `r round(obs_diff, 2)` o più (in entrambe le direzioni) sarebbe insolita, ma non straordinaria — circa un evento su `r round(1 / p_perm)`.
+:::
+
+## 4. La stessa risposta dalla teoria
+
+Prima dei computer, gli statistici ricavavano la distribuzione sotto l'ipotesi nulla per via matematica. Il test t a due campioni (vedi [Test t](34-t-tests.qmd)) assume dati approssimativamente normali e usa la distribuzione t come distribuzione sotto l'ipotesi nulla della differenza standardizzata.
+
+```{r}
+#| label: t-equiv
+t_res <- t.test(weight ~ group, data = plants, var.equal = TRUE)
+t_res$p.value
+```
+
+Il p-value teorico (`r round(t_res$p.value, 4)`) è molto vicino al p-value di permutazione (`r round(p_perm, 4)`). È rassicurante: il test basato sulla formula è una scorciatoia per la simulazione che abbiamo appena fatto. I test di permutazione richiedono meno assunzioni — in sostanza, che sotto $H_0$ le etichette siano scambiabili — e ci torneremo in [Test non parametrici](36-nonparametric-tests.qmd).
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: test di permutazione esatti e Monte Carlo
+
+Con 10 + 10 piante ci sono $\binom{20}{10} =$ `r format(choose(20, 10), big.mark = ",")` modi di ripartire le etichette. Enumerarli tutti dà il p-value di permutazione *esatto*; campionarne 10.000 dà un'approssimazione *Monte Carlo*, con errore standard circa $\sqrt{p(1-p)/10000}$ — qui circa `r round(sqrt(p_perm * (1 - p_perm) / 10000), 4)`. Un raffinamento comune conta la ripartizione osservata come una delle permutazioni: $(1 + \#\{\text{estreme}\}) / (1 + B)$, il che garantisce che il p-value non sia mai esattamente 0.
+:::
+
+## 5. Unilaterale o bilaterale?
+
+Finora $H_1$ era "le medie sono diverse" (**bilaterale**): abbiamo contato i valori estremi in **entrambe** le code. Se, *prima di vedere i dati*, l'unica domanda scientificamente rilevante fosse "il trattamento 2 **aumenta** il peso?", l'alternativa è **unilaterale** e si conta solo la coda superiore:
+
+```{r}
+#| label: one-sided
+mean(perm_diffs >= obs_diff)
+t.test(weight ~ group, data = plants, var.equal = TRUE,
+       alternative = "less")$p.value
+```
+
+Il p-value unilaterale è circa la metà di quello bilaterale. (In `t.test()` la differenza è `ctrl − trt2`, seguendo l'ordine dei livelli del fattore, quindi "trt2 è maggiore" corrisponde a `alternative = "less"`.)
+
+::: {.callout-warning}
+## Scegli la direzione prima di guardare i dati
+
+Passare a un test unilaterale *dopo* aver visto in quale direzione puntano i dati significa dimezzare il proprio p-value gratis. Non è legittimo. Usa test bilaterali, a meno che la direzione sia stata fissata in anticipo e un effetto nella direzione opposta sarebbe davvero irrilevante.
+:::
+
+## 6. Decisioni, α e due tipi di errore
+
+Spesso dobbiamo prendere una decisione: agire come se ci fosse un effetto, oppure no. Fissiamo in anticipo un **livello di significatività** $\alpha$ (per convenzione 0,05) e **rifiutiamo $H_0$ se $p \le \alpha$**.
+
+Qualunque regola di decisione può sbagliare in due modi:
+
+|  | $H_0$ vera (nessun effetto) | $H_0$ falsa (effetto reale) |
+|---|---|---|
+| **Rifiuto $H_0$** | **Errore di I tipo** (falso positivo). Probabilità $= \alpha$ | Corretto: rilevazione. Probabilità $=$ **potenza** $= 1 - \beta$ |
+| **Non rifiuto $H_0$** | Corretto | **Errore di II tipo** (falso negativo). Probabilità $= \beta$ |
+
+**L'analogia del processo.** Un imputato è presunto innocente ($H_0$) finché non è provata la sua colpevolezza oltre ogni ragionevole dubbio.
+
+- Condannare un innocente è un **errore di I tipo**. Il sistema giudiziario lo mantiene raro richiedendo prove solide (un $\alpha$ piccolo).
+- Assolvere un colpevole è un **errore di II tipo**. Succede quando le prove sono troppo deboli — per esempio, pochi testimoni (un campione piccolo).
+- "Non colpevole" **non** significa "innocente". Allo stesso modo, "non significativo" **non** significa "nessun effetto"; significa che l'evidenza non era abbastanza forte.
+
+Abbassare $\alpha$ protegge dai falsi positivi ma, a parità di dati, rende più probabili i falsi negativi. L'unico modo per ridurre entrambi è raccogliere **più dati (o dati migliori)**.
+
+## 7. Potenza: il mio studio rileverà un effetto reale?
+
+La **potenza** è la probabilità che il test rifiuti $H_0$ *quando esiste un effetto reale di una data grandezza*. Dipende da:
+
+- la **dimensione dell'effetto** (*effect size*) — quanto è grande la vera differenza rispetto al rumore. Una misura comune è la $d$ di Cohen, la differenza tra le medie divisa per la deviazione standard (vedi [Test t](34-t-tests.qmd));
+- la **numerosità campionaria** $n$;
+- il livello di significatività $\alpha$.
+
+### Potenza per simulazione
+
+Supponi che il vero effetto sia $d = 0.5$ (un effetto "medio") e di pianificare 20 soggetti per gruppo. Simuliamo molti studi e contiamo quante volte il test risulta significativo:
+
+```{r}
+#| label: power-sim
+set.seed(1)
+p_vals <- replicate(2000, {
+  control <- rnorm(20, mean = 0,   sd = 1)
+  treated <- rnorm(20, mean = 0.5, sd = 1)
+  t.test(treated, control)$p.value
+})
+power_sim <- mean(p_vals < 0.05)
+power_sim
+```
+
+### Potenza con una formula
+
+```{r}
+#| label: power-formula
+power.t.test(n = 20, delta = 0.5, sd = 1, sig.level = 0.05)
+```
+
+I due approcci concordano: con 20 soggetti per gruppo, un effetto medio viene rilevato solo circa il `r round(100 * power_sim)`% delle volte. La maggior parte degli studi *mancherebbe* un effetto reale. Ometti `n` e imposta invece `power` per trovare la numerosità necessaria:
+
+```{r}
+#| label: sample-size
+ss <- power.t.test(power = 0.80, delta = 0.5, sd = 1)
+ceiling(ss$n)
+```
+
+Per raggiungere la potenza convenzionale dell'80% con $d = 0.5$ servono circa `r ceiling(ss$n)` soggetti **per gruppo**.
+
+::: {.callout-tip .read-output}
+## Come leggere `power.t.test()`
+
+Fornisci tutti gli argomenti tranne uno tra `n`, `delta`, `sd`, `sig.level`, `power`, e la funzione calcola quello mancante. `delta` è la vera differenza che vuoi rilevare, nelle stesse unità di `sd`; `n` è la numerosità di **ciascun** gruppo (vedi la riga `NOTE`). La parte più difficile non è il codice, ma scegliere un `delta` realistico: basalo su studi precedenti o sulla più piccola differenza che conterebbe nella pratica.
+:::
+
+## 8. Significatività statistica non vuol dire importanza pratica
+
+Con un campione abbastanza grande, anche una differenza trascurabile diventa "significativa". Immagina due gruppi molto numerosi le cui vere medie differiscono di mezzo punto su una scala con DS 15 (come un test del QI):
+
+```{r}
+#| label: tiny-effect
+set.seed(3)
+group_a <- rnorm(20000, mean = 100,   sd = 15)
+group_b <- rnorm(20000, mean = 100.5, sd = 15)
+t.test(group_a, group_b)$p.value
+(mean(group_b) - mean(group_a)) / sd(c(group_a, group_b))   # d di Cohen approssimata
+```
+
+Il p-value è minuscolo, ma la dimensione dell'effetto è circa `r round((mean(group_b) - mean(group_a)) / sd(c(group_a, group_b)), 2)` deviazioni standard — praticamente irrilevante. **Il p-value ti dice se un effetto è rilevabile, non se è grande.** Riporta sempre l'effetto stimato con il suo intervallo di confidenza.
+
+## 9. Test multipli: cercare in molti posti
+
+Se esegui un solo test con $\alpha = 0.05$ su un'ipotesi nulla vera, hai il 5% di probabilità di un falso positivo. Se esegui 20 test indipendenti su ipotesi nulle vere, la probabilità di **almeno un** falso positivo è $1 - 0.95^{20} =$ `r round(1 - 0.95^20, 2)`.
+
+Simuliamo 20 confronti in cui **non succede nulla**:
+
+```{r}
+#| label: twenty-tests
+set.seed(28)
+p20 <- replicate(20, t.test(rnorm(15), rnorm(15))$p.value)
+round(sort(p20), 3)
+sum(p20 < 0.05)
+```
+
+`r sum(p20 < 0.05)` dei 20 "studi" sembrano significativi, benché tutti i dati siano puro rumore. Riportare solo questi sarebbe fuorviante. (In effetti, sotto $H_0$ il p-value è distribuito uniformemente tra 0 e 1, quindi circa 1 su 20 cade sotto 0,05 per costruzione.)
+
+Il rimedio è **correggere** i p-value in base al numero di test:
+
+```{r}
+#| label: p-adjust
+p_adj <- tibble(
+  raw        = p20,
+  bonferroni = p.adjust(p20, method = "bonferroni"),
+  holm       = p.adjust(p20, method = "holm"),
+  BH         = p.adjust(p20, method = "BH")
+)
+p_adj |> arrange(raw) |> head(5)
+colSums(p_adj < 0.05)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **Bonferroni** moltiplica ogni p-value per il numero di test (con tetto a 1). Semplice, ma conservativo.
+- **Holm** è una versione sequenziale (*step-down*) di Bonferroni: controlla lo stesso errore (la probabilità di *almeno* un falso positivo, il *family-wise error rate*) e non è mai meno potente. Non c'è motivo di preferire Bonferroni a Holm.
+- **BH** (Benjamini–Hochberg) controlla il *false discovery rate* (tasso di false scoperte): la proporzione attesa di falsi positivi tra i risultati che dichiari significativi. È meno severo ed è diffuso quando si eseguono moltissimi test (genomica, screening).
+- Confronta i p-value corretti con il solito $\alpha$: dopo la correzione, le "scoperte" spurie qui spariscono.
+:::
+
+## 10. Che cos'è un p-value — e che cosa non è
+
+Nel 2016 l'American Statistical Association ha pubblicato una dichiarazione sui p-value (Wasserstein & Lazar, *The American Statistician*). I suoi sei principi, in parole semplici:
+
+1. Un p-value misura quanto i dati sono **incompatibili con un modello specificato** (come $H_0$).
+2. **Non** è la probabilità che $H_0$ sia vera, né la probabilità che i dati siano stati prodotti dal solo caso.
+3. Le decisioni scientifiche **non** dovrebbero basarsi solo sul fatto che $p$ superi una soglia come 0,05.
+4. Un'inferenza corretta richiede **resoconto completo e trasparenza**: tutti i test eseguiti, non solo quelli significativi.
+5. Un p-value **non** misura la grandezza né l'importanza di un effetto.
+6. Da solo, un p-value **non** è una buona misura di evidenza a favore di un modello o di un'ipotesi.
+
+Alcune interpretazioni errate comuni di "$p = 0.03$":
+
+| Affermazione | Corretta? |
+|---|---|
+| "Se $H_0$ fosse vera, dati almeno così estremi si osserverebbero circa il 3% delle volte." | ✅ Sì |
+| "C'è una probabilità del 3% che $H_0$ sia vera." | ❌ No — il calcolo *assume* che $H_0$ sia vera |
+| "C'è una probabilità del 97% che l'effetto sia reale." | ❌ No |
+| "L'effetto è grande." | ❌ Non implicato — vedi la Sezione 8 |
+| "$p = 0.06$ dimostra che non c'è alcun effetto." | ❌ No — l'assenza di evidenza non è evidenza di assenza |
+
+## 11. Test e intervalli di confidenza: due modi di vedere un unico calcolo
+
+Un intervallo di confidenza al 95% contiene esattamente i valori che un test bilaterale con $\alpha = 0.05$ **non** rifiuterebbe. Verifichiamolo con i dati sulle piante:
+
+```{r}
+#| label: duality
+ci <- t_res$conf.int
+ci
+
+# verifica H0: (ctrl - trt2) = d0 per diversi valori di d0
+d0 <- c(-1.2, -1, -0.5, 0, 0.2)
+p_d0 <- sapply(d0, \(d) {
+  t.test(weight ~ group, data = plants, var.equal = TRUE, mu = d)$p.value
+})
+tibble(d0, p = round(p_d0, 3), inside_ci = d0 >= ci[1] & d0 <= ci[2])
+```
+
+Ogni valore all'interno dell'intervallo ha $p > 0.05$; ogni valore all'esterno ha $p < 0.05$. Poiché $0$ si trova appena fuori dall'intervallo, il test di "nessuna differenza" dà un $p$ appena sotto 0,05. Per questo un IC è più informativo di un p-value da solo: mostra *tutti* i valori compatibili con i dati in un colpo solo.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Leggere il p-value come la probabilità che $H_0$ sia vera.** È calcolato *assumendo* $H_0$.
+2. **Considerare "non significativo" come "nessun effetto".** Controlla l'IC e la potenza: uno studio piccolo può facilmente mancare un effetto reale.
+3. **Scegliere il test unilaterale dopo aver guardato i dati**, o provare diversi test e riportare quello che "funziona" (*p-hacking*).
+4. **Eseguire molti test senza correzione** e riportare solo quelli significativi.
+5. **Equiparare significatività e importanza.** Riporta la dimensione dell'effetto e il suo IC.
+6. **Trattare 0,05 come una linea magica.** $p = 0.049$ e $p = 0.051$ portano praticamente la stessa evidenza.
+:::
+
+## 12. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. Nel test di permutazione, perché è legittimo rimescolare le etichette dei gruppi?
+
+Perché sotto $H_0$ il trattamento non ha effetto: il peso di ogni pianta sarebbe lo stesso con una qualsiasi delle due etichette, quindi tutte le assegnazioni delle etichette sono ugualmente probabili. Il rimescolamento genera dataset che avrebbero potuto verificarsi se $H_0$ fosse vera.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. Uno studio ha potenza 0,30 per l'effetto di interesse. Che cosa significa, e qual è il rischio?
+
+Se l'effetto esiste con quella grandezza, lo studio lo rileva (p < α) solo il 30% delle volte. Lo studio produrrà di solito un risultato "non significativo" anche se l'effetto è reale (un errore di II tipo), e i risultati significativi che produce tendono a sovrastimare l'effetto.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. Un ricercatore testa 10 esiti e ne trova uno con p = 0,03. Dopo una correzione di Holm diventa 0,30. Come va riportato?
+
+Come non significativo dopo aver tenuto conto dei test multipli. Il singolo p-value piccolo è del tutto plausibile come risultato casuale tra 10 test; può essere riportato come esplorativo, da confermare in un nuovo studio.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q4. Un IC al 95% per una differenza è [0,4; 2,9]. Senza fare calcoli, il p-value bilaterale per "differenza = 0" è sopra o sotto 0,05?
+
+**Sotto** 0,05: lo 0 è fuori dall'IC al 95%.
+:::
+
+## 13. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 1 — il tuo test di permutazione.** Le auto a cambio manuale (`am == 1`) hanno un `mpg` medio diverso da quelle a cambio automatico (`am == 0`)? Completa il test di permutazione e confronta il suo p-value con quello di `t.test()`.
+
+```{webr}
+#| exercise: ex_33_1
+obs <- mean(mtcars$mpg[mtcars$am == 1]) - mean(mtcars$mpg[mtcars$am == 0])
+
+set.seed(1)
+perm <- replicate(5000, {
+  am_shuffled <- sample(______)
+  mean(mtcars$mpg[am_shuffled == 1]) - mean(mtcars$mpg[am_shuffled == 0])
+})
+mean(abs(perm) >= abs(______))
+t.test(mpg ~ am, data = mtcars, var.equal = TRUE)$p.value
+```
+
+::: {.hint exercise="ex_33_1"}
+Rimescola le etichette del cambio `mtcars$am` e confronta le differenze rimescolate con la differenza osservata `obs`.
+:::
+
+::: {.solution exercise="ex_33_1"}
+```r
+perm <- replicate(5000, {
+  am_shuffled <- sample(mtcars$am)
+  mean(mtcars$mpg[am_shuffled == 1]) - mean(mtcars$mpg[am_shuffled == 0])
+})
+mean(abs(perm) >= abs(obs))
+```
+La differenza osservata è circa 7,2 mpg. Solo una manciata dei 5.000 rimescolamenti la raggiunge, quindi il p-value di permutazione è ben sotto 0,01 (circa 0,0006 con questo seme), in linea con il test t (p ≈ 0,0003). Se nessun rimescolamento raggiunge il valore osservato, non riportare "p = 0" ma "p < 1/5000".
+:::
+:::
+
+::: {.exercise}
+[★]{.stars} **Esercizio 2 — pianifica uno studio.** Ti aspetti una differenza di 5 unità tra due gruppi, con una deviazione standard di 12. (a) Che potenza hai con 30 soggetti per gruppo? (b) Quanti soggetti per gruppo servono per una potenza del 90%?
+
+```{webr}
+#| exercise: ex_33_2
+power.t.test(n = ______, delta = ______, sd = ______)
+power.t.test(power = ______, delta = 5, sd = 12)
+```
+
+::: {.hint exercise="ex_33_2"}
+`delta` è la differenza attesa (5) e `sd` la deviazione standard (12). La potenza è un numero tra 0 e 1.
+:::
+
+::: {.solution exercise="ex_33_2"}
+```r
+power.t.test(n = 30, delta = 5, sd = 12)        # potenza circa 0.35
+power.t.test(power = 0.90, delta = 5, sd = 12)  # n = 122.01, quindi 123 per gruppo
+```
+Con 30 soggetti per gruppo lo studio mancherebbe l'effetto circa due volte su tre. Servono circa 123 soggetti per gruppo (arrotondando sempre per eccesso) per una potenza del 90% — un risultato avvilente ma molto comune.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 3 — correggi per i test multipli.** Uno studio di screening riporta questi otto p-value. Quanti sono sotto 0,05 prima della correzione, dopo Holm e dopo BH?
+
+```{webr}
+#| exercise: ex_33_3
+p <- c(0.001, 0.008, 0.012, 0.030, 0.040, 0.045, 0.20, 0.60)
+sum(p < 0.05)
+sum(p.adjust(p, method = "______") < 0.05)
+sum(p.adjust(p, method = "______") < 0.05)
+```
+
+::: {.hint exercise="ex_33_3"}
+I nomi dei metodi sono `"holm"` e `"BH"`.
+:::
+
+::: {.solution exercise="ex_33_3"}
+```r
+sum(p < 0.05)                              # 6
+sum(p.adjust(p, method = "holm") < 0.05)   # 1
+sum(p.adjust(p, method = "BH") < 0.05)     # 3
+```
+Holm controlla la probabilità di *almeno* un falso positivo e conserva solo il p-value più piccolo. BH controlla la *proporzione* attesa di false scoperte e ne conserva tre: è meno severo. Quale usare dipende dal costo di un falso positivo.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 4 — una curva di potenza.** Usando la simulazione (1.000 replicazioni per punto), stima la potenza di un test t a due campioni per un vero effetto $d = 0.5$ con $n = 10, 20, 40, 80$ per gruppo. Rappresenta graficamente la potenza in funzione di $n$ e aggiungi i valori ottenuti con `power.t.test()`.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+set.seed(42)
+sim_power <- function(n, d, reps = 1000) {
+  mean(replicate(reps, t.test(rnorm(n, d), rnorm(n, 0))$p.value < 0.05))
+}
+pw <- tibble(n = c(10, 20, 40, 80)) |>
+  mutate(
+    simulated = sapply(n, sim_power, d = 0.5),
+    formula   = sapply(n, \(k) power.t.test(n = k, delta = 0.5)$power)
+  )
+pw
+
+ggplot(pw, aes(n, simulated)) +
+  geom_line(linewidth = 1) +
+  geom_point(aes(y = formula), colour = "#D55E00", size = 3) +
+  geom_hline(yintercept = 0.8, linetype = "dashed") +
+  labs(x = "n per gruppo", y = "Potenza", title = "Potenza per d = 0.5")
+```
+La potenza cresce da circa 0,18 (n = 10) a circa 0,88 (n = 80); i valori simulati e quelli della formula concordano entro l'errore di simulazione. La linea dell'80% viene attraversata tra 40 e 80 per gruppo (≈ 64, come trovato nella Sezione 7).
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — interpreta.** Un articolo riporta: *"Il nuovo metodo didattico ha migliorato i punteggi d'esame (p = 0,04, n = 2.000 per gruppo). La differenza media è stata di 0,6 punti su una scala di 100 (IC al 95% da 0,03 a 1,2)."* Scrivi tre frasi per un consiglio d'istituto: il risultato è reale, è importante, e che cosa resta incerto?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+Una differenza così grande sarebbe piuttosto insolita se il metodo non avesse effetto (p = 0,04), quindi c'è una certa evidenza di un effetto reale. Tuttavia, il miglioramento stimato è minuscolo — meno di un punto su 100 — e anche l'estremo superiore dell'intervallo (1,2 punti) è piccolo, quindi il beneficio pratico è dubbio. L'intervallo arriva inoltre quasi a zero, quindi il vero effetto potrebbe essere trascurabile; la decisione dovrebbe pesare costi e altri esiti, non il solo p-value.
+:::
+:::
+
+## Riepilogo
+
+| Idea / funzione | Che cosa fa |
+|---|---|
+| $H_0$, $H_1$ | Il modello "nessun effetto" e la sua alternativa |
+| Test di permutazione (`sample()` + `replicate()`) | Costruisce la distribuzione sotto l'ipotesi nulla rimescolando le etichette |
+| p-value | Probabilità, sotto $H_0$, di dati almeno così estremi come quelli osservati |
+| $\alpha$ | Tasso di errore di I tipo scelto in anticipo (tasso di falsi positivi) |
+| Potenza, `power.t.test()` | Probabilità di rilevare un effetto reale; pianificazione della numerosità campionaria |
+| `p.adjust(p, "holm")`, `"BH"` | Correzione per test multipli |
+
+- Un test confronta la statistica osservata con la sua **distribuzione sotto l'ipotesi nulla**; una simulazione rende visibile questa distribuzione.
+- p-value piccolo: i dati sono sorprendenti **se $H_0$ fosse vera** — nient'altro.
+- Non significativo ≠ nessun effetto; significativo ≠ importante. Riporta dimensioni dell'effetto e IC.
+- Pianifica gli studi con **potenza** sufficiente; correggi quando esegui **molti test**.
+- Un IC al 95% contiene esattamente i valori non rifiutati con $\alpha = 0.05$.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), capitoli sul test d'ipotesi con la randomizzazione, <https://openintro-ims.netlify.app>
+- Wasserstein, R. L. & Lazar, N. A. (2016). The ASA statement on p-values: context, process, and purpose. *The American Statistician*, 70(2), 129–133. <https://doi.org/10.1080/00031305.2016.1154108>
+- Lakens, D., *Improving Your Statistical Inferences*, capitoli su p-value, controllo dell'errore e potenza, <https://lakens.github.io/statistical_inferences/>
+:::

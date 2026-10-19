@@ -1,0 +1,483 @@
+---
+title: "Proporzioni e test chi-quadrato"
+subtitle: "Inferenza per dati categoriali: una e due proporzioni, bontà di adattamento, indipendenza"
+description: "Verifica e stima proporzioni con binom.test() e prop.test(), calcola differenze di rischio, rischi relativi e odds ratio, e analizza tabelle di contingenza con il test chi-quadrato e il test di Fisher, i residui e la V di Cramér."
+---
+
+{{< include ../../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Livello 3 · Inferenza]{.level-3} [⏱ ~80 min]{} [Prerequisiti: [La logica del test d'ipotesi](33-hypothesis-testing.qmd), [Tabelle di frequenza](../05-descriptive/21-frequency-tables.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Obiettivi di apprendimento
+
+Al termine di questa lezione sarai in grado di:
+
+- verificare e stimare **una proporzione** con `binom.test()` e `prop.test()`;
+- confrontare **due proporzioni** e riportare la differenza, il rischio relativo e l'odds ratio;
+- eseguire un test chi-quadrato di **bontà di adattamento** e un test chi-quadrato **di indipendenza**;
+- usare le frequenze attese, i **residui standardizzati** e la **V di Cramér** per descrivere un'associazione;
+- scegliere il test esatto di Fisher quando le frequenze sono piccole e il test di McNemar per proporzioni appaiate.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+```
+
+## 1. Perché servono test specifici per le categorie?
+
+Molte domande riguardano **conteggi**, non misurazioni: *Un passeggero è sopravvissuto? Su quale isola vive un pinguino? Uno studente è stato ammesso?* Non c'è una media da confrontare; confrontiamo invece **proporzioni**, oppure ci chiediamo se due variabili categoriali sono **associate**. La logica è quella della lezione [La logica del test d'ipotesi](33-hypothesis-testing.qmd) — un modello nullo, una statistica test, un p-value, un intervallo di confidenza — ma le statistiche sono costruite a partire da conteggi.
+
+| Domanda | Test | R |
+|---|---|---|
+| Una proporzione è uguale a un valore di riferimento? | Test binomiale esatto / test per una proporzione | `binom.test(x, n, p)`, `prop.test(x, n, p)` |
+| Due gruppi hanno la stessa proporzione? | Test per due proporzioni | `prop.test(table_2x2)` |
+| I conteggi seguono proporzioni date? | Test chi-quadrato di bontà di adattamento | `chisq.test(x, p = ...)` |
+| Due variabili categoriali sono associate? | Test chi-quadrato di indipendenza | `chisq.test(table)` |
+| Come sopra, con frequenze attese piccole | Test esatto di Fisher | `fisher.test(table)` |
+| Esiti sì/no appaiati (prima/dopo) | Test di McNemar | `mcnemar.test(table)` |
+
+## 2. Una proporzione
+
+Il foglietto illustrativo di un farmaco afferma che il 20% dei pazienti manifesta un effetto collaterale. In una clinica, 16 pazienti su 50 lo riferiscono. Questo dato è compatibile con il 20%?
+
+```{r}
+#| label: one-prop
+side <- binom.test(x = 16, n = 50, p = 0.20)
+side
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **number of successes / trials** (numero di successi / prove): 16 su 50, quindi $\hat p =$ `r side$estimate`.
+- **p-value**: `r round(side$p.value, 3)`. Se il vero tasso fosse il 20%, un conteggio lontano dal valore atteso di 10 almeno quanto 16 si verificherebbe con questa probabilità. Il test è **esatto**: usa direttamente la distribuzione binomiale, senza approssimazioni.
+- **IC al 95%**: da `r round(side$conf.int[1], 3)` a `r round(side$conf.int[2], 3)` — i tassi compatibili con i dati (vedi [Intervalli di confidenza](32-confidence-intervals.qmd)). Include 0.20 per un soffio, anche se il p-value è appena sotto 0.05: l'intervallo esatto e il p-value esatto sono calcolati in modi leggermente diversi, quindi al confine possono essere in disaccordo.
+:::
+
+`prop.test()` fornisce una versione approssimata basata sulla distribuzione normale (con correzione di continuità):
+
+```{r}
+#| label: one-prop-approx
+prop.test(16, 50, p = 0.20)$p.value
+```
+
+Qui i due p-value cadono da parti opposte rispetto a 0.05 (`r round(side$p.value, 3)` contro `r round(prop.test(16, 50, p = 0.20)$p.value, 3)`). È un buon promemoria di quanto visto in [La logica del test d'ipotesi](33-hypothesis-testing.qmd): l'evidenza è al limite in entrambi i casi, e 0.05 non è una linea magica. Per una singola proporzione con $n$ modesto, preferisci il test esatto `binom.test()`.
+
+## 3. Due proporzioni: il Titanic
+
+La tabella incorporata `Titanic` classifica le 2.201 persone a bordo per classe, sesso, età e sopravvivenza. Riduciamola a **sesso × sopravvivenza** con `margin.table()` (equivalente a `apply(Titanic, c(2, 4), sum)`):
+
+```{r}
+#| label: titanic-sex
+sex_surv <- margin.table(Titanic, c(2, 4))[, c("Yes", "No")]
+sex_surv
+prop.table(sex_surv, margin = 1)    # proporzioni all'interno di ogni riga
+```
+
+Mettiamo "Yes" per primo perché `prop.test()` tratta la **prima colonna come "successo"**. Quindi:
+
+```{r}
+#| label: two-prop
+two <- prop.test(sex_surv)
+two
+```
+
+::: {.callout-tip .read-output}
+## Come leggere questo output
+
+- **prop 1, prop 2**: proporzioni di sopravvissuti per la prima riga (Male, maschi, `r round(two$estimate[1], 3)`) e per la seconda riga (Female, femmine, `r round(two$estimate[2], 3)`).
+- **IC al 95%**: per **prop 1 − prop 2**, cioè maschi − femmine: da `r round(two$conf.int[1], 3)` a `r round(two$conf.int[2], 3)`. La probabilità di sopravvivenza delle donne era più alta di circa `r round(-100 * two$conf.int[2])`–`r round(-100 * two$conf.int[1])` punti percentuali.
+- **X-squared** e **p-value**: il test di "uguaglianza delle proporzioni". Il p-value è praticamente zero.
+:::
+
+### Tre modi per descrivere la differenza
+
+La **differenza di rischio** è ciò che riporta `prop.test()`. Altre due misure sono molto diffuse, soprattutto in medicina ed epidemiologia:
+
+```{r}
+#| label: rr-or
+p_male   <- sex_surv["Male", "Yes"]   / sum(sex_surv["Male", ])
+p_female <- sex_surv["Female", "Yes"] / sum(sex_surv["Female", ])
+
+risk_diff <- p_female - p_male
+rel_risk  <- p_female / p_male
+
+odds_female <- sex_surv["Female", "Yes"] / sex_surv["Female", "No"]
+odds_male   <- sex_surv["Male", "Yes"]   / sex_surv["Male", "No"]
+odds_ratio  <- odds_female / odds_male
+
+c(risk_diff = risk_diff, rel_risk = rel_risk, odds_ratio = odds_ratio)
+```
+
+- **Differenza di rischio** (`r round(risk_diff, 2)`): la probabilità di sopravvivenza delle donne era più alta di `r round(100 * risk_diff)` punti percentuali.
+- **Rischio relativo** (`r round(rel_risk, 2)`): le donne avevano una probabilità di sopravvivere `r round(rel_risk, 1)` volte quella degli uomini.
+- **Odds ratio** (rapporto degli odds, `r round(odds_ratio, 1)`): gli *odds* di sopravvivenza (sopravvissuti per ogni non sopravvissuto) erano circa `r round(odds_ratio)` volte più alti per le donne. Quando l'esito è frequente, gli odds ratio sono sempre più lontani da 1 dei rischi relativi, quindi non leggere un odds ratio di 10 come "10 volte più probabile". Gli odds ratio ritornano in [Regressione logistica (EN)](../../../lessons/09-regression/41-logistic-regression.qmd).
+
+::: {.callout-note .deeper collapse="true"}
+## Per approfondire: un IC per l'odds ratio
+
+Per una tabella 2×2 con celle $a, b, c, d$, $\log(\text{OR})$ è approssimativamente normale con errore standard $\sqrt{1/a + 1/b + 1/c + 1/d}$:
+
+```{r}
+#| label: or-ci
+se_log_or <- sqrt(sum(1 / sex_surv))
+exp(log(odds_ratio) + c(-1, 1) * qnorm(0.975) * se_log_or)
+```
+
+Anche `fisher.test(sex_surv)` riporta un odds ratio con un IC (una stima leggermente diversa, "condizionata"). Attenzione: confronta la **prima riga con la seconda**, quindi restituisce circa `r round(1 / odds_ratio, 2)` (maschi contro femmine), il reciproco del nostro.
+:::
+
+## 4. Test chi-quadrato di bontà di adattamento
+
+I conteggi osservati corrispondono a proporzioni fissate in anticipo? Il classico esperimento di Gregor Mendel sui piselli produsse 556 semi in quattro categorie; la sua teoria prevedeva il rapporto 9 : 3 : 3 : 1.
+
+```{r}
+#| label: gof-mendel
+peas <- c(round_yellow = 315, round_green = 108,
+          wrinkled_yellow = 101, wrinkled_green = 32)
+gof <- chisq.test(peas, p = c(9, 3, 3, 1) / 16)
+gof
+gof$expected
+```
+
+La statistica confronta ciascun conteggio osservato $O$ con la corrispondente frequenza attesa $E$ sotto $H_0$:
+
+$$
+X^2 = \sum \frac{(O - E)^2}{E}.
+$$
+
+Se la teoria è corretta, $X^2$ è piccola. Qui $X^2 =$ `r round(gof$statistic, 2)` e $p =$ `r round(gof$p.value, 2)`: i conteggi sono molto vicini a quanto prevede la teoria 9:3:3:1. (Un p-value grande non *dimostra* la teoria; dice che i dati non danno motivo di dubitarne.)
+
+Un secondo esempio: le tre specie di pinguini sono rappresentate in egual misura nei dati?
+
+```{r}
+#| label: gof-penguins
+chisq.test(table(penguins$species))   # p predefinito: tutte le categorie uguali
+```
+
+No: i pinguini Chinstrap sono chiaramente sottorappresentati. Questo ci dice qualcosa sul *campionamento* dello studio, non necessariamente sulle popolazioni delle specie.
+
+## 5. Test chi-quadrato di indipendenza
+
+Ora due variabili: sul Titanic, la **sopravvivenza** era associata alla **classe**?
+
+```{r}
+#| label: fig-titanic-class
+#| fig-cap: "Sopravvivenza sul Titanic per classe: proporzione di sopravvissuti e non sopravvissuti all'interno di ciascuna classe."
+as.data.frame(Titanic) |>
+  summarise(n = sum(Freq), .by = c(Class, Survived)) |>
+  ggplot(aes(Class, n, fill = Survived)) +
+  geom_col(position = "fill") +
+  labs(x = NULL, y = "Proporzione nella classe", fill = "Sopravvissuto")
+```
+
+```{r}
+#| label: indep
+class_surv <- margin.table(Titanic, c(1, 4))
+class_surv
+chi <- chisq.test(class_surv)
+chi
+```
+
+$H_0$ è l'**indipendenza**: la probabilità di sopravvivenza è la stessa in ogni classe. Sotto $H_0$, la frequenza attesa in ogni cella è
+
+$$
+E = \frac{\text{totale di riga} \times \text{totale di colonna}}{\text{totale generale}} .
+$$
+
+```{r}
+#| label: indep-expected
+round(chi$expected, 1)
+```
+
+Il test confronta la tabella osservata con questa "tabella di indipendenza". Con $X^2 =$ `r round(chi$statistic, 1)` su `r chi$parameter` gradi di libertà ($(\text{righe} - 1) \times (\text{colonne} - 1)$), il p-value è minuscolo: sopravvivenza e classe sono associate.
+
+### Dov'è l'associazione? I residui standardizzati
+
+Un chi-quadrato significativo dice *che* la tabella si discosta dall'indipendenza, non *dove*. I **residui standardizzati** rispondono a questa domanda. Ciascuno è approssimativamente un punteggio z: valori oltre circa ±2 segnalano celle con chiaramente più (positivi) o meno (negativi) persone di quante ne preveda l'indipendenza.
+
+```{r}
+#| label: stdres
+round(chi$stdres, 1)
+```
+
+::: {.callout-tip .read-output}
+## Come leggere i residui
+
+- **1st class, Yes** (prima classe, sopravvissuti): `r round(chi$stdres["1st", "Yes"], 1)` — molti più sopravvissuti in prima classe di quanti ne prevederebbe l'indipendenza.
+- **3rd class e Crew, No** (terza classe ed equipaggio, non sopravvissuti): residui positivi (`r round(chi$stdres["3rd", "No"], 1)` e `r round(chi$stdres["Crew", "No"], 1)`) — più morti del previsto.
+- I residui raccontano la storia dietro il singolo p-value: le probabilità di sopravvivenza calavano dalla prima classe alla terza classe e all'equipaggio.
+:::
+
+### Quanto è forte l'associazione? La V di Cramér
+
+Come ogni p-value, il p-value del chi-quadrato dipende dalla numerosità campionaria. La **V di Cramér** è una dimensione dell'effetto compresa tra 0 (indipendenza) e 1 (associazione perfetta):
+
+$$
+V = \sqrt{\frac{X^2}{n\,(k - 1)}}, \qquad k = \min(\text{righe}, \text{colonne}).
+$$
+
+```{r}
+#| label: cramer
+cramers_v <- function(tab) {
+  x2 <- suppressWarnings(chisq.test(tab, correct = FALSE))$statistic
+  k  <- min(dim(tab))
+  unname(sqrt(x2 / (sum(tab) * (k - 1))))
+}
+cramers_v(class_surv)
+cramers_v(sex_surv)
+```
+
+L'associazione della sopravvivenza con il sesso (V = `r round(cramers_v(sex_surv), 2)`) è più forte di quella con la classe (V = `r round(cramers_v(class_surv), 2)`). Come guida molto approssimativa, una V attorno a 0.1 è debole, 0.3 moderata e 0.5 o più forte (per tabelle 2×2; le soglie si riducono al crescere delle dimensioni della tabella). `correct = FALSE` disattiva la correzione di continuità di Yates, che viene applicata per impostazione predefinita alle tabelle 2×2 e distorcerebbe la V.
+
+### Colore dei capelli e degli occhi
+
+`HairEyeColor` è una tabella a 3 vie (capelli × occhi × sesso). Sommiamo rispetto al sesso:
+
+```{r}
+#| label: hair-eye
+hair_eye <- margin.table(HairEyeColor, c(1, 2))
+hair_eye
+he_chi <- chisq.test(hair_eye)
+round(he_chi$stdres, 1)
+```
+
+Il p-value è `r format.pval(he_chi$p.value, digits = 2)` e i residui localizzano l'associazione: **capelli biondi con occhi azzurri** (`r round(he_chi$stdres["Blond", "Blue"], 1)`) e **capelli neri con occhi castani** (`r round(he_chi$stdres["Black", "Brown"], 1)`) ricorrono molto più spesso di quanto preveda l'indipendenza, mentre i capelli biondi con occhi castani sono rari (`r round(he_chi$stdres["Blond", "Brown"], 1)`). La V di Cramér è `r round(cramers_v(hair_eye), 2)`.
+
+### Un avvertimento da Berkeley: `UCBAdmissions`
+
+Nel 1973 la scuola di dottorato della UC Berkeley ammise gli uomini con un tasso più alto delle donne:
+
+```{r}
+#| label: ucb-total
+ucb <- margin.table(UCBAdmissions, c(2, 1))   # Genere x Ammissione
+prop.table(ucb, margin = 1)
+```
+
+La differenza è fortemente significativa (`chisq.test(ucb)` dà $p \approx$ `r signif(chisq.test(ucb)$p.value, 1)`). Ma guarda **dipartimento per dipartimento**:
+
+```{r}
+#| label: ucb-dept
+round(apply(UCBAdmissions, 3, \(t) t["Admitted", ] / colSums(t)), 2)
+```
+
+Nella maggior parte dei dipartimenti i tassi di ammissione di uomini e donne sono simili, e nel dipartimento A le donne vanno meglio. Il divario complessivo compare perché le donne facevano domanda più spesso ai dipartimenti che ammettevano pochi candidati di entrambi i sessi. Questa inversione si chiama **paradosso di Simpson**: un'associazione in una tabella aggregata può scomparire o invertirsi all'interno dei sottogruppi. Un test chi-quadrato risponde alla domanda che gli poni — scegli la tabella con cura.
+
+### Pinguini: specie × isola
+
+```{r}
+#| label: species-island
+sp_isl <- table(penguins$species, penguins$island)
+sp_isl
+si_chi <- suppressWarnings(chisq.test(sp_isl))
+round(si_chi$expected, 1)
+```
+
+L'associazione è schiacciante (V di Cramér = `r round(cramers_v(sp_isl), 2)`): i pinguini Gentoo vivono solo su Biscoe e i Chinstrap solo su Dream. Due lezioni da trarre. Primo, la tabella contiene **zeri strutturali** — un test di "indipendenza" è poco informativo quando la risposta è evidente dalla tabella stessa. Secondo, R avvisa che l'approssimazione "may be incorrect" (potrebbe essere inesatta) perché alcune frequenze attese sono piccole (Chinstrap su Torgersen: `r round(si_chi$expected["Chinstrap", "Torgersen"], 1)`), il che ci porta alla sezione successiva.
+
+## 6. Frequenze attese piccole: il test esatto di Fisher
+
+Il p-value del chi-quadrato si basa su un'approssimazione che funziona bene quando **tutte le frequenze attese sono almeno circa 5**. Quando alcune sono più piccole, usa il **test esatto di Fisher**, che calcola il p-value direttamente a partire dalle possibili tabelle con gli stessi margini.
+
+Considera solo i 109 **bambini** a bordo del Titanic, nelle tre classi passeggeri:
+
+```{r}
+#| label: children
+children <- Titanic[1:3, , "Child", ] |> margin.table(c(1, 3))
+children
+suppressWarnings(chisq.test(children))$expected
+fisher.test(children)
+```
+
+Alcune frequenze attese sono sotto 5 (prima classe), quindi `chisq.test()` emetterebbe un avviso. Il test di Fisher è esatto e dà $p =$ `r format.pval(fisher.test(children)$p.value, digits = 2)`: tutti i bambini di prima e seconda classe sopravvissero, contro circa un terzo dei bambini di terza classe. Il test di Fisher funziona per tabelle di qualsiasi dimensione, anche se può diventare lento per tabelle grandi con conteggi elevati (per la tabella dei pinguini vista sopra fallisce con un errore di spazio di lavoro, *workspace*; `chisq.test(tab, simulate.p.value = TRUE)` è un'alternativa).
+
+## 7. Proporzioni appaiate: il test di McNemar
+
+Se le **stesse persone** rispondono due volte a una domanda sì/no (prima/dopo, due valutatori, due test diagnostici), le due proporzioni non sono indipendenti e `prop.test()` è sbagliato — è la versione categoriale del test t per dati appaiati. Un esempio classico (da `?mcnemar.test`): a 1.600 persone fu chiesto due volte, a distanza di un mese, se approvavano l'operato del Presidente degli Stati Uniti.
+
+```{r}
+#| label: mcnemar
+approval <- matrix(c(794, 86, 150, 570), nrow = 2,
+                   dimnames = list(first  = c("Approve", "Disapprove"),
+                                   second = c("Approve", "Disapprove")))
+approval
+mcnemar.test(approval)
+```
+
+Contano solo le celle **discordanti**: 150 persone sono passate da approvare a disapprovare, 86 nella direzione opposta. Il test di McNemar si chiede se questi due numeri differiscono più di quanto consentirebbe il caso — qui è così: l'approvazione è calata.
+
+::: {.callout-warning .pitfall}
+## Errori comuni
+
+1. **Eseguire `chisq.test()` su proporzioni o percentuali** invece che sui conteggi grezzi. Il test ha bisogno dei conteggi; la numerosità campionaria conta.
+2. **Ignorare le frequenze attese piccole.** Controlla `$expected`; se diverse sono sotto 5, usa `fisher.test()` (o un p-value simulato).
+3. **Fermarsi al p-value.** Guarda i **residui standardizzati** per capire dov'è l'associazione e riporta una dimensione dell'effetto (differenza di rischio, rischio relativo, odds ratio, V di Cramér).
+4. **Usare `prop.test()` per dati appaiati.** Misure prima/dopo sulle stesse persone richiedono `mcnemar.test()`.
+5. **Aggregare tabelle senza cautela.** Una tabella aggregata può nascondere o invertire l'associazione presente nei sottogruppi (paradosso di Simpson).
+6. **Leggere un odds ratio come un rischio relativo.** Sono vicini solo quando l'esito è raro.
+:::
+
+## 8. Verifica la comprensione
+
+::: {.callout-note collapse="true" icon="false"}
+## D1. Una tabella 3×4 dà un test chi-quadrato significativo. Che cosa ti dice e che cosa non ti dice?
+
+Ti dice che le due variabili non sono indipendenti: la distribuzione di una cambia tra le categorie dell'altra. Non ti dice quali celle determinano l'associazione (usa `$stdres`) né quanto è forte (usa la V di Cramér), e non dice nulla su causa ed effetto.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D2. In una tabella 2×2 le frequenze attese sono 3.1, 8.9, 12.0 e 34.0. Quale test usi?
+
+Una frequenza attesa è sotto 5, quindi è preferibile `fisher.test()`.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## D3. Una probabilità di sopravvivenza passa da 0.20 a 0.40. Quanto valgono la differenza di rischio, il rischio relativo e l'odds ratio?
+
+Differenza di rischio 0.40 − 0.20 = 0.20; rischio relativo 0.40 / 0.20 = 2; odds ratio (0.40/0.60) / (0.20/0.80) = 0.667 / 0.25 ≈ 2.67.
+:::
+
+## 9. Esercizi
+
+### Interattivi (da eseguire nel browser)
+
+::: {.exercise}
+[★]{.stars} **Esercizio 1 — una proporzione.** Tra i pinguini Gentoo di cui è registrato il sesso, la proporzione di femmine è diversa da 0.5? Inserisci i conteggi ed esegui un test esatto.
+
+```{webr}
+#| exercise: ex_35_1
+gentoo_sex <- penguins$sex[penguins$species == "Gentoo"]
+n_female <- sum(gentoo_sex == "female", na.rm = TRUE)
+n_known  <- sum(!is.na(gentoo_sex))
+binom.test(______, ______, p = ______)
+```
+
+::: {.hint exercise="ex_35_1"}
+`binom.test(successi, prove, p = riferimento)`.
+:::
+
+::: {.solution exercise="ex_35_1"}
+```r
+binom.test(n_female, n_known, p = 0.5)
+```
+Ci sono 58 femmine su 119; il p-value è grande (circa 0.85) e l'IC al 95% (circa da 0.39 a 0.58) contiene 0.5. I dati sono compatibili con un rapporto tra i sessi bilanciato.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 2 — chi-quadrato o Fisher?** In `mtcars`, il tipo di cambio (`am`) è associato al numero di cilindri (`cyl`)? Costruisci la tabella, esamina le frequenze attese e scegli il test appropriato.
+
+```{webr}
+#| exercise: ex_35_2
+tab <- table(mtcars$am, mtcars$______)
+tab
+chisq.test(tab)$______
+______(tab)
+```
+
+::: {.hint exercise="ex_35_2"}
+Le frequenze attese si trovano in `$expected`. Se alcune sono sotto 5, usa `fisher.test()`.
+:::
+
+::: {.solution exercise="ex_35_2"}
+```r
+tab <- table(mtcars$am, mtcars$cyl)
+chisq.test(tab)$expected   # R emette anche un avviso: diversi conteggi sotto 5
+fisher.test(tab)           # p circa 0.009
+```
+Tre delle sei frequenze attese sono sotto 5, quindi l'approssimazione chi-quadrato è dubbia e R emette un avviso. Il test esatto di Fisher dà $p \approx 0.009$: le auto con cambio manuale tendono ad avere meno cilindri (la maggior parte delle auto a 8 cilindri ha il cambio automatico).
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Esercizio 3 — residui e V di Cramér.** Usa solo la sezione **femminile** di `HairEyeColor` (`HairEyeColor[, , "Female"]`). Esegui il test chi-quadrato, trova la cella con il residuo standardizzato positivo più grande e calcola la V di Cramér con la funzione della Sezione 5.
+
+```{webr}
+#| exercise: ex_35_3
+cramers_v <- function(tab) {
+  x2 <- suppressWarnings(chisq.test(tab, correct = FALSE))$statistic
+  k  <- min(dim(tab))
+  unname(sqrt(x2 / (sum(tab) * (k - 1))))
+}
+female <- HairEyeColor[, , "Female"]
+res <- chisq.test(female)
+round(res$______, 1)
+cramers_v(______)
+```
+
+::: {.hint exercise="ex_35_3"}
+I residui standardizzati si trovano in `$stdres`. Passa la tabella `female` a `cramers_v()`.
+:::
+
+::: {.solution exercise="ex_35_3"}
+```r
+round(res$stdres, 1)
+cramers_v(female)
+```
+Il residuo positivo più grande è di nuovo **capelli biondi / occhi azzurri**. La V di Cramér (circa 0.3) indica un'associazione moderata, simile a quella ottenuta con i due sessi insieme. R emette un avviso perché una frequenza attesa (capelli rossi, occhi verdi) è sotto 5; con p-value così piccoli la conclusione non è in dubbio, ma `fisher.test(female, simulate.p.value = TRUE)` la confermerebbe.
+:::
+:::
+
+### Da svolgere sul tuo computer
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 4 — il paradosso di Simpson nel dettaglio.** Per ciascuno dei sei dipartimenti di `UCBAdmissions`, esegui `prop.test()` confrontando i tassi di ammissione di uomini e donne, e raccogli i p-value. In quale dipartimento la differenza è significativa, e in quale direzione?
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+```r
+p_dept <- sapply(dimnames(UCBAdmissions)$Dept, \(d) {
+  tab <- t(UCBAdmissions[, , d])   # righe = Gender, colonne = Admitted/Rejected
+  prop.test(tab)$p.value
+})
+round(p_dept, 4)
+round(apply(UCBAdmissions, 3, \(t) t["Admitted", ] / colSums(t)), 2)
+```
+Solo il dipartimento A mostra una differenza netta (p ≈ 0.0001), ed è a favore delle **donne** (circa l'82% ammesse contro il 62% degli uomini). Negli altri dipartimenti le differenze sono piccole e non significative. Il vantaggio complessivo degli uomini deriva dalla diversa scelta dei dipartimenti, non da una discriminazione all'interno dei dipartimenti.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Esercizio 5 — interpreta.** Uno studio riporta: *"I fumatori avevano odds più alti di malattia (OR = 2.5, IC al 95% da 1.1 a 5.7, p = 0.03, n = 180)."* Un giornale scrive *"Il fumo rende la malattia 2.5 volte più probabile."* Indica due motivi per cui questa frase potrebbe essere sbagliata.
+
+::: {.callout-tip collapse="true"}
+## Soluzione
+(1) Un odds ratio non è un rischio relativo: se la malattia è frequente, il rischio relativo è più vicino a 1 di quanto lo sia 2.5. (2) Lo studio è osservazionale e "rende ... più probabile" implica un rapporto causale; un'associazione può essere dovuta a confondimento. Si potrebbe aggiungere: l'IC è ampio (da 1.1 a 5.7), quindi l'entità dell'associazione è molto incerta.
+:::
+:::
+
+## Riepilogo
+
+| Compito | Codice | Che cosa riportare |
+|---|---|---|
+| Una proporzione | `binom.test(x, n, p = p0)` | $\hat p$, IC al 95%, p |
+| Due proporzioni | `prop.test(tab_2x2)` (prima colonna = successo) | differenza, IC al 95%; RR e OR |
+| Bontà di adattamento | `chisq.test(counts, p = probs)` | $X^2$, gdl, p |
+| Indipendenza | `chisq.test(tab)`; `$expected`; `$stdres` | $X^2$, gdl, p, V di Cramér, residui principali |
+| Frequenze attese piccole | `fisher.test(tab)` | p (e OR per tabelle 2×2) |
+| Sì/no appaiati | `mcnemar.test(tab_2x2)` | conteggi discordanti, p |
+
+- I test per dati categoriali confrontano i **conteggi osservati** con le frequenze **attese** sotto $H_0$.
+- Controlla le frequenze attese; passa al test esatto di Fisher quando sono piccole.
+- I residui standardizzati mostrano **dove** si trova l'associazione; la V di Cramér mostra **quanto è forte**.
+- Differenza di rischio, rischio relativo e odds ratio rispondono a domande diverse — dichiara quale riporti.
+- Fai attenzione quando aggreghi le tabelle: i sottogruppi possono raccontare una storia diversa.
+
+::: {.callout-note collapse="true" icon="false"}
+## Per saperne di più
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2a ed.), capitoli sull'inferenza per dati categoriali, <https://openintro-ims.netlify.app>
+- Agresti, A., *An Introduction to Categorical Data Analysis* (3a ed., Wiley, 2018) — il manuale di riferimento.
+- Documentazione di R: `?chisq.test`, `?fisher.test`, `?mcnemar.test`, `?UCBAdmissions`
+:::
