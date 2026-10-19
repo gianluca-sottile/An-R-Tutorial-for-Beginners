@@ -1,0 +1,443 @@
+---
+title: "Factors and types of variables"
+subtitle: "Nominal, ordinal, discrete, continuous — and how R stores categories"
+description: "The first statistical idea of the course: the four types of variables. Then factors in R: levels, labels, ordered factors, frequency tables, reordering and lumping levels with forcats, dropping unused levels, the as.numeric() trap and why factors matter for statistical models."
+aliases:
+  - ../../R-course_lesson-4.html
+format:
+  live-html:
+    webr:
+      packages: ["forcats"]
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(forcats)
+```
+
+::: {.lesson-meta}
+[Level 1 · Foundations]{.level-1} [⏱ ~60 min]{} [Prerequisites: [Vectors](04-vectors.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- classify a variable as **nominal**, **ordinal**, **discrete** or **continuous**, and explain why the type matters;
+- create factors with `factor()`, controlling `levels`, `labels` and `ordered`;
+- count categories with `table()` and reorder levels with `relevel()` and `forcats`;
+- avoid the classic `as.numeric(factor)` trap and drop unused levels;
+- explain how a factor enters a statistical model through dummy coding.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(forcats)
+```
+
+## 1. Why do variable types matter?
+
+Suppose that in a survey you code the answer "Which island do you live on?" as `1 = Biscoe`, `2 = Dream`, `3 = Torgersen`. The column now contains numbers, and R will happily compute their mean: 1.8, say. But "the average island is 1.8" means **nothing**. The numbers are just labels.
+
+Now consider a satisfaction question coded `1 = very unhappy` … `5 = very happy`. Here the order means something (4 is happier than 2), but is the step from 1 to 2 the same as from 4 to 5? Not necessarily.
+
+And body mass in grams? A difference of 100 g means the same everywhere on the scale, and 0 g means "no mass": we can average it, take ratios, everything.
+
+The **type** of a variable decides which summaries, plots and statistical methods make sense. It is the first statistical concept of this course, and you will use it in every lesson that follows.
+
+## 2. The four types of variables
+
+Statisticians divide variables into two families, each with two members.
+
+| Family | Type | Values are… | Penguin / R example | Sensible summaries |
+|---|---|---|---|---|
+| **Categorical** (qualitative) | **Nominal** | categories with **no order** | `species`, `island`, `sex` | counts, proportions, mode |
+| | **Ordinal** | categories with a **natural order** | survey answers *disagree < neutral < agree*; age groups in `esoph$agegp` | counts, proportions, median, percentiles |
+| **Numerical** (quantitative) | **Discrete** | **counts**: whole numbers, with gaps between possible values | number of insects in `InsectSprays$count`; number of chicks in a nest | all of the above + mean, standard deviation |
+| | **Continuous** | **measurements**: any value in an interval, limited only by precision | `bill_len`, `flipper_len`, `body_mass` | all of the above + mean, standard deviation |
+
+A few remarks that often confuse students:
+
+- **A number is not always numerical.** Postcodes, student IDs, and the island codes 1/2/3 above are *nominal*: they are names written with digits.
+- **Rounding does not make a variable discrete.** `flipper_len` is stored as a whole number of millimetres, but flipper length is a continuous quantity that was simply measured to the nearest millimetre.
+- **Binary variables** (two categories, like `sex` or yes/no answers) are a special case of nominal variables. They are very common, and in [Logistic regression](../09-regression/41-logistic-regression.qmd) they become the outcome of a model.
+- **`year`** in `penguins` is a time point. With only three values (`r paste(sort(unique(penguins$year)), collapse = ", ")`) it is often treated as a category in analysis.
+
+::: {.callout-tip}
+## A quick decision rule
+
+1. Can you **do arithmetic** with the values and get something meaningful? If **no** → categorical. Is there a natural **order**? Yes → ordinal; no → nominal.
+2. If **yes** → numerical. Are the values **counts** of something? Yes → discrete; otherwise (measurements) → continuous.
+:::
+
+In R, numerical variables are stored as `numeric` or `integer` vectors (see [Data types](03-data-types.qmd)). Categorical variables are stored as **factors**. Look at how `penguins` stores its columns:
+
+```{r}
+#| label: str-penguins
+str(penguins)
+```
+
+`species`, `island` and `sex` are factors; the measurements are numbers.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: interval and ratio scales
+
+A finer classification (due to S. S. Stevens) splits numerical variables into **interval** scales, where differences are meaningful but zero is arbitrary (temperature in °C: 20 °C is not "twice as hot" as 10 °C), and **ratio** scales, with a true zero (mass, length, income: 4 kg *is* twice 2 kg). Most measurements in this course are on a ratio scale. The distinction matters for statements about ratios and for some transformations (e.g. logarithms require positive values on a ratio scale).
+:::
+
+## 3. Creating factors
+
+A **factor** is a vector of categories. It stores each distinct category once — these are its **levels** — and then records, for each observation, which level it belongs to.
+
+```{r}
+#| label: factor-basic
+sex <- c("male", "female", "female", "male", "male")
+class(sex)
+
+sex_f <- factor(sex)
+sex_f
+levels(sex_f)
+nlevels(sex_f)
+```
+
+By default the levels are sorted alphabetically. You can choose them, and their order, with `levels`:
+
+```{r}
+#| label: factor-levels
+answer <- c("yes", "no", "yes", "yes")
+factor(answer, levels = c("yes", "no"))
+```
+
+A value that is not among the levels becomes `NA`. This is a useful safety net against typos:
+
+```{r}
+#| label: factor-typo
+factor(c("yes", "no", "Yes"), levels = c("yes", "no"))
+```
+
+### Codes with labels
+
+Data are often stored as numeric codes. `labels` turns them into readable categories — the first label goes with the first level, and so on:
+
+```{r}
+#| label: factor-labels
+sex_code <- c(1, 0, 0, 1, 1)
+factor(sex_code, levels = c(0, 1), labels = c("female", "male"))
+```
+
+## 4. Ordered factors (ordinal variables)
+
+For ordinal variables, set `ordered = TRUE` and give the levels **in the right order**:
+
+```{r}
+#| label: ordered
+satisfaction <- factor(
+  c("agree", "neutral", "strongly agree", "disagree", "agree"),
+  levels = c("strongly disagree", "disagree", "neutral",
+             "agree", "strongly agree"),
+  ordered = TRUE
+)
+satisfaction
+```
+
+The `<` signs in the printed levels show the order. Now comparisons make sense:
+
+```{r}
+#| label: ordered-compare
+satisfaction >= "agree"
+mean(satisfaction >= "agree")    # proportion who agree or strongly agree
+max(satisfaction)
+```
+
+With an unordered factor, `>=` would return `NA` with a warning, because "greater than" is meaningless for nominal categories. R also ships with ordinal data: in the `esoph` dataset, age groups are an ordered factor.
+
+```{r}
+#| label: esoph
+levels(esoph$agegp)
+class(esoph$agegp)
+```
+
+## 5. Counting categories: `table()`
+
+The natural summary of a categorical variable is a **frequency table**:
+
+```{r}
+#| label: table
+table(penguins$species)
+table(penguins$sex, useNA = "ifany")    # show missing values too
+table(penguins$species, penguins$island)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+The two-way table counts penguins for each combination of species and island. The zeros are informative: Chinstrap penguins were found only on Dream, Gentoo only on Biscoe, while Adelie live on all three islands. `useNA = "ifany"` reveals `r sum(is.na(penguins$sex))` penguins with unknown sex, which `table()` hides by default. Frequency tables are developed in [Frequency tables](../05-descriptive/21-frequency-tables.qmd).
+:::
+
+`summary()` on a factor gives the same counts. Note that the order of the levels decides the order of the rows in tables and of the bars in plots — which brings us to reordering.
+
+## 6. Changing the order of levels
+
+The first level has a special role: it is the **reference** category in statistical models (Section 8) and the first bar in plots. Base R's `relevel()` changes the reference:
+
+```{r}
+#| label: relevel
+levels(relevel(penguins$species, ref = "Gentoo"))
+```
+
+The `forcats` package (part of the tidyverse) has a consistent family of `fct_*()` functions for everything else:
+
+| Function | What it does |
+|---|---|
+| `fct_relevel(f, "a", "b")` | move the named levels to the front, in that order |
+| `fct_infreq(f)` | order levels by frequency, most common first |
+| `fct_rev(f)` | reverse the order |
+| `fct_lump_n(f, n)` | keep the `n` most common levels, lump the rest into `"Other"` |
+| `fct_recode(f, new = "old")` | rename levels |
+| `fct_drop(f)` | drop unused levels |
+
+```{r}
+#| label: forcats
+species <- penguins$species
+levels(fct_relevel(species, "Gentoo", "Chinstrap"))
+levels(fct_infreq(species))
+table(fct_lump_n(species, n = 1))
+```
+
+`fct_infreq()` is particularly useful before a bar chart: bars sorted by height are much easier to read ([Categorical plots](../06-visualization/26-categorical-plots.qmd)). `fct_lump_n()` helps when a variable has dozens of rare categories.
+
+## 7. Two classic traps
+
+### Trap 1: converting a factor of numbers
+
+Internally, a factor stores **integer codes** (1, 2, 3, …) pointing to its levels. `as.numeric()` returns those codes, **not** the numbers written in the labels:
+
+```{r}
+#| label: as-numeric-trap
+dose <- factor(c("10", "20", "10", "5"))
+dose
+as.numeric(dose)                  # WRONG: the internal codes
+as.numeric(as.character(dose))    # RIGHT: go through text first
+```
+
+The levels are `"10"`, `"20"`, `"5"` (sorted alphabetically, as text!), so the codes are 1, 2, 1, 3. No warning is given. This happens in practice when a numeric column is accidentally read as a factor because of a stray text value.
+
+### Trap 2: unused levels stick around
+
+Filtering rows does **not** remove levels:
+
+```{r}
+#| label: drop-levels
+no_chinstrap <- penguins[penguins$species != "Chinstrap", ]
+table(no_chinstrap$species)               # Chinstrap is still a level, with 0 birds
+table(droplevels(no_chinstrap$species))   # drop the empty level
+```
+
+Empty levels produce empty bars in plots and zero-count groups in tables or tests. Use `droplevels()` (on a vector or a whole data frame) or `forcats::fct_drop()` after filtering.
+
+## 8. Why factors matter for models
+
+Statistical models work with numbers. When a factor enters a model, R automatically turns it into **dummy variables** (also called indicator variables): one 0/1 column for each level **except the reference** level. You can see this with `model.matrix()`, here for one Adelie, one Gentoo and one Chinstrap penguin:
+
+```{r}
+#| label: dummy
+model.matrix(~ species, data = penguins)[c(1, 153, 277), ]
+```
+
+Adelie, the first level, is the reference: it has 0 in both dummy columns. A linear model of body mass on species then estimates the Adelie mean (the intercept) and the **differences** of the other species from Adelie:
+
+```{r}
+#| label: lm-preview
+coef(lm(body_mass ~ species, data = penguins))
+```
+
+The intercept is the mean mass of Adelie penguins, and `speciesGentoo` says Gentoo penguins are on average `r round(coef(lm(body_mass ~ species, data = penguins))[3])` g heavier. Changing the reference with `relevel()` changes what the coefficients compare — but not the model's predictions. You will study this in [Multiple regression](../09-regression/39-multiple-regression.qmd).
+
+This is also why codes must be stored as factors: `lm(mpg ~ cyl, data = mtcars)` treats the number of cylinders as a continuous number (one slope), while `lm(mpg ~ factor(cyl), data = mtcars)` estimates a separate mean for 4, 6 and 8 cylinders.
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Treating codes as numbers.** Island codes, IDs and postcodes are nominal; their mean is meaningless. Convert them with `factor()`.
+2. **`as.numeric()` on a factor** returns internal codes. Use `as.numeric(as.character(f))`.
+3. **Forgetting `ordered = TRUE`** (or giving levels in alphabetical instead of logical order) for ordinal variables: "high" < "low" < "medium" is not what you meant.
+4. **Unused levels after filtering.** Call `droplevels()`.
+5. **Typos becoming `NA`.** `factor(x, levels = ...)` silently turns any value not in `levels` (e.g. `"Yes"` vs `"yes"`) into `NA`. Check with `table(x, useNA = "ifany")`.
+:::
+
+## 9. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. Classify: (a) blood group; (b) number of siblings; (c) pain on a scale none/mild/moderate/severe; (d) reaction time in ms.
+
+(a) nominal; (b) discrete; (c) ordinal; (d) continuous.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. What does `as.numeric(factor(c("3", "1", "2")))` return? And `as.numeric(factor(c("30", "100")))`?
+
+`3 1 2` — here the codes happen to coincide with the values, because the levels `"1" "2" "3"` sort the same way as text and as numbers. The second gives `2 1`: as text, `"100"` comes before `"30"`. The trap is dangerous precisely because it sometimes *seems* to work.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. In `lm(body_mass ~ species)`, why is there no coefficient for Adelie?
+
+Adelie is the reference level: its mean is the intercept, and the other coefficients are differences from it.
+:::
+
+## 10. Exercises
+
+### Interactive (run in your browser)
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — codes to labels.** In a survey, smoking status is coded `0 = never`, `1 = former`, `2 = current`. Turn the codes into a factor with readable labels, and count each category.
+
+```{webr}
+#| exercise: ex_06_1
+smoke <- c(0, 2, 1, 0, 0, 2, 1, 0)
+smoke_f <- factor(smoke, levels = ______, labels = ______)
+smoke_f
+table(smoke_f)
+```
+
+::: {.hint exercise="ex_06_1"}
+`levels = c(0, 1, 2)` and `labels = c("never", "former", "current")`.
+:::
+
+::: {.solution exercise="ex_06_1"}
+```r
+smoke_f <- factor(smoke, levels = c(0, 1, 2),
+                  labels = c("never", "former", "current"))
+table(smoke_f)    # never 4, former 2, current 2
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — an ordinal variable.** Create an ordered factor `size` from the values below with levels `small < medium < large`. Then (a) find the largest value, (b) count how many are at least `"medium"`.
+
+```{webr}
+#| exercise: ex_06_2
+x <- c("medium", "small", "large", "medium", "small", "large", "large")
+size <- factor(x, levels = ______, ordered = ______)
+size
+max(size)
+sum(size >= ______)
+```
+
+::: {.hint exercise="ex_06_2"}
+Give the levels in increasing order and set `ordered = TRUE`. Compare with the text `"medium"`.
+:::
+
+::: {.solution exercise="ex_06_2"}
+```r
+size <- factor(x, levels = c("small", "medium", "large"), ordered = TRUE)
+max(size)               # large
+sum(size >= "medium")   # 5
+```
+Without `ordered = TRUE`, `max()` would fail with an error: the maximum of nominal categories is not defined.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — debug the conversion.** A dose column was read as a factor. The code below computes the mean dose, but the answer is wrong. Fix it.
+
+```{webr}
+#| exercise: ex_06_3
+dose <- factor(c("0.5", "1", "2", "0.5", "2", "10"))
+mean(as.numeric(dose))
+```
+
+::: {.hint exercise="ex_06_3"}
+Print `levels(dose)` and `as.numeric(dose)`. What are those numbers?
+:::
+
+::: {.solution exercise="ex_06_3"}
+```r
+mean(as.numeric(as.character(dose)))   # 2.667
+```
+`as.numeric(dose)` returns the internal codes of the levels `"0.5" "1" "10" "2"` (alphabetical order as text), i.e. `1 2 4 1 4 3`, whose mean (2.5) has nothing to do with the doses.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 4 — reorder and lump with `forcats`.** (a) Reorder the levels of `penguins$species` by frequency. (b) Make Chinstrap the reference level. (c) Keep only the most common species and lump the others into `"Other"`; count them.
+
+```{webr}
+#| exercise: ex_06_4
+library(forcats)
+sp <- penguins$species
+levels(______(sp))
+levels(fct_relevel(sp, ______))
+table(fct_lump_n(sp, n = ______))
+```
+
+::: {.hint exercise="ex_06_4"}
+`fct_infreq()` orders by frequency; `fct_relevel(sp, "Chinstrap")`; `n = 1`.
+:::
+
+::: {.solution exercise="ex_06_4"}
+```r
+levels(fct_infreq(sp))                # Adelie, Gentoo, Chinstrap
+levels(fct_relevel(sp, "Chinstrap"))  # Chinstrap, Adelie, Gentoo
+table(fct_lump_n(sp, n = 1))          # Adelie 152, Other 192
+```
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 5 — types and models.** (a) For each column of `mtcars`, decide whether it is nominal, ordinal, discrete or continuous (use `?mtcars`). (b) Fit `lm(mpg ~ cyl, data = mtcars)` and `lm(mpg ~ factor(cyl), data = mtcars)`. How many coefficients does each model have, and what do they mean? (c) Compare the coefficients of the second model with `tapply(mtcars$mpg, mtcars$cyl, mean)`.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+coef(lm(mpg ~ cyl, data = mtcars))
+coef(lm(mpg ~ factor(cyl), data = mtcars))
+tapply(mtcars$mpg, mtcars$cyl, mean)
+```
+(a) Continuous: `mpg`, `disp`, `hp`, `drat`, `wt`, `qsec`. Discrete counts: `cyl`, `gear`, `carb` (with few values, often treated as categories). Nominal (binary): `vs` (engine shape) and `am` (transmission).
+
+(b) The first model has 2 coefficients: it assumes that each extra cylinder changes `mpg` by the same amount (a straight line). The second has 3: the intercept is the mean `mpg` of 4-cylinder cars, and the other two are the differences of 6- and 8-cylinder cars from it.
+
+(c) Intercept ≈ 26.7 = mean of 4-cylinder cars; 26.7 − 6.9 ≈ 19.7 (6 cylinders); 26.7 − 11.6 ≈ 15.1 (8 cylinders).
+:::
+:::
+
+## Summary
+
+| Function / idea | What it does |
+|---|---|
+| Nominal / ordinal / discrete / continuous | The four types of variables |
+| `factor(x, levels, labels, ordered)` | Create a factor |
+| `levels()`, `nlevels()` | Inspect levels |
+| `table(x, useNA = "ifany")` | Frequency table |
+| `relevel(f, ref)` | Change the reference level |
+| `fct_relevel()`, `fct_infreq()`, `fct_rev()`, `fct_lump_n()` | Reorder or lump levels (forcats) |
+| `droplevels()`, `fct_drop()` | Remove unused levels |
+| `as.numeric(as.character(f))` | Correct factor → number conversion |
+| `model.matrix()` | Shows the dummy coding used by models |
+
+- The **type** of a variable decides which summaries and methods make sense.
+- Categorical variables are stored as **factors**; ordinal ones as **ordered** factors.
+- The **first level** is the reference in models and the first bar in plots.
+- Never call `as.numeric()` directly on a factor.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- *R for Data Science* (2e), chapter "Factors", <https://r4ds.hadley.nz/factors.html>
+- `forcats` documentation, <https://forcats.tidyverse.org>
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), chapter "Hello data" (types of variables), <https://openintro-ims.netlify.app>
+:::

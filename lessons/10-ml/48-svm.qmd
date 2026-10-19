@@ -1,0 +1,668 @@
+---
+title: "Support vector machines"
+subtitle: "Separate the classes with the widest possible street — and bend the street with kernels"
+description: "The maximum-margin idea, soft margins and the cost parameter, the hinge loss, linear, polynomial and RBF kernels shown on simulated 2-D data, why predictors must be normalised, tuning an RBF SVM with tidymodels and kernlab, a correct validation split, and the caveats of SVM probabilities (Platt scaling)."
+aliases:
+  - ../../R-course_lesson-29.html
+---
+
+::: {.lesson-meta}
+[Level 4 · Models & learning]{.level-4} [⏱ ~100 min]{} [Prerequisites: [The ML workflow](44-ml-workflow.qmd), [Logistic regression](../09-regression/41-logistic-regression.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- explain the **maximum-margin** idea and identify the **support vectors** in a picture;
+- describe the **soft margin** and the role of the **cost** parameter $C$, and write down the **hinge loss**;
+- explain what a **kernel** does and how `cost` and `rbf_sigma` change the decision boundary of an RBF SVM;
+- explain why predictors must be **normalised**, and build a correct **train / validation / test** split;
+- tune an RBF SVM with `svm_rbf()` and `kernlab` in tidymodels, and interpret its probability estimates with care.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(tidymodels)
+library(kernlab)   # engine for support vector machines
+
+# tidymodels attaches modeldata, whose own `penguins` (with different column
+# names) would mask the base-R one: make sure we use R's built-in version.
+penguins <- datasets::penguins
+```
+
+## 1. Why support vector machines?
+
+Imagine two groups of points on a map — say, houses belonging to two villages — and you must draw a single straight road between them. Many roads would separate the villages. Which one is best? A natural answer: the road that stays **as far as possible from the nearest house on either side**. A wide road leaves room for error: a new house built a little off the usual pattern will still be on the correct side.
+
+A **support vector machine** (SVM) turns this idea into a classifier. It looks for the boundary with the widest **margin** (the widest "street") between the classes. Then it extends the idea in two directions:
+
+- a **soft margin** allows some points to be inside the street or on the wrong side, because real classes overlap;
+- **kernels** allow the street to be curved, by implicitly working in a richer space of features.
+
+SVMs were among the most popular classifiers of the late 1990s and 2000s. Today boosted trees are more often the first choice for tabular data, but SVMs remain useful, especially with many numeric features and moderate sample sizes, and the margin and kernel ideas reappear throughout machine learning.
+
+## 2. The maximum-margin classifier
+
+We simulate two well-separated classes in two dimensions. For SVMs it is convenient to code the classes as $y = -1$ and $y = +1$.
+
+```{r}
+#| label: toy-data
+set.seed(48)
+n <- 40
+toy <- data.frame(
+  x1 = c(rnorm(n / 2, -1.2, 0.6), rnorm(n / 2, 1.2, 0.6)),
+  x2 = c(rnorm(n / 2, -1.2, 0.6), rnorm(n / 2, 1.2, 0.6)),
+  y  = rep(c(-1, 1), each = n / 2)
+)
+X <- as.matrix(toy[, c("x1", "x2")])
+```
+
+A linear classifier uses the **decision value** $f(x) = w_1 x_1 + w_2 x_2 + b$ and predicts $+1$ if $f(x) > 0$, $-1$ otherwise. The boundary is the line $f(x) = 0$. A point is correctly classified when $y\,f(x) > 0$; the larger $y\,f(x)$, the more comfortably it is on the right side.
+
+The SVM chooses $w$ and $b$ by minimising
+
+$$
+\underbrace{\tfrac12 \lVert w \rVert^2}_{\text{small } w \;=\; \text{wide margin}} \;+\; C \sum_{i=1}^n \underbrace{\max\big(0,\; 1 - y_i f(x_i)\big)}_{\text{hinge loss}} .
+$$
+
+We will unpack this formula in section 3. For now, we can minimise it directly with base R's general-purpose optimiser `optim()`:
+
+```{r}
+#| label: linear-svm
+svm_objective <- function(par, X, y, C) {
+  w <- par[1:2]
+  b <- par[3]
+  f <- drop(X %*% w) + b                           # decision values
+  0.5 * sum(w^2) + C * sum(pmax(0, 1 - y * f))     # margin + hinge loss
+}
+fit_linear_svm <- function(X, y, C) {
+  start <- c(coef(lm(y ~ X))[-1], 0)
+  opt <- optim(start, svm_objective, X = X, y = y, C = C,
+               control = list(maxit = 20000, reltol = 1e-12))
+  opt <- optim(opt$par, svm_objective, X = X, y = y, C = C,   # restart
+               control = list(maxit = 20000, reltol = 1e-12))
+  list(w = unname(opt$par[1:2]), b = unname(opt$par[3]))
+}
+```
+
+(`optim()` is not how real SVM software works — it solves an equivalent quadratic problem very efficiently — but for 40 points and 3 parameters it is accurate enough, and it lets us see the objective in plain R.)
+
+With a very large $C$, violations of the margin are so expensive that none is allowed: this is the **hard-margin** classifier.
+
+```{r}
+#| label: hard-margin
+svm_hard <- fit_linear_svm(X, toy$y, C = 1000)
+f_hard <- drop(X %*% svm_hard$w) + svm_hard$b
+toy$margin_value <- toy$y * f_hard
+round(sort(toy$margin_value)[1:5], 3)
+half_width <- 1 / sqrt(sum(svm_hard$w^2))
+half_width
+```
+
+Every point has $y_i f(x_i) \ge 1$, and exactly `r sum(toy$margin_value < 1 + 1e-3)` points sit on the edge of the street ($y_i f(x_i) = 1$). These are the **support vectors**: the boundary is determined by them alone. Moving any other point (without crossing the street) would not change the solution. The distance from the boundary to the edge of the street is $1/\lVert w \rVert$ = `r round(half_width, 2)`.
+
+```{r}
+#| label: fig-max-margin
+#| fig-cap: "Two separable classes. Grey lines: two other lines that also separate the classes. Solid line: the maximum-margin boundary; dashed lines: the edges of the margin. Circled points are the support vectors."
+other_lines <- data.frame(intercept = c(0, 0), slope = c(-5, -0.2))
+w <- svm_hard$w
+b <- svm_hard$b
+ggplot(toy, aes(x1, x2)) +
+  geom_abline(data = other_lines, aes(intercept = intercept, slope = slope),
+              colour = "grey70", linewidth = 0.8) +
+  geom_abline(intercept = -b / w[2], slope = -w[1] / w[2], linewidth = 1) +
+  geom_abline(intercept = (c(-1, 1) - b) / w[2], slope = -w[1] / w[2],
+              linetype = "dashed") +
+  geom_point(aes(colour = factor(y)), size = 2) +
+  geom_point(data = subset(toy, margin_value < 1 + 1e-3),
+             shape = 21, size = 5, stroke = 1) +
+  coord_equal() +
+  labs(x = expression(x[1]), y = expression(x[2]), colour = "Class")
+```
+
+The two grey lines also separate the training data perfectly, but each of them passes closer to the nearest points than the maximum-margin line does. The maximum-margin line is the most "cautious" one: it keeps the largest possible distance from both classes.
+
+## 3. Soft margins, the cost $C$ and the hinge loss
+
+Real classes overlap, and no straight line separates them. The **soft-margin** SVM allows violations, but makes each one pay a price. Look again at the objective:
+
+- $\tfrac12 \lVert w \rVert^2$ is small when $w$ is small, i.e. when the street (width $2/\lVert w \rVert$) is **wide**;
+- the **hinge loss** $\max(0, 1 - y_i f(x_i))$ is **zero** for a point on the correct side and outside the street ($y_i f(x_i) \ge 1$), and grows linearly for points inside the street or on the wrong side;
+- the **cost** $C$ sets the exchange rate between the two.
+
+```{r}
+#| label: fig-hinge
+#| fig-cap: "Three losses as a function of the margin value y·f(x). The 0–1 loss counts errors; the hinge loss (SVM) is zero beyond 1 and linear below; the logistic loss (logistic regression, rescaled to equal 1 at 0) is smooth and never exactly zero."
+losses <- data.frame(m = seq(-2, 3, length.out = 501))
+losses <- rbind(
+  data.frame(m = losses$m, loss = as.numeric(losses$m < 0), type = "0-1"),
+  data.frame(m = losses$m, loss = pmax(0, 1 - losses$m), type = "hinge"),
+  data.frame(m = losses$m, loss = log2(1 + exp(-losses$m)),
+             type = "logistic")
+)
+ggplot(losses, aes(m, loss, colour = type)) +
+  geom_line(linewidth = 1) +
+  geom_vline(xintercept = c(0, 1), linetype = "dotted") +
+  labs(x = "Margin value  y · f(x)", y = "Loss", colour = NULL)
+```
+
+The hinge loss is zero for every point beyond the margin: those points have **no influence** on the solution. Only points on or inside the margin (the support vectors) matter. The logistic loss, in contrast, gives every point some influence. Otherwise the two are remarkably similar, which is why linear SVMs and logistic regression often give similar boundaries.
+
+Now let us see what $C$ does on overlapping data:
+
+```{r}
+#| label: soft-margin
+set.seed(480)
+toy2 <- data.frame(
+  x1 = c(rnorm(n / 2, -0.7, 0.8), rnorm(n / 2, 0.7, 0.8)),
+  x2 = c(rnorm(n / 2, -0.7, 0.8), rnorm(n / 2, 0.7, 0.8)),
+  y  = rep(c(-1, 1), each = n / 2)
+)
+X2 <- as.matrix(toy2[, c("x1", "x2")])
+c_values <- c(0.01, 0.1, 1, 100)
+soft <- do.call(rbind, lapply(c_values, \(C) {
+  fit <- fit_linear_svm(X2, toy2$y, C)
+  m <- toy2$y * (drop(X2 %*% fit$w) + fit$b)
+  data.frame(C = C, half_width = 1 / sqrt(sum(fit$w^2)),
+             support_vectors = sum(m < 1 + 1e-3),
+             training_errors = sum(m < 0),
+             w1 = fit$w[1], w2 = fit$w[2], b = fit$b)
+}))
+soft[, 1:4]
+```
+
+```{r}
+#| label: fig-soft-margin
+#| fig-cap: "Soft-margin linear SVMs on overlapping data for four values of the cost C. Small C: wide margin, many support vectors. Large C: narrow margin, few violations allowed."
+#| fig-width: 9
+#| fig-height: 5
+ggplot(toy2, aes(x1, x2)) +
+  geom_point(aes(colour = factor(y)), size = 1.8) +
+  geom_abline(data = soft, aes(intercept = -b / w2, slope = -w1 / w2),
+              linewidth = 1) +
+  geom_abline(data = soft, aes(intercept = (1 - b) / w2, slope = -w1 / w2),
+              linetype = "dashed") +
+  geom_abline(data = soft, aes(intercept = (-1 - b) / w2, slope = -w1 / w2),
+              linetype = "dashed") +
+  facet_wrap(~ C, labeller = label_both) +
+  coord_equal(xlim = c(-3, 3), ylim = c(-3, 3)) +
+  labs(x = expression(x[1]), y = expression(x[2]), colour = "Class")
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- With **small $C$** (`r min(c_values)`), violations are cheap: the street is wide (half-width `r round(soft$half_width[1], 2)`) and `r soft$support_vectors[1]` of the `r n` points are support vectors. The boundary is determined by many points: **low variance, possibly higher bias**.
+- With **large $C$** (`r max(c_values)`), violations are expensive: the street becomes narrow (half-width `r round(soft$half_width[4], 2)`) and the boundary bends to classify the training points correctly (`r soft$training_errors[4]` training errors against `r soft$training_errors[1]` for small $C$). Few points decide everything: **low bias, high variance** — risk of overfitting.
+- $C$ is therefore a **regularisation** parameter, like $\lambda$ in [penalised regression](../09-regression/43-penalized-regression.qmd), but in the opposite direction: a large $C$ means *weak* regularisation.
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: primal, dual and support vectors
+
+The soft-margin SVM solves
+$$
+\min_{w, b, \xi}\; \tfrac12\lVert w\rVert^2 + C\sum_i \xi_i
+\quad \text{s.t.} \quad y_i(w^\top x_i + b) \ge 1 - \xi_i,\;\; \xi_i \ge 0,
+$$
+where the **slack** $\xi_i = \max(0, 1 - y_i f(x_i))$ is exactly the hinge loss. Dividing by $Cn$ shows that this is *regularised empirical risk minimisation*: average hinge loss plus a ridge-type penalty $\lambda \lVert w \rVert^2$ with $\lambda = 1/(2Cn)$.
+
+Its Lagrange **dual** is
+$$
+\max_{\alpha}\; \sum_i \alpha_i - \tfrac12 \sum_{i,j} \alpha_i\alpha_j y_i y_j\, x_i^\top x_j
+\quad \text{s.t.} \quad 0 \le \alpha_i \le C,\;\; \sum_i \alpha_i y_i = 0,
+$$
+with $w = \sum_i \alpha_i y_i x_i$. The solution has $\alpha_i = 0$ for points beyond the margin; the points with $\alpha_i > 0$ are the support vectors. Crucially, the data enter the dual **only through inner products** $x_i^\top x_j$ — the door through which kernels enter.
+:::
+
+## 4. Kernels: curved boundaries
+
+Some problems are not linear at all. Here one class sits inside a ring formed by the other:
+
+```{r}
+#| label: ring-data
+set.seed(4848)
+ring <- data.frame(x1 = runif(200, -2, 2), x2 = runif(200, -2, 2))
+ring$class <- factor(ifelse(ring$x1^2 + ring$x2^2 + rnorm(200, sd = 0.4) < 2,
+                            "inner", "outer"))
+table(ring$class)
+```
+
+No straight line separates the classes. But if we added the feature $z = x_1^2 + x_2^2$, a simple threshold on $z$ would. A **kernel** achieves this kind of enlargement of the feature space **implicitly**: an SVM only needs inner products between observations (see Going deeper above), and a kernel function $K(x, x')$ replaces the inner product $x^\top x'$ with a similarity computed in a richer space — without ever building that space.
+
+| Kernel | $K(x, x')$ | parsnip | Tuning parameters |
+|---|---|---|---|
+| Linear | $x^\top x'$ | `svm_linear()` | `cost` |
+| Polynomial | $(\text{scale}\cdot x^\top x' + \text{offset})^{d}$ | `svm_poly()` | `cost`, `degree`, `scale_factor` |
+| Radial basis function (RBF, Gaussian) | $\exp(-\sigma \lVert x - x'\rVert^2)$ | `svm_rbf()` | `cost`, `rbf_sigma` |
+
+The RBF kernel measures how close two points are: 1 for identical points, decaying towards 0 with distance. $\sigma$ controls **how fast** it decays:
+
+```{r}
+#| label: rbf-kernel
+rbf <- function(d, sigma) exp(-sigma * d^2)
+distances <- c(0, 0.5, 1, 2, 3)
+round(outer(distances, c(sigma_0.1 = 0.1, sigma_1 = 1, sigma_10 = 10), rbf),
+      3)
+```
+
+With $\sigma = 10$ two points at distance 1 are already almost "unrelated" (similarity `r signif(rbf(1, 10), 2)`): each training point influences only its immediate neighbourhood, and the boundary can be very wiggly. With $\sigma = 0.1$ even distant points are similar, and the boundary is smooth, almost linear. (Some software, e.g. `e1071`, calls this parameter `gamma`; kernlab and parsnip call it `sigma` / `rbf_sigma`.)
+
+To *see* a decision boundary, we predict the class on a fine grid of points covering the plane and colour the grid:
+
+```{r}
+#| label: grid-helper
+grid_2d <- tidyr::expand_grid(x1 = seq(-2, 2, length.out = 120),
+                              x2 = seq(-2, 2, length.out = 120))
+boundary <- function(spec, label) {
+  fitted <- fit(spec, class ~ x1 + x2, data = ring)
+  grid_2d |>
+    mutate(.pred_class = predict(fitted, new_data = grid_2d)$.pred_class,
+           model = label)
+}
+```
+
+```{r}
+#| label: fig-kernels
+#| fig-cap: "Decision regions of three SVMs with cost = 1 on the ring data: linear, polynomial of degree 2 and RBF (sigma = 1)."
+#| fig-width: 9
+#| fig-height: 3.8
+kernel_fits <- bind_rows(
+  boundary(svm_linear(cost = 1) |> set_engine("kernlab") |>
+             set_mode("classification"), "linear"),
+  boundary(svm_poly(cost = 1, degree = 2) |> set_engine("kernlab") |>
+             set_mode("classification"), "polynomial (degree 2)"),
+  boundary(svm_rbf(cost = 1, rbf_sigma = 1) |> set_engine("kernlab") |>
+             set_mode("classification"), "RBF (sigma = 1)")
+)
+ggplot(kernel_fits, aes(x1, x2)) +
+  geom_raster(aes(fill = .pred_class), alpha = 0.35) +
+  geom_point(data = ring, aes(colour = class), size = 1) +
+  facet_wrap(~ model) +
+  coord_equal() +
+  labs(x = expression(x[1]), y = expression(x[2]), fill = "Predicted",
+       colour = "Observed")
+```
+
+The linear SVM can only draw a straight boundary, which cannot enclose the inner class: whatever line it chooses, many points end up on the wrong side. A degree-2 polynomial can represent ellipses, which suits this problem; the RBF kernel can represent almost any shape.
+
+### What `cost` and `rbf_sigma` do
+
+```{r}
+#| label: fig-cost-sigma
+#| fig-cap: "RBF SVMs on the ring data for three values of cost (columns) and rbf_sigma (rows). Large sigma and large cost give wiggly, overfitted boundaries; small values give smooth ones."
+#| fig-width: 9
+#| fig-height: 8.5
+settings <- tidyr::expand_grid(cost = c(0.1, 10, 1000),
+                               rbf_sigma = c(0.1, 1, 20))
+rbf_fits <- purrr::pmap(settings, \(cost, rbf_sigma) {
+  spec <- svm_rbf(cost = cost, rbf_sigma = rbf_sigma) |>
+    set_engine("kernlab") |>
+    set_mode("classification")
+  boundary(spec, "rbf") |> mutate(cost = cost, rbf_sigma = rbf_sigma)
+}) |>
+  bind_rows()
+
+ggplot(rbf_fits, aes(x1, x2)) +
+  geom_raster(aes(fill = .pred_class), alpha = 0.35) +
+  geom_point(data = ring, aes(colour = class), size = 0.7) +
+  facet_grid(rbf_sigma ~ cost, labeller = label_both) +
+  coord_equal() +
+  labs(x = expression(x[1]), y = expression(x[2]), fill = "Predicted",
+       colour = "Observed")
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- **`rbf_sigma`** (rows) sets the **reach** of each training point. Small $\sigma$ (top row): every point influences a large region, the boundary is smooth — with $\sigma = 0.1$ and small cost it may be too smooth to capture the ring. Large $\sigma$ (bottom row): every point has a tiny region of influence, and the boundary forms islands around individual points — classic overfitting.
+- **`cost`** (columns) sets how hard the SVM tries to classify every training point correctly. Large cost with large $\sigma$ (bottom right) is the most flexible and the most overfitted combination.
+- The two parameters interact, which is why they are **tuned together** on a grid.
+:::
+
+## 5. Normalise the predictors
+
+The RBF kernel depends on the **Euclidean distance** between observations, and so does the margin of a linear SVM. If one predictor is measured on a much larger scale than the others, it dominates the distances. Take three penguins, with bill length in mm and body mass in grams:
+
+```{r}
+#| label: scaling
+peng <- penguins[complete.cases(penguins[, c("bill_len", "body_mass")]),
+                 c("species", "bill_len", "body_mass")]
+peng[1:3, ]
+dist(peng[1:3, c("bill_len", "body_mass")])
+dist(scale(peng[, c("bill_len", "body_mass")])[1:3, ])
+```
+
+On the raw scale, the distances are essentially differences in body mass: a difference of 50 g counts as much as a difference of 50 mm in bill length, which would be enormous. After standardising each variable (mean 0, SD 1), both variables contribute on comparable terms. For SVMs (and k-NN, penalised regression, neural networks) **normalisation is part of the model**, and — as always — it must be learned on the training data inside the recipe, with `step_normalize()`. (kernlab also standardises internally by default, but other engines do not; keep the step in the recipe so the workflow does not depend on an engine default.)
+
+## 6. A correct validation split
+
+The old version of this lesson created a train / validation / test split by hand like this:
+
+```{r}
+#| label: split-bug
+set.seed(123)
+n_rows <- 100
+idx_train <- sample(n_rows, 80)
+n_rows[-idx_train]                       # NOT the remaining row numbers!
+idx_valid_bug <- sample(n_rows[-idx_train], 10)
+sum(idx_valid_bug %in% idx_train)        # validation rows also in training
+```
+
+`n_rows` is a single number, a vector of length 1. Negative indexing removes *positions*, so `n_rows[-idx_train]` is just `n_rows` again (positions 2–100 do not exist), and `sample(100, 10)` draws from **all** 100 rows. (If position 1 happens to be among the training indices, the result is instead an empty vector and `sample()` fails with an error — the code "works" only by luck.) Here `r sum(idx_valid_bug %in% idx_train)` of the 10 "validation" rows were also training rows: the validation score would be optimistic. The fix is to sample from the rows *not yet used*:
+
+```{r}
+#| label: split-fix
+idx_valid <- sample(setdiff(seq_len(n_rows), idx_train), 10)
+sum(idx_valid %in% idx_train)
+```
+
+In tidymodels, `initial_validation_split()` does the three-way split for us, stratified, with no possibility of overlap. We use the same Titanic preparation as in [the ML workflow lesson](44-ml-workflow.qmd):
+
+```{r}
+#| label: titanic-data
+titanic <- readr::read_csv(data_path("titanic_data.csv"),
+                           na = c("", "NA", "?"), show_col_types = FALSE) |>
+  select(survived, pclass, sex, age, sibsp, parch, fare, embarked) |>
+  mutate(
+    survived = factor(survived, levels = c(1, 0), labels = c("yes", "no")),
+    pclass   = factor(pclass, levels = 1:3, labels = c("1st", "2nd", "3rd")),
+    sex      = factor(sex),
+    embarked = factor(embarked)
+  )
+```
+
+```{r}
+#| label: validation-split
+set.seed(2026)
+titanic_val_split <- initial_validation_split(titanic, prop = c(0.6, 0.2),
+                                              strata = survived)
+c(train = nrow(training(titanic_val_split)),
+  validation = nrow(validation(titanic_val_split)),
+  test = nrow(testing(titanic_val_split)),
+  total = nrow(titanic))
+titanic_val <- validation_set(titanic_val_split)
+```
+
+`validation_set()` turns the split into a resampling object with a single "fold" (fit on the training part, evaluate on the validation part) that can be passed to `tune_grid()` exactly like CV folds. A single validation set is fast and simple, but noisy with a few hundred rows. For the main analysis we keep, as in the previous lessons, the **75/25 train–test split with 5-fold CV** on the training set, so that the results can be compared with the other models; Exercise 5 uses the validation set.
+
+```{r}
+#| label: titanic-split
+set.seed(2026)
+titanic_split <- initial_split(titanic, prop = 0.75, strata = survived)
+titanic_train <- training(titanic_split)
+titanic_test  <- testing(titanic_split)
+set.seed(2026)
+titanic_folds <- vfold_cv(titanic_train, v = 5, strata = survived)
+titanic_metrics <- metric_set(roc_auc, accuracy, sensitivity, specificity,
+                              brier_class, mn_log_loss)
+```
+
+## 7. Tuning an RBF SVM on the Titanic
+
+The recipe of lesson 44 already does what an SVM needs: impute, log-transform `fare`, create dummy variables and **normalise**.
+
+```{r}
+#| label: svm-recipe
+titanic_rec <- recipe(survived ~ ., data = titanic_train) |>
+  step_impute_median(all_numeric_predictors()) |>
+  step_impute_mode(all_nominal_predictors()) |>
+  step_log(fare, offset = 1) |>
+  step_dummy(all_nominal_predictors()) |>
+  step_normalize(all_numeric_predictors())
+```
+
+```{r}
+#| label: svm-spec
+svm_spec <- svm_rbf(cost = tune(), rbf_sigma = tune()) |>
+  set_engine("kernlab") |>
+  set_mode("classification")
+
+svm_wf <- workflow() |>
+  add_recipe(titanic_rec) |>
+  add_model(svm_spec)
+
+svm_grid <- grid_regular(cost(range = c(-2, 8)),
+                         rbf_sigma(range = c(-3, 0)),
+                         levels = 4)
+svm_grid
+```
+
+The `cost()` range is given on the **log2** scale ($2^{-2}$ to $2^{8}$) and `rbf_sigma()` on the **log10** scale ($10^{-3}$ to $1$): `grid_regular()` spaces the values evenly on those scales, which is what we want for parameters that act multiplicatively.
+
+```{r}
+#| label: svm-tune
+set.seed(2026)
+svm_res <- tune_grid(svm_wf, resamples = titanic_folds, grid = svm_grid,
+                     metrics = titanic_metrics)
+```
+
+```{r}
+#| label: fig-svm-tune
+#| fig-cap: "Cross-validated ROC AUC of RBF SVMs by cost and rbf_sigma."
+autoplot(svm_res, metric = "roc_auc")
+```
+
+```{r}
+#| label: svm-best
+show_best(svm_res, metric = "roc_auc", n = 5)
+best_svm <- select_best(svm_res, metric = "roc_auc")
+best_svm
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- Each line is one value of `rbf_sigma`; the x-axis is `cost` (log scale). Very large $\sigma$ combined with large cost typically gives the **worst** AUC: the boundary wraps around individual passengers (section 4).
+- The selected combination is cost = `r signif(best_svm$cost, 3)` and rbf_sigma = `r signif(best_svm$rbf_sigma, 3)`. As usual, check in `show_best()` whether other combinations are within one standard error.
+:::
+
+```{r}
+#| label: svm-final
+svm_final <- svm_wf |>
+  finalize_workflow(best_svm) |>
+  last_fit(titanic_split, metrics = titanic_metrics)
+collect_metrics(svm_final)
+```
+
+## 8. Probabilities from an SVM: Platt scaling
+
+An SVM produces a **decision value** $f(x)$, not a probability. To report a probability (and compute ROC AUC, the Brier score or the log-loss), kernlab — called by parsnip with `prob.model = TRUE` in classification mode — uses **Platt scaling**: it fits a logistic regression of the class on the decision values,
+$$
+\hat P(y = 1 \mid x) = \frac{1}{1 + \exp(A\, f(x) + B)},
+$$
+with $A$ and $B$ estimated on decision values obtained by an internal cross-validation of the training data.
+
+This has practical consequences:
+
+1. **Extra cost and randomness.** The internal cross-validation fits the SVM several more times and uses random numbers which, as the parsnip documentation for the kernlab engine warns, are not controlled by R's `set.seed()`: probabilities may differ slightly from run to run.
+2. **Class and probability may disagree.** The predicted class comes from the sign of $f(x)$, the probability from the sigmoid; for points near the boundary, `.pred_class` can be "yes" while `.pred_yes` is below 0.5. Let us count such cases on the test set:
+
+```{r}
+#| label: platt-agree
+collect_predictions(svm_final) |>
+  mutate(agree = (.pred_yes > 0.5) == (.pred_class == "yes")) |>
+  count(agree)
+```
+
+3. **Calibration is only as good as the sigmoid.** With small data sets, or when a sigmoid does not describe the relation between $f(x)$ and the true probabilities, the probabilities can be poorly calibrated. If you need well-calibrated probabilities, check a calibration plot ([lesson 49](49-model-comparison.qmd)) or prefer a model that estimates probabilities directly.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: Platt scaling by hand
+
+On the overlapping toy data of section 3, the idea is just a logistic regression on the decision values (Platt's method additionally uses held-out decision values and slightly smoothed 0/1 targets):
+
+```{r}
+#| label: platt-by-hand
+fit_c1 <- fit_linear_svm(X2, toy2$y, C = 1)
+decision <- drop(X2 %*% fit_c1$w) + fit_c1$b
+platt <- glm(I(toy2$y == 1) ~ decision, family = binomial)
+coef(platt)
+```
+
+Because the decision values here are in-sample (the SVM was fitted on the same points), the sigmoid tends to be too steep and the probabilities too extreme — this is why held-out decision values are used in practice.
+:::
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Forgetting to normalise.** Distances, and therefore SVMs, are dominated by the predictors with the largest scale. Put `step_normalize()` in the recipe.
+2. **Building a validation set by hand with index errors.** `n[-idx]` on a scalar `n` does not give the remaining rows. Use `initial_validation_split()` (or `setdiff(seq_len(n), idx)`).
+3. **Tuning `cost` and `rbf_sigma` on linear scales.** Both act multiplicatively; use grids on a log scale (as `cost()` and `rbf_sigma()` do by default).
+4. **Reading SVM probabilities as calibrated.** They come from Platt scaling; check calibration, and remember that class and probability may disagree.
+5. **Expecting SVMs to scale to very large n.** Kernel SVMs need the $n \times n$ kernel matrix in some form; training time grows roughly between $n^2$ and $n^3$. For hundreds of thousands of rows, use linear SVMs (e.g. engine `"LiblineaR"`) or other models.
+6. **Calling a printed CV score a "learning curve".** A learning curve plots error against training-set size (or training iterations); a single CV AUC is not one.
+:::
+
+## 9. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. What are support vectors, and why are they called that?
+
+The training points on the edge of the margin or inside it (including misclassified points), i.e. those with $y_i f(x_i) \le 1$. They alone determine (*support*) the boundary: removing any other point would not change the solution.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. You increase `cost` from 1 to 1000. What happens to the margin, the number of support vectors and the risk of overfitting?
+
+The margin becomes narrower, there are usually fewer support vectors, and the boundary follows the training data more closely: the risk of overfitting increases (weaker regularisation).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. For an RBF kernel, what does a very large `rbf_sigma` do?
+
+The similarity $\exp(-\sigma \lVert x - x' \rVert^2)$ drops to almost zero even for nearby points, so each training point influences only a tiny region. The boundary becomes a set of islands around individual points: it nearly memorises the training data and generalises badly.
+:::
+
+## 10. Exercises
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — hinge loss by hand.** Five points have margin values $y_i f(x_i) = -1, 0, 0.5, 1, 2$. Compute their hinge losses. Which points are support vectors? Which are misclassified? Check with `pmax()`.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+m <- c(-1, 0, 0.5, 1, 2)
+pmax(0, 1 - m)   # 2 1 0.5 0 0
+```
+The first four points ($y f \le 1$) are support vectors; the last one, beyond the margin, has zero loss and no influence. The point with $y f = -1$ is misclassified; the one with $y f = 0$ lies exactly on the boundary; the one with $0.5$ is correctly classified but inside the street; the one with $1$ sits on its edge.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — predict, then check.** In section 3, before looking at the table, predict how the number of support vectors changes as $C$ goes from 0.01 to 100. Then add $C = 1000$ to `c_values` and rerun. Does the half-width keep shrinking?
+
+::: {.callout-tip collapse="true"}
+## Solution
+The number of support vectors **decreases** as $C$ grows (from 38 of 40 points at $C = 0.01$ to 3 at $C = 100$): with cheap violations, many points are inside the wide street.
+```r
+c_values <- c(0.01, 0.1, 1, 100, 1000)
+# ... rerun the `soft` code above
+```
+At $C = 100$ these data are already separated without errors, so the solution is (essentially) the hard-margin one, and increasing $C$ further changes almost nothing: the half-width stops shrinking at the maximum-margin value. (On data that are not separable it would keep shrinking.)
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — debug.** A student writes this split for a data set with `n` rows:
+
+```r
+idx_train <- sample(n, floor(0.8 * n))
+idx_valid <- sample(n[-idx_train], floor(0.1 * n))
+idx_test  <- setdiff(seq_len(n), c(idx_train, idx_valid))
+```
+
+What goes wrong, and how large will the test set be? Fix it in two ways.
+
+::: {.callout-tip collapse="true"}
+## Solution
+`n` is a single number, so `n[-idx_train]` is either `n` itself (if 1 is not among the training indices) or an empty vector (if it is — then `sample()` stops with an error, which happens about 80% of the time). In the first case `idx_valid` is drawn from **all** rows and about 80% of it overlaps with `idx_train`, so the validation score is optimistic; the test set (everything not in either set) ends up with about $n - 0.8n - 0.02n \approx 18\%$ of the rows instead of 10%. Fixes:
+```r
+idx_valid <- sample(setdiff(seq_len(n), idx_train), floor(0.1 * n))
+```
+or, with rsample (stratified, and no indices to get wrong):
+```r
+split3 <- initial_validation_split(df, prop = c(0.8, 0.1), strata = outcome)
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 4 — scaling and distances.** Using `penguins`, compute the distance matrix between the first three complete rows using `bill_len`, `bill_dep`, `flipper_len` and `body_mass`, first on the raw scale and then after `scale()`. Which variable dominates the raw distances, and why does this matter for an RBF SVM?
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+vars <- c("bill_len", "bill_dep", "flipper_len", "body_mass")
+pp <- penguins[complete.cases(penguins[, vars]), vars]
+dist(pp[1:3, ])
+dist(scale(pp)[1:3, ])
+sapply(pp, sd)
+```
+`body_mass` (SD about 800 g, against single or low double digits for the others) dominates the raw distances. An RBF kernel on raw data would effectively measure similarity by body mass alone, ignoring the bill and flipper measurements. Standardising gives each variable a comparable say.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 5 — linear vs RBF, and the validation set.** (a) Using `fit_resamples()` with `titanic_folds`, compare a linear SVM (`svm_linear(cost = 1)`, engine `kernlab`) with the tuned RBF SVM (`finalize_workflow(svm_wf, best_svm)`). Is the non-linear kernel worth it? (b) Tune the RBF SVM on the single validation set `titanic_val` instead of the folds. Do you get the same best parameters?
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+lin_spec <- svm_linear(cost = 1) |>
+  set_engine("kernlab") |>
+  set_mode("classification")
+set.seed(2026)
+lin_res <- fit_resamples(workflow(titanic_rec, lin_spec),
+                         resamples = titanic_folds,
+                         metrics = metric_set(roc_auc, brier_class))
+set.seed(2026)
+rbf_res <- fit_resamples(finalize_workflow(svm_wf, best_svm),
+                         resamples = titanic_folds,
+                         metrics = metric_set(roc_auc, brier_class))
+bind_rows(linear = collect_metrics(lin_res),
+          rbf = collect_metrics(rbf_res), .id = "kernel")
+
+set.seed(2026)
+svm_val_res <- tune_grid(svm_wf, resamples = titanic_val, grid = svm_grid,
+                         metrics = metric_set(roc_auc))
+select_best(svm_val_res, metric = "roc_auc")
+```
+(a) Compare the difference in mean AUC with the standard errors: if the RBF gain is about one standard error or less, the simpler linear SVM is a reasonable choice. (b) The best parameters often differ: one validation set of about 260 passengers gives a noisy AUC for every candidate, and the "winner" can change with the split. With small data, CV gives more stable choices. (Note that `titanic_val_split` is a different random split from `titanic_split`, so its test set must not be mixed with this analysis.)
+:::
+:::
+
+## Summary
+
+| Idea / function | What it does |
+|---|---|
+| Margin, support vectors | Widest street between classes; only points on/inside it matter |
+| Hinge loss $\max(0, 1 - y f(x))$ | Zero beyond the margin, linear inside |
+| `cost` ($C$) | Price of margin violations; large = less regularisation |
+| Kernel $K(x, x')$ | Similarity replacing $x^\top x'$; curved boundaries |
+| `rbf_sigma` ($\sigma$) | Reach of each point in the RBF kernel; large = wiggly |
+| `svm_linear()`, `svm_poly()`, `svm_rbf()` + `set_engine("kernlab")` | tidymodels SVM specifications |
+| `step_normalize()` | Essential preprocessing for SVMs |
+| `initial_validation_split()`, `validation_set()` | Correct three-way split |
+| Platt scaling | Sigmoid that turns decision values into probabilities |
+
+- An SVM maximises the margin, trading width against violations through `cost`.
+- Kernels give flexible boundaries; `cost` and `rbf_sigma` must be tuned **together**, on log scales.
+- **Normalise** predictors, and build validation sets with tools that cannot overlap.
+- SVM probabilities are a post-processing step (Platt scaling): check their calibration.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2e), chapter 9, <https://www.statlearning.com>
+- Kuhn & Silge, *Tidy Modeling with R*, <https://www.tmwr.org>
+- Karatzoglou, Smola, Hornik & Zeileis, "kernlab – An S4 Package for Kernel Methods in R", *Journal of Statistical Software* 11(9), 2004, <https://www.jstatsoft.org/v11/i09/>
+:::

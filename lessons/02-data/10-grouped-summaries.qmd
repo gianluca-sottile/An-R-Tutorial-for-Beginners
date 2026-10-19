@@ -1,0 +1,507 @@
+---
+title: "Grouped summaries"
+subtitle: "From one row per unit to one row per group: summarise(), group_by() and across()"
+description: "Compute summaries with summarise(), split them by group with group_by() or .by, summarise many columns at once with across(), and avoid the classic pitfalls of missing values and leftover groups."
+format:
+  live-html:
+    webr:
+      packages: ["dplyr", "tibble"]
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+library(tibble)
+```
+
+::: {.lesson-meta}
+[Level 1 · Foundations]{.level-1} [⏱ ~60 min]{} [Prerequisites: [Data manipulation with dplyr](09-dplyr-verbs.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- reduce a data frame to summary statistics with `summarise()`, `n()` and `n_distinct()`;
+- compute the same summaries **for each group** with `group_by()` or the `.by` argument;
+- apply several functions to several columns at once with `across()` and control the names with `.names`;
+- use grouped `mutate()` to compare each unit with its own group (e.g. centring within group);
+- recognise and avoid the two classic pitfalls: missing values and grouped data "leaking" into later steps.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(tibble)
+```
+
+## 1. Why summarise?
+
+A table with 344 penguins is too long to *read*. To answer questions like "are Gentoo penguins heavier than Adelie?" we need to **compress** many rows into a few numbers: a mean, a standard deviation, a count — one set of numbers for each species.
+
+This is the first step of **descriptive statistics**: describing a variable with a few well-chosen summaries, separately for each group we want to compare. The statistics themselves (mean vs median, standard deviation, IQR…) are discussed in [Summary statistics](../05-descriptive/22-summary-statistics.qmd); here we learn the **tools** to compute them.
+
+```{r}
+#| label: data
+penguins <- as_tibble(penguins)
+```
+
+## 2. `summarise()`: many rows to one
+
+```{r}
+#| label: summarise-na
+penguins |>
+  summarise(mean_mass = mean(body_mass))
+```
+
+The result is `NA`: two penguins have a missing body mass, and the mean of a set of numbers that includes an unknown number is unknown. We must say explicitly that missing values should be removed:
+
+```{r}
+#| label: summarise-basic
+penguins |>
+  summarise(
+    mean_mass = mean(body_mass, na.rm = TRUE),
+    sd_mass   = sd(body_mass, na.rm = TRUE),
+    n         = n(),
+    n_mass    = sum(!is.na(body_mass))
+  )
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- The output has **one row**, because we summarised the whole table, and one column per summary.
+- `n()` counts **rows** (`r nrow(penguins)`), including those with a missing mass; `sum(!is.na(body_mass))` counts the **non-missing values** (`r sum(!is.na(penguins$body_mass))`). The mean was computed on the second number — this is the sample size you should report.
+:::
+
+`summarise()` accepts any function that returns **one value**: `mean()`, `median()`, `sd()`, `min()`, `max()`, `quantile(x, 0.9)`, and also `n()` (number of rows) and `n_distinct()` (number of different values).
+
+## 3. Summaries by group
+
+The real power comes when we split the table into groups, summarise each group, and stack the results. This idea is called **split–apply–combine**.
+
+### `group_by()` + `summarise()`
+
+```{r}
+#| label: group-by
+penguins |>
+  group_by(species) |>
+  summarise(
+    mean_mass = mean(body_mass, na.rm = TRUE),
+    sd_mass   = sd(body_mass, na.rm = TRUE),
+    n         = n()
+  )
+```
+
+Now there is **one row per species**. Gentoo penguins are about `r round(mean(penguins$body_mass[penguins$species == "Gentoo"], na.rm = TRUE) - mean(penguins$body_mass[penguins$species == "Adelie"], na.rm = TRUE), -2)` g heavier than Adelie on average. Whether such a difference could be due to chance is a question for [t-tests](../08-inference/34-t-tests.qmd).
+
+### The `.by` argument
+
+Since dplyr 1.1 you can group **for a single operation** with `.by`:
+
+```{r}
+#| label: by-arg
+penguins |>
+  summarise(
+    mean_mass = mean(body_mass, na.rm = TRUE),
+    n = n(),
+    .by = species
+  )
+```
+
+The numbers are the same. Two differences: the result is **never grouped** afterwards (see section 6), and the groups appear in the order in which they first occur in the data, not alphabetically. Add `arrange(species)` if you need a sorted table.
+
+### Several grouping variables
+
+```{r}
+#| label: two-groups
+penguins |>
+  filter(!is.na(sex)) |>
+  summarise(
+    mean_flipper = mean(flipper_len, na.rm = TRUE),
+    n = n(),
+    .by = c(species, sex)
+  ) |>
+  arrange(species, sex)
+```
+
+Each row is now a **combination** of species and sex. Within every species males have longer flippers on average — an example of a pattern you can only see after grouping.
+
+### `n_distinct()`
+
+```{r}
+#| label: n-distinct
+penguins |>
+  summarise(
+    n_islands = n_distinct(island),
+    n_years   = n_distinct(year),
+    .by = species
+  )
+```
+
+Only Adelie penguins were sampled on all three islands; keep this in mind before comparing islands, because island and species are **confounded** (mixed together).
+
+## 4. Many columns at once: `across()`
+
+Typing `mean(..., na.rm = TRUE)` for every column is tedious and error-prone. `across()` applies one or more functions to a set of columns:
+
+```{r}
+#| label: across-one
+penguins |>
+  summarise(
+    across(starts_with("bill"), \(x) mean(x, na.rm = TRUE)),
+    .by = species
+  )
+```
+
+The first argument of `across()` selects columns (with any of the helpers from `select()`); the second is the function. `\(x) mean(x, na.rm = TRUE)` is an **anonymous function**: "take a column `x` and return its mean without missing values".
+
+With **several functions**, give them names in a list; `.names` builds the column names from the column (`{.col}`) and the function name (`{.fn}`):
+
+```{r}
+#| label: across-many
+penguins |>
+  summarise(
+    across(
+      c(bill_len, flipper_len),
+      list(mean = \(x) mean(x, na.rm = TRUE),
+           sd   = \(x) sd(x, na.rm = TRUE)),
+      .names = "{.col}_{.fn}"
+    ),
+    .by = species
+  )
+```
+
+`across()` also works inside `mutate()`, for example to round every numeric column: `mutate(across(where(is.numeric), \(x) round(x, 1)))`. It replaces the old `summarise_at()`, `mutate_if()` and similar functions, which you may still see in older code.
+
+## 5. Grouped `mutate()`: comparing a unit with its group
+
+`summarise()` returns one row per group. `mutate()` with groups keeps **all rows**, but computes group statistics for each row. A typical use is **centring within group**: how much heavier is each penguin than the average of its own species?
+
+```{r}
+#| label: grouped-mutate
+centred <- penguins |>
+  mutate(
+    species_mean  = mean(body_mass, na.rm = TRUE),
+    mass_centred  = body_mass - species_mean,
+    .by = species
+  ) |>
+  select(species, body_mass, species_mean, mass_centred)
+
+centred
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- `species_mean` is the same for all penguins of a species — it is repeated on every row.
+- `mass_centred` is positive for penguins heavier than their species average, negative for lighter ones. Within each species, its mean is zero (up to rounding).
+- A Gentoo with `mass_centred = 0` is "average for a Gentoo", even though it is much heavier than any average Adelie. Centring removes differences *between* groups to focus on variation *within* groups.
+:::
+
+Other common grouped mutates: the share of each unit in its group total (`x / sum(x)`), the rank within group (`min_rank(desc(x))`), or a **z-score within group** (`(x - mean(x)) / sd(x)`), which you will meet again in descriptive statistics.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: within- and between-group variation
+
+Write $x_{ij}$ for the mass of penguin $i$ in species $j$, $\bar x_j$ for the species mean and $\bar x$ for the overall mean. Then
+
+$$
+x_{ij} - \bar x \;=\; \underbrace{(\bar x_j - \bar x)}_{\text{between groups}} \;+\; \underbrace{(x_{ij} - \bar x_j)}_{\text{within group (centred)}} .
+$$
+
+Summing the squares of each part over all penguins splits the total variability into a between-group and a within-group part. This decomposition is the heart of [ANOVA](../08-inference/37-anova.qmd).
+:::
+
+## 6. Grouped data frames and `ungroup()`
+
+`group_by()` attaches the grouping **to the data frame**, and it stays there. This is convenient, but it is also the source of a subtle bug. Suppose we want the proportion of each species–sex combination among *all* penguins:
+
+```{r}
+#| label: leak
+penguins |>
+  filter(!is.na(sex)) |>
+  group_by(species, sex) |>
+  summarise(n = n()) |>
+  mutate(prop = n / sum(n))
+```
+
+The proportions add up to 1 **within each species**, not overall. After `summarise()`, the result is still grouped by `species` (summarise removes only the *last* grouping variable), so `sum(n)` was computed per species. Three ways to be explicit:
+
+```{r}
+#| label: leak-fix
+# 1. remove the grouping
+penguins |>
+  filter(!is.na(sex)) |>
+  group_by(species, sex) |>
+  summarise(n = n()) |>
+  ungroup() |>
+  mutate(prop = n / sum(n))
+```
+
+```{r}
+#| label: leak-fix-2
+# 2. drop groups inside summarise()
+penguins |>
+  filter(!is.na(sex)) |>
+  group_by(species, sex) |>
+  summarise(n = n(), .groups = "drop") |>
+  mutate(prop = n / sum(n))
+
+# 3. use .by, which never leaves groups behind
+penguins |>
+  filter(!is.na(sex)) |>
+  summarise(n = n(), .by = c(species, sex)) |>
+  mutate(prop = n / sum(n))
+```
+
+Neither result is "wrong": proportions within species and proportions of the total answer **different questions**. The bug is getting one when you meant the other. When a tibble is grouped, its printout starts with a line like `# Groups: species [3]` — learn to look for it.
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Forgetting `na.rm = TRUE`.** One missing value turns the mean, sd, min, max and sum into `NA`.
+2. **Reporting `n()` as the sample size** when the variable has missing values. Use `sum(!is.na(x))` for the number of values actually used.
+3. **Grouped data leaking into later steps.** After `group_by()`, every following `mutate()`, `summarise()` and `slice_*()` works by group. Use `.by`, `.groups = "drop"` or `ungroup()`.
+4. **Using `mutate()` when you wanted `summarise()`** (or vice versa). `summarise()` gives one row per group; `mutate()` keeps every row.
+5. **Comparing group means without looking at group sizes.** A mean based on 5 units is far less reliable than one based on 150; always report `n` next to it.
+:::
+
+## 7. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. How many rows does `penguins |> summarise(m = mean(bill_len, na.rm = TRUE), .by = c(species, island))` return?
+
+One per species–island combination **that exists in the data**: Adelie on three islands, Chinstrap on one, Gentoo on one — 5 rows.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. What is the difference between these two lines?
+
+`penguins |> summarise(m = mean(body_mass, na.rm = TRUE), .by = species)` and `penguins |> mutate(m = mean(body_mass, na.rm = TRUE), .by = species)`
+
+The first returns 3 rows (one per species). The second returns all 344 rows, with the species mean repeated on each row.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. After `group_by(species, sex) |> summarise(n = n())`, by which variable is the result still grouped?
+
+By `species`. `summarise()` drops only the last grouping variable (`sex`). Use `.groups = "drop"` to drop all of them.
+:::
+
+## 8. Exercises
+
+### Interactive (run in your browser)
+
+```{webr}
+#| setup: true
+#| exercise: ex_10_1
+penguins <- tibble::as_tibble(penguins)
+```
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — summary by species.** For each species compute the median body mass, the standard deviation of body mass and the number of non-missing body mass values.
+
+```{webr}
+#| exercise: ex_10_1
+penguins |>
+  summarise(
+    median_mass = median(body_mass, ______),
+    sd_mass     = ______,
+    n_mass      = sum(!is.na(______)),
+    .by = ______
+  )
+```
+
+::: {.hint exercise="ex_10_1"}
+Every function needs `na.rm = TRUE`. Group with `.by = species`.
+:::
+
+::: {.solution exercise="ex_10_1"}
+```r
+penguins |>
+  summarise(
+    median_mass = median(body_mass, na.rm = TRUE),
+    sd_mass     = sd(body_mass, na.rm = TRUE),
+    n_mass      = sum(!is.na(body_mass)),
+    .by = species
+  )
+```
+Gentoo has the highest median mass; the counts are 151 (Adelie), 123 (Gentoo) and 68 (Chinstrap).
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_10_2
+penguins <- tibble::as_tibble(penguins)
+```
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — `across()`.** Compute the mean of **all numeric measurements** except `year` (i.e. `bill_len`, `bill_dep`, `flipper_len`, `body_mass`) for each species, with column names like `bill_len_mean`.
+
+```{webr}
+#| exercise: ex_10_2
+penguins |>
+  summarise(
+    across(
+      c(bill_len:body_mass),
+      list(mean = ______),
+      .names = ______
+    ),
+    .by = species
+  )
+```
+
+::: {.hint exercise="ex_10_2"}
+The function is `\(x) mean(x, na.rm = TRUE)`; the name pattern is `"{.col}_{.fn}"`.
+:::
+
+::: {.solution exercise="ex_10_2"}
+```r
+penguins |>
+  summarise(
+    across(
+      c(bill_len:body_mass),
+      list(mean = \(x) mean(x, na.rm = TRUE)),
+      .names = "{.col}_{.fn}"
+    ),
+    .by = species
+  )
+```
+Chinstrap penguins have the longest bills on average (about 48.8 mm), Gentoo the shallowest (about 15.0 mm) but the longest flippers.
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_10_3
+penguins <- tibble::as_tibble(penguins)
+```
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — debug the proportions.** The goal is the proportion of penguins on each island **out of all penguins**, but the `prop` column is all ones. Why? Fix it.
+
+```{webr}
+#| exercise: ex_10_3
+penguins |>
+  group_by(island) |>
+  summarise(n = n()) |>
+  group_by(island) |>
+  mutate(prop = n / sum(n))
+```
+
+::: {.hint exercise="ex_10_3"}
+Inside each island group there is only one row, so `n / sum(n)` is always 1. Remove the second `group_by()` (or use `.by` in `summarise()`).
+:::
+
+::: {.solution exercise="ex_10_3"}
+```r
+penguins |>
+  summarise(n = n(), .by = island) |>
+  mutate(prop = n / sum(n))
+```
+Biscoe hosts the largest share of the sample (about 49%), Torgersen the smallest (about 15%).
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_10_4
+penguins <- tibble::as_tibble(penguins)
+```
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 4 — z-scores within species.** Add a column `z_mass` with the body mass standardised **within species**: subtract the species mean and divide by the species standard deviation. Then check that, within each species, `z_mass` has mean 0 and sd 1.
+
+```{webr}
+#| exercise: ex_10_4
+penguins |>
+  mutate(
+    z_mass = ______,
+    .by = species
+  ) |>
+  summarise(
+    mean_z = mean(z_mass, na.rm = TRUE),
+    sd_z   = sd(z_mass, na.rm = TRUE),
+    .by = species
+  )
+```
+
+::: {.hint exercise="ex_10_4"}
+`(body_mass - mean(body_mass, na.rm = TRUE)) / sd(body_mass, na.rm = TRUE)`.
+:::
+
+::: {.solution exercise="ex_10_4"}
+```r
+penguins |>
+  mutate(
+    z_mass = (body_mass - mean(body_mass, na.rm = TRUE)) /
+      sd(body_mass, na.rm = TRUE),
+    .by = species
+  ) |>
+  summarise(
+    mean_z = mean(z_mass, na.rm = TRUE),
+    sd_z   = sd(z_mass, na.rm = TRUE),
+    .by = species
+  )
+```
+The means print as 0 (or tiny numbers like `1e-16`, which are rounding errors) and the standard deviations as 1. A penguin with `z_mass = 2` is two standard deviations heavier than the average of *its own* species.
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★]{.stars} **Exercise 5 — monthly ozone.** With `airquality`, compute for each `Month`: the mean `Ozone`, the number of days, the number of days with missing `Ozone` and the maximum `Temp`. Which month has the most missing ozone values? Why does this matter when comparing monthly means?
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+airquality |>
+  summarise(
+    mean_ozone = mean(Ozone, na.rm = TRUE),
+    n_days     = n(),
+    n_missing  = sum(is.na(Ozone)),
+    max_temp   = max(Temp),
+    .by = Month
+  )
+```
+June (`Month == 6`) has 21 missing ozone values out of 30 days, so its mean is based on only 9 days and is much less reliable than the others. If the missing days are not a random subset (for example, if the instrument failed on particular kinds of days), the June mean could also be biased — see [Missing data](../04-io/20-missing-data.qmd).
+:::
+:::
+
+## Summary
+
+| Tool | What it does | Example |
+|---|---|---|
+| `summarise()` | many rows → one row (per group) | `summarise(m = mean(x, na.rm = TRUE))` |
+| `n()`, `n_distinct()` | number of rows / of distinct values | `summarise(n = n(), k = n_distinct(g))` |
+| `.by =` | group for one operation | `summarise(..., .by = c(g1, g2))` |
+| `group_by()` | attach groups to the data | `group_by(g)`, then `summarise(...)` |
+| `across()` | same function(s) on many columns | `across(where(is.numeric), list(mean = mean))` |
+| grouped `mutate()` | group statistic on every row | `mutate(xc = x - mean(x), .by = g)` |
+| `ungroup()`, `.groups = "drop"` | remove groups | `summarise(..., .groups = "drop")` |
+
+- `summarise()` compresses, `mutate()` keeps every row: choose according to the question.
+- Always use `na.rm = TRUE` deliberately, and report the number of non-missing values.
+- Prefer `.by`: it groups for one step only and avoids leftover groups.
+- Group summaries are the raw material of [descriptive statistics](../05-descriptive/22-summary-statistics.qmd) and of [comparisons between groups](../05-descriptive/23-two-variables.qmd).
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2e), chapter "Data transformation" (groups), <https://r4ds.hadley.nz>
+- dplyr vignette "Column-wise operations" (`across()`), <https://dplyr.tidyverse.org/articles/colwise.html>
+- dplyr reference for per-operation grouping (`.by`), <https://dplyr.tidyverse.org/reference/dplyr_by.html>
+:::

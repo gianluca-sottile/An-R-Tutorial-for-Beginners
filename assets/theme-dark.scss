@@ -1,0 +1,72 @@
+/*-- scss:defaults --*/
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap');
+
+$r-blue:      #6EA8FE;
+$r-blue-dark: #9EC5FE;
+$coral:       #FF8A65;
+$teal:        #2DD4BF;
+$amber:       #FBBF24;
+$ink:         #E6E9EF;
+$muted:       #A3ACBD;
+$paper:       #0F1522;
+$card:        #161E2E;
+$line:        #263043;
+
+$body-bg:     $paper;
+$body-color:  $ink;
+$primary:     $r-blue;
+$secondary:   $muted;
+$success:     $teal;
+$info:        $r-blue;
+$warning:     $amber;
+$danger:      $coral;
+$link-color:  $r-blue;
+$link-hover-color: $r-blue-dark;
+
+$font-family-sans-serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+$font-family-monospace:  "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+$headings-font-family:   "Inter", system-ui, sans-serif;
+$headings-font-weight:   700;
+$font-size-root:         17px;
+$line-height-base:       1.65;
+
+$navbar-bg:        #0B111C;
+$navbar-fg:        $ink;
+$navbar-hl:        $r-blue;
+$sidebar-bg:       $paper;
+$sidebar-fg:       $muted;
+$sidebar-hl:       $r-blue;
+$footer-bg:        #0B111C;
+$footer-fg:        $muted;
+
+$code-color:       #F9A8D4;
+$code-bg:          #1B2436;
+$code-block-bg:    #131B2A;
+$code-block-border-left: $r-blue;
+$border-radius:    .6rem;
+
+$toc-color:        $muted;
+
+$accent-coral: $coral;
+$accent-teal:  $teal;
+$card-bg:      $card;
+$card-line:    $line;
+$hero-grad-1:  #13213A;
+$hero-grad-2:  #2A1A1A;
+
+/*-- scss:rules --*/
+// Design tokens consumed by assets/custom.css
+:root {
+  --rt-primary: #{$r-blue};
+  --rt-primary-dark: #{$r-blue-dark};
+  --rt-coral: #{$accent-coral};
+  --rt-teal: #{$accent-teal};
+  --rt-amber: #{$amber};
+  --rt-ink: #{$ink};
+  --rt-muted: #{$muted};
+  --rt-paper: #{$paper};
+  --rt-card: #{$card-bg};
+  --rt-line: #{$card-line};
+  --rt-hero-1: #{$hero-grad-1};
+  --rt-hero-2: #{$hero-grad-2};
+}

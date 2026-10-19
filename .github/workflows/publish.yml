@@ -1,0 +1,58 @@
+# Publish the Quarto website to GitHub Pages.
+#
+# How it works
+# ------------
+# * All R code is executed on YOUR computer when you run `quarto render`.
+#   Quarto stores the results in the `_freeze/` folder (execute: freeze: auto),
+#   which you commit together with the .qmd files.
+# * This workflow only re-assembles the HTML from those frozen results, so the
+#   GitHub runner needs Quarto but NOT R, packages, keras or TensorFlow.
+# * Pages settings: Settings -> Pages -> Build and deployment -> Source:
+#   "GitHub Actions" (the same setting the old site already used).
+
+name: Publish site
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Quarto
+        uses: quarto-dev/quarto-actions/setup@v2
+
+      - name: Render site from frozen computations
+        uses: quarto-dev/quarto-actions/render@v2
+        # If a page fails here with "R not found", it means its results were
+        # not frozen: run `quarto render` locally and commit `_freeze/`.
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

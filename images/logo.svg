@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="From Data to Models with R">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2160B8"/>
+      <stop offset="1" stop-color="#163F7A"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 3 57 17.5v29L32 61 7 46.5v-29z" fill="url(#g)"/>
+  <rect x="17" y="38" width="5" height="9" rx="1.2" fill="#E8613C"/>
+  <rect x="24.5" y="32" width="5" height="15" rx="1.2" fill="#E8613C" opacity=".85"/>
+  <text x="38" y="44" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="800" font-size="26" fill="#fff">R</text>
+</svg>

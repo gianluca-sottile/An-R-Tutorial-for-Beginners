@@ -1,0 +1,211 @@
+project:
+  type: website
+  output-dir: _site
+  render:
+    - "*.qmd"
+    - "lessons/**/*.qmd"
+    - "!_legacy/"
+    - "!_dev/"
+  resources:
+    - data/
+    - images/
+
+execute:
+  freeze: auto        # re-run code only when a source file changes (see setup.qmd)
+  warning: false
+  message: false
+
+knitr:
+  opts_chunk:
+    fig.align: center
+    fig.width: 7
+    fig.asp: 0.618
+    out.width: "85%"
+    dev: ragg_png
+    comment: "#>"
+    collapse: false
+
+website:
+  title: "From Data to Models with R"
+  description: "From your first line of R to statistical modelling and machine learning — a free, open course with interactive exercises."
+  site-url: https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/
+  repo-url: https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners
+  repo-actions: [edit, issue]
+  favicon: images/logo.svg
+  page-navigation: true
+  back-to-top-navigation: true
+  bread-crumbs: true
+  reader-mode: true
+  search:
+    location: navbar
+    type: overlay
+  open-graph: true
+
+  navbar:
+    logo: images/logo.svg
+    title: "From Data to Models with R"
+    left:
+      - text: "Start here"
+        href: setup.qmd
+      - text: "Learning path"
+        href: learning-path.qmd
+      - text: "Lessons"
+        href: lessons/01-foundations/01-what-is-r.qmd
+      - text: "Glossary"
+        href: glossary.qmd
+      - text: "About"
+        href: about.qmd
+    right:
+      - icon: github
+        href: https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners
+        aria-label: GitHub repository
+
+  sidebar:
+    style: floating
+    search: false
+    collapse-level: 1
+    contents:
+      - section: "Level 1 · R foundations"
+        contents:
+          - section: "1. Getting started"
+            contents:
+              - lessons/01-foundations/01-what-is-r.qmd
+              - lessons/01-foundations/02-first-steps.qmd
+              - lessons/01-foundations/03-data-types.qmd
+              - lessons/01-foundations/04-vectors.qmd
+              - lessons/01-foundations/05-matrices.qmd
+              - lessons/01-foundations/06-factors.qmd
+              - lessons/01-foundations/07-lists.qmd
+          - section: "2. Working with data"
+            contents:
+              - lessons/02-data/08-data-frames.qmd
+              - lessons/02-data/09-dplyr-verbs.qmd
+              - lessons/02-data/10-grouped-summaries.qmd
+              - lessons/02-data/11-joins.qmd
+              - lessons/02-data/12-tidy-reshape.qmd
+              - lessons/02-data/13-strings-dates.qmd
+          - section: "3. Programming"
+            contents:
+              - lessons/03-programming/14-functions.qmd
+              - lessons/03-programming/15-conditionals.qmd
+              - lessons/03-programming/16-loops.qmd
+              - lessons/03-programming/17-iteration.qmd
+          - section: "4. Data in and out"
+            contents:
+              - lessons/04-io/18-import.qmd
+              - lessons/04-io/19-export.qmd
+              - lessons/04-io/20-missing-data.qmd
+      - section: "Level 2 · Describe & explore"
+        contents:
+          - section: "5. Descriptive statistics"
+            contents:
+              - lessons/05-descriptive/21-frequency-tables.qmd
+              - lessons/05-descriptive/22-summary-statistics.qmd
+              - lessons/05-descriptive/23-two-variables.qmd
+          - section: "6. Visualisation"
+            contents:
+              - lessons/06-visualization/24-ggplot-grammar.qmd
+              - lessons/06-visualization/25-distribution-plots.qmd
+              - lessons/06-visualization/26-categorical-plots.qmd
+              - lessons/06-visualization/27-correlation.qmd
+      - section: "Level 3 · Uncertainty & inference"
+        contents:
+          - section: "7. Probability & simulation"
+            contents:
+              - lessons/07-probability/28-randomness-simulation.qmd
+              - lessons/07-probability/29-distributions.qmd
+              - lessons/07-probability/30-sampling-distributions.qmd
+              - lessons/07-probability/31-bootstrap.qmd
+          - section: "8. Statistical inference"
+            contents:
+              - lessons/08-inference/32-confidence-intervals.qmd
+              - lessons/08-inference/33-hypothesis-testing.qmd
+              - lessons/08-inference/34-t-tests.qmd
+              - lessons/08-inference/35-proportions-chisq.qmd
+              - lessons/08-inference/36-nonparametric-tests.qmd
+              - lessons/08-inference/37-anova.qmd
+      - section: "Level 4 · Models & learning"
+        contents:
+          - section: "9. Regression models"
+            contents:
+              - lessons/09-regression/38-simple-regression.qmd
+              - lessons/09-regression/39-multiple-regression.qmd
+              - lessons/09-regression/40-model-selection.qmd
+              - lessons/09-regression/41-logistic-regression.qmd
+              - lessons/09-regression/42-poisson-regression.qmd
+              - lessons/09-regression/43-penalized-regression.qmd
+          - section: "10. Supervised learning"
+            contents:
+              - lessons/10-ml/44-ml-workflow.qmd
+              - lessons/10-ml/45-decision-trees.qmd
+              - lessons/10-ml/46-random-forests.qmd
+              - lessons/10-ml/47-gradient-boosting.qmd
+              - lessons/10-ml/48-svm.qmd
+              - lessons/10-ml/49-model-comparison.qmd
+          - section: "11. Dimensionality reduction"
+            contents:
+              - lessons/11-dimred/50-pca.qmd
+              - lessons/11-dimred/51-factor-analysis.qmd
+              - lessons/11-dimred/52-correspondence-analysis.qmd
+              - lessons/11-dimred/53-mds.qmd
+              - lessons/11-dimred/54-tsne-umap.qmd
+          - section: "12. Clustering"
+            contents:
+              - lessons/12-clustering/55-clustering-intro.qmd
+              - lessons/12-clustering/56-kmeans.qmd
+              - lessons/12-clustering/57-hierarchical.qmd
+              - lessons/12-clustering/58-dbscan.qmd
+              - lessons/12-clustering/59-model-based.qmd
+              - lessons/12-clustering/60-spectral.qmd
+      - section: "Optional · Deep learning"
+        contents:
+          - lessons/13-deep-learning/61-dl-setup.qmd
+          - lessons/13-deep-learning/62-dnn-tabular.qmd
+          - lessons/13-deep-learning/63-autoencoders.qmd
+          - lessons/13-deep-learning/64-lstm.qmd
+          - lessons/13-deep-learning/65-gru.qmd
+          - lessons/13-deep-learning/66-cnn.qmd
+      - section: "Capstone"
+        contents:
+          - lessons/67-capstone.qmd
+
+  page-footer:
+    left: |
+      © 2026 [Gianluca Sottile](https://www.unipa.it/persone/docenti/s/gianluca.sottile) · University of Palermo
+    center: |
+      Content licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+    right: |
+      Built with [Quarto](https://quarto.org) & [webR](https://docs.r-wasm.org/webr/latest/)
+
+format:
+  live-html:
+    theme:
+      light: [cosmo, assets/theme-light.scss]
+      dark: [cosmo, assets/theme-dark.scss]
+    css: assets/custom.css
+    toc: true
+    toc-depth: 3
+    toc-title: "On this page"
+    toc-location: right
+    number-sections: false
+    code-copy: true
+    code-overflow: wrap
+    code-link: true
+    code-tools:
+      source: repo
+      toggle: false
+    highlight-style:
+      light: github
+      dark: nord
+    link-external-icon: true
+    link-external-newwindow: true
+    smooth-scroll: true
+    anchor-sections: true
+    fig-cap-location: bottom
+    callout-appearance: default
+    grid:
+      sidebar-width: 290px
+      body-width: 860px
+      margin-width: 260px
+
+engine: knitr

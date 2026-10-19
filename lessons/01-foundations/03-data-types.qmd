@@ -1,0 +1,486 @@
+---
+title: "Data types and operators"
+subtitle: "Numbers, text and TRUE/FALSE — and the surprises hidden in between"
+description: "The basic data types of R (numeric, integer, character, logical), how to inspect and convert them, implicit coercion, arithmetic, comparison and logical operators, special values (NA, NULL, NaN, Inf) and the floating-point equality trap."
+aliases:
+  - ../../R-course_lesson-2.html
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Level 1 · Foundations]{.level-1} [⏱ ~60 min]{} [Prerequisites: [First steps](02-first-steps.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- recognise the four basic data types and inspect them with `class()`, `typeof()` and `is.*()`;
+- convert between types with `as.*()` and **predict** what implicit coercion will do;
+- use arithmetic (including `%/%` and `%%`), comparison and logical operators;
+- distinguish `NA`, `NULL`, `NaN` and `Inf`;
+- compare decimal numbers safely with `all.equal()`.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+# Base R only: nothing to load.
+```
+
+## 1. Why do data types matter?
+
+Look at these two lines:
+
+```{r}
+#| label: motivation
+10 < 9
+"10" < "9"
+```
+
+The first comparison is `FALSE`, as expected. The second is `TRUE`! With quotes, `"10"` and `"9"` are **text**, and text is compared alphabetically, character by character: `"1"` comes before `"9"`, just as "apple" comes before "banana".
+
+This is not a curiosity. When you import a spreadsheet and one cell in a column of numbers contains `"n/a"`, R may read the **whole column as text**. Your averages fail, your sorting is wrong, your plots look odd. Knowing what type each object has — and what R does when types are mixed — prevents a whole family of bugs.
+
+## 2. The basic types
+
+Every value in R has a type. Four are used every day:
+
+| Type | Example | What it stores |
+|---|---|---|
+| **numeric** (double) | `4.5`, `-3`, `1e6` | Real numbers, with decimals. The default for numbers. |
+| **integer** | `4L`, `1:10` | Whole numbers. The `L` suffix makes an integer. |
+| **character** | `"Adelie"`, `'R is fun'` | Text (*strings*), always in quotes, single or double. |
+| **logical** | `TRUE`, `FALSE` | Yes/no values (*Booleans*). Always in capitals, without quotes. |
+
+A fifth type, **complex** (e.g. `2+3i`), stores complex numbers; you are unlikely to need it in data analysis.
+
+```{r}
+#| label: types
+x <- 28
+y <- "R is fantastic"
+z <- TRUE
+w <- 4L
+
+class(x)
+class(y)
+class(z)
+class(w)
+```
+
+### `class()` vs `typeof()`
+
+Two functions describe an object:
+
+- `class()` answers **"what kind of object is this, for the user?"** It is what decides how the object is printed, summarised and plotted.
+- `typeof()` answers **"how is it stored in memory?"**
+
+For simple values they mostly agree. The main difference you will notice is that ordinary numbers have class `"numeric"` but type `"double"` (short for *double-precision floating point*):
+
+```{r}
+#| label: typeof
+typeof(28)
+typeof(28L)
+class(penguins$species)    # a factor: see the lesson on factors
+typeof(penguins$species)   # ...stored internally as integers
+```
+
+You will meet the second pair again in [Factors](06-factors.qmd).
+
+### Testing and converting: `is.*()` and `as.*()`
+
+Every type has a pair of functions: `is.<type>()` asks "is it?", and `as.<type>()` says "make it so".
+
+```{r}
+#| label: is-as
+is.numeric(28)
+is.character(28)
+
+as.numeric("3.14")
+as.character(42)
+as.integer(3.9)       # truncates towards zero, does not round!
+as.logical(c("TRUE", "false", "T", "yes"))
+```
+
+Note two things: `as.integer(3.9)` gives `3`, not `4`; and `"yes"` cannot be turned into a logical, so R returns `NA` (missing). When a conversion fails, R does not stop — it returns `NA` and usually a warning:
+
+```{r}
+#| label: as-fail
+#| warning: true
+as.numeric(c("12", "7.5", "n/a"))
+```
+
+This is exactly what happens to the spreadsheet column with an `"n/a"` cell from Section 1.
+
+## 3. Implicit coercion: mixing types
+
+A **vector** (a sequence of values, created with `c()` — more in [Vectors](04-vectors.qmd)) can hold **only one type**. If you mix types, R silently converts everything to the most "flexible" type. This is called **implicit coercion**, and it always follows the same hierarchy:
+
+$$
+\texttt{logical} \;\rightarrow\; \texttt{integer} \;\rightarrow\; \texttt{double} \;\rightarrow\; \texttt{character}
+$$
+
+Anything can be written as text, but not all text can be a number; every logical can be a number (`TRUE` = 1, `FALSE` = 0), but not every number is `TRUE`/`FALSE`. So R always moves to the right.
+
+```{r}
+#| label: coercion
+c(1, TRUE, FALSE)       # logical -> double
+c(1L, 2.5)              # integer -> double
+c(1, "a", TRUE)         # everything -> character
+```
+
+The fact that `TRUE` becomes `1` and `FALSE` becomes `0` is very useful: the **sum** of a logical vector counts the `TRUE`s, and its **mean** is the proportion of `TRUE`s.
+
+```{r}
+#| label: logical-sum
+answers <- c(TRUE, FALSE, TRUE, TRUE)
+sum(answers)
+mean(answers)
+```
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: why "double"?
+
+Computers store real numbers in *binary floating point*. A `double` uses 64 bits: about 15–16 significant decimal digits, and numbers up to roughly $1.8 \times 10^{308}$. An `integer` uses 32 bits and can only hold whole numbers up to `r format(.Machine$integer.max, big.mark = ",")` (i.e. $2^{31} - 1$). Because doubles cover a far wider range, R uses them by default; integers appear when you write `5L`, use `1:10`, or count things (`nrow()`, `length()`).
+:::
+
+## 4. Arithmetic operators
+
+| Operator | Meaning | Example | Result |
+|---|---|---|---|
+| `+` `-` | addition, subtraction | `5 - 2` | `r 5 - 2` |
+| `*` `/` | multiplication, division | `7 / 2` | `r 7 / 2` |
+| `^` | power | `2^5` | `r 2^5` |
+| `%/%` | **integer division** (how many whole times?) | `17 %/% 5` | `r 17 %/% 5` |
+| `%%` | **modulo** (remainder) | `17 %% 5` | `r 17 %% 5` |
+
+```{r}
+#| label: arith
+(5 + 5) / 2
+2^5
+17 %/% 5
+17 %% 5
+```
+
+Read `17 %/% 5` and `17 %% 5` together: "17 is 5 *three* times, with remainder *two*", because $17 = 5 \times 3 + 2$. The modulo is handy in practice: `x %% 2 == 0` tests whether `x` is even, and `minutes %/% 60` and `minutes %% 60` split a duration into hours and minutes.
+
+R follows the usual order of operations: `^` first, then `*` and `/`, then `+` and `-`. When in doubt, add parentheses.
+
+## 5. Comparison operators
+
+Comparisons return a logical value.
+
+| Operator | Meaning |
+|---|---|
+| `<`, `<=` | less than, less than or equal to |
+| `>`, `>=` | greater than, greater than or equal to |
+| `==` | **equal to** (two equals signs!) |
+| `!=` | not equal to |
+
+```{r}
+#| label: compare
+x <- 1:10
+x > 5
+```
+
+R compares **each element** of `x` with 5 and returns one `TRUE`/`FALSE` per element. Put that logical vector inside square brackets to keep only the elements where it is `TRUE`:
+
+```{r}
+#| label: filter-preview
+x[x > 5]
+```
+
+This idea — *select with a logical condition* — is the basis of all data filtering in R. We will develop it in [Vectors](04-vectors.qmd).
+
+## 6. Logical operators
+
+| Operator | Meaning |
+|---|---|
+| `!x` | NOT: flips `TRUE` and `FALSE` |
+| `x & y` | AND, element by element: `TRUE` only if both are `TRUE` |
+| `x \| y` | OR, element by element: `TRUE` if at least one is `TRUE` |
+| `xor(x, y)` | exclusive OR: `TRUE` if exactly one is `TRUE` |
+| `x && y`, `x \|\| y` | AND / OR for a **single** `TRUE`/`FALSE` value |
+| `isTRUE(x)` | `TRUE` only if `x` is a single, non-missing `TRUE` |
+
+```{r}
+#| label: logical-ops
+x[(x > 4) & (x < 7)]
+x[x < 3 | x > 8]
+!c(TRUE, FALSE)
+```
+
+### `&` versus `&&`
+
+- `&` and `|` are **vectorised**: they work element by element on whole vectors. Use them to **filter data**.
+- `&&` and `||` expect **exactly one** value on each side and return one value. Use them in **`if ()` conditions** ([Conditionals](../03-programming/15-conditionals.qmd)). Since R 4.3, giving them a vector longer than one is an error:
+
+```{r}
+#| label: double-amp
+#| error: true
+c(TRUE, FALSE) & c(TRUE, TRUE)    # vectorised: two answers
+c(TRUE, FALSE) && TRUE            # error: && needs a single value
+```
+
+`&&` and `||` also *short-circuit*: if the left side already decides the answer (`FALSE && …`), the right side is not evaluated at all.
+
+## 7. Special values: `NA`, `NULL`, `NaN`, `Inf`
+
+| Value | Meaning | Example | `length()` |
+|---|---|---|---|
+| `NA` | **Not Available**: a value exists but is unknown (missing) | a penguin that was not weighed | 1 |
+| `NULL` | **nothing**: the absence of an object | `c()` | 0 |
+| `NaN` | **Not a Number**: an undefined calculation | `0 / 0` | 1 |
+| `Inf`, `-Inf` | plus/minus infinity | `1 / 0` | 1 |
+
+```{r}
+#| label: specials
+0 / 0
+1 / 0
+c(1, NA, 3)      # NA keeps its place
+c(1, NULL, 3)    # NULL disappears
+```
+
+`NA` is "contagious": almost any calculation that involves an unknown value gives an unknown result.
+
+```{r}
+#| label: na-contagious
+NA + 1
+mean(c(4, NA, 6))
+mean(c(4, NA, 6), na.rm = TRUE)
+NA == NA
+```
+
+`NA == NA` is `NA`, not `TRUE`: if two penguins have unknown weights, we do not know whether they weigh the same. For the same reason you **cannot** test for missing values with `x == NA`. Use `is.na()`:
+
+```{r}
+#| label: is-na
+v <- c(4, NA, 6, NaN)
+is.na(v)     # TRUE for both NA and NaN
+is.nan(v)    # TRUE only for NaN
+```
+
+There are a few exceptions to the "contagious" rule, which follow from logic: `NA & FALSE` is `FALSE` (whatever the unknown value, AND with `FALSE` is `FALSE`) and `NA | TRUE` is `TRUE`.
+
+## 8. The floating-point trap
+
+Try this:
+
+```{r}
+#| label: float-trap
+0.1 + 0.2 == 0.3
+```
+
+`FALSE`! R is not broken: computers store numbers in binary, and 0.1 has no exact binary representation, just as 1/3 has no exact decimal one (0.333…). Printing more digits reveals the tiny error:
+
+```{r}
+#| label: float-digits
+print(0.1 + 0.2, digits = 17)
+```
+
+The rule: **never use `==` to compare decimal numbers that come from calculations.** Use `all.equal()`, which allows a tiny tolerance (about $1.5 \times 10^{-8}$ by default):
+
+```{r}
+#| label: all-equal
+all.equal(0.1 + 0.2, 0.3)
+all.equal(1, 1.1)
+isTRUE(all.equal(1, 1.1))
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+`all.equal()` returns `TRUE` when the numbers are equal up to the tolerance, but when they differ it returns a **description** of the difference (`"Mean relative difference: 0.1"`), not `FALSE`. That text would break an `if ()` statement, so wrap it in `isTRUE()` whenever you need a strict `TRUE`/`FALSE` answer: `if (isTRUE(all.equal(a, b))) ...`.
+:::
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Numbers stored as text.** `"10" < "9"` is `TRUE` and `mean("5")` fails. Check with `class()` and convert with `as.numeric()` — and look for the `NAs introduced by coercion` warning, which marks the values that could not be converted.
+2. **Using `=` instead of `==`.** `x = 5` assigns; `x == 5` compares.
+3. **Testing missingness with `x == NA`.** It always returns `NA`. Use `is.na(x)`.
+4. **Comparing decimals with `==`.** Use `isTRUE(all.equal(a, b))`.
+5. **Using `&&` on vectors.** It is an error in modern R. Use `&` to filter vectors and `&&` only for single values in `if ()`.
+6. **Expecting `as.integer()` to round.** It truncates: `as.integer(3.9)` is 3. Use `round()` first if you want rounding.
+:::
+
+## 9. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. What is the type of `c(2L, 3.5, TRUE)`?
+
+Double (`"numeric"`). The most flexible type among integer, double and logical is double, so `TRUE` becomes `1` and `2L` becomes `2`.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. What does `sum(penguins$body_mass > 5000, na.rm = TRUE)` compute?
+
+The **number** of penguins heavier than 5,000 g. The comparison produces a logical vector; `sum()` counts its `TRUE` values (and `na.rm = TRUE` skips the birds whose mass is missing). Replacing `sum()` with `mean()` would give the **proportion** instead.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. What is the difference between `NA` and `NULL`?
+
+`NA` is a placeholder for a value that exists but is unknown; it takes up a position (length 1). `NULL` means "no object at all" and has length 0: `c(1, NULL)` has length 1, `c(1, NA)` has length 2.
+:::
+
+## 10. Exercises
+
+### Interactive (run in your browser)
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — predict the output.** Before running the code, write down (in a comment) what type you expect each vector to have. Then run it and check with `class()`.
+
+```{webr}
+#| exercise: ex_03_1
+class(c(1, "a", TRUE))
+class(c(1, TRUE, FALSE))
+class(c(1L, 2L, 3.5))
+class(c(TRUE, NA))
+class(c("1", NA))
+```
+
+::: {.hint exercise="ex_03_1"}
+Apply the hierarchy logical → integer → double → character. `NA` on its own is logical, so it adapts to whatever else is in the vector.
+:::
+
+::: {.solution exercise="ex_03_1"}
+```r
+class(c(1, "a", TRUE))   # "character"
+class(c(1, TRUE, FALSE)) # "numeric"
+class(c(1L, 2L, 3.5))    # "numeric"
+class(c(TRUE, NA))       # "logical"
+class(c("1", NA))        # "character"
+```
+`NA` never forces a conversion: it takes the type of the other values.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — integer division and modulo.** A film lasts 135 minutes. Use `%/%` and `%%` to compute how many full hours and how many extra minutes that is. Then use `%%` to check which of the numbers 1 to 10 are even.
+
+```{webr}
+#| exercise: ex_03_2
+minutes <- 135
+minutes ______ 60   # hours
+minutes ______ 60   # remaining minutes
+
+n <- 1:10
+n[n %% 2 == ______]
+```
+
+::: {.hint exercise="ex_03_2"}
+`%/%` gives the whole number of times; `%%` gives the remainder. An even number has remainder 0 when divided by 2.
+:::
+
+::: {.solution exercise="ex_03_2"}
+```r
+minutes %/% 60   # 2
+minutes %% 60    # 15
+n[n %% 2 == 0]   # 2 4 6 8 10
+```
+135 minutes are 2 hours and 15 minutes.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — counting with logicals.** Using `penguins`, compute (a) how many penguins have a flipper length of at least 210 mm, and (b) what **proportion** of the penguins with a known flipper length that is.
+
+```{webr}
+#| exercise: ex_03_3
+long <- penguins$flipper_len >= 210
+______(long, na.rm = TRUE)    # (a) how many
+______(long, na.rm = TRUE)    # (b) proportion
+```
+
+::: {.hint exercise="ex_03_3"}
+`TRUE` counts as 1 and `FALSE` as 0. Which function adds them up, and which one averages them?
+:::
+
+::: {.solution exercise="ex_03_3"}
+```r
+sum(long, na.rm = TRUE)
+mean(long, na.rm = TRUE)
+```
+About 114 penguins, roughly one third (33%) of those with a recorded flipper length. Without `na.rm = TRUE` both results would be `NA`, because two birds have no flipper measurement.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 4 — debug the comparison.** The code below should report that the computed value equals 0.3, but it prints `FALSE`. Fix the comparison so that it returns `TRUE`, and make sure the result is a single `TRUE`/`FALSE` even when the numbers differ.
+
+```{webr}
+#| exercise: ex_03_4
+total <- 0.1 + 0.2
+total == 0.3
+
+# should be FALSE (and not a text message):
+1 == 1.1
+```
+
+::: {.hint exercise="ex_03_4"}
+Use `all.equal()`, and wrap it in `isTRUE()` so that a difference gives `FALSE` instead of a message.
+:::
+
+::: {.solution exercise="ex_03_4"}
+```r
+total <- 0.1 + 0.2
+isTRUE(all.equal(total, 0.3))   # TRUE
+isTRUE(all.equal(1, 1.1))       # FALSE
+```
+Decimal numbers produced by arithmetic carry tiny rounding errors; `all.equal()` ignores differences smaller than about $1.5 \times 10^{-8}$.
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★]{.stars} **Exercise 5 — cleaning a column read as text.** A colleague sends you weights typed by hand: `w <- c("3750", "3800", "n/a", "3250", "unknown", "3450")`. (a) What is `class(w)`? (b) Convert it to numbers. (c) How many values could not be converted? (d) Compute the mean weight of the others.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+w <- c("3750", "3800", "n/a", "3250", "unknown", "3450")
+class(w)                    # "character"
+w_num <- as.numeric(w)      # warning: NAs introduced by coercion
+w_num
+sum(is.na(w_num))           # 2
+mean(w_num, na.rm = TRUE)   # 3562.5
+```
+When you import a real file, you can tell `readr::read_csv()` which strings mean "missing" with its `na` argument (see [Import](../04-io/18-import.qmd)).
+:::
+:::
+
+## Summary
+
+| Function / operator | What it does |
+|---|---|
+| `class()`, `typeof()` | Kind of object / storage type |
+| `is.numeric()`, `is.character()`, … | Test a type |
+| `as.numeric()`, `as.character()`, … | Convert a type (failures become `NA`) |
+| `+ - * / ^`, `%/%`, `%%` | Arithmetic, integer division, remainder |
+| `== != < <= > >=` | Comparisons |
+| `!`, `&`, `\|`, `xor()` | Vectorised logic |
+| `&&`, `\|\|` | Logic on single values (for `if ()`) |
+| `is.na()`, `is.nan()` | Detect missing / undefined values |
+| `all.equal()`, `isTRUE()` | Safe comparison of decimals |
+
+- Four everyday types: numeric (double), integer, character, logical.
+- Mixing types coerces to the most flexible: logical → integer → double → character.
+- `TRUE` is 1 and `FALSE` is 0: `sum()` counts, `mean()` gives proportions.
+- `NA` is contagious; test it with `is.na()`, never with `== NA`.
+- Never compare computed decimals with `==`.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- *R for Data Science* (2e), chapters "Logical vectors" and "Numbers", <https://r4ds.hadley.nz>
+- Wickham, *Advanced R* (2e), chapter "Vectors", <https://adv-r.hadley.nz/vectors-chap.html>
+:::

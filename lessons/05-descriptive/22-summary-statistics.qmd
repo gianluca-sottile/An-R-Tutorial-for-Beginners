@@ -1,0 +1,624 @@
+---
+title: "Summary statistics"
+subtitle: "Centre, spread, position and shape — a distribution in a few numbers"
+description: "Summarise a numeric variable with measures of location (mean, median, trimmed mean), spread (range, IQR, variance, SD), position (quantiles), shape (skewness), z-scores and the coefficient of variation, overall and by group."
+format:
+  live-html:
+    webr:
+      packages: ["dplyr"]
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+```
+
+::: {.lesson-meta}
+[Level 2 · Describe & explore]{.level-2} [⏱ ~75 min]{} [Prerequisites: [Frequency tables](21-frequency-tables.qmd), [Grouped summaries](../02-data/10-grouped-summaries.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- compute and interpret the **mean, median, mode and trimmed mean**, and explain which are robust to outliers;
+- measure **spread** with the range, IQR, variance and standard deviation, and explain what the SD measures;
+- use **quantiles** and **z-scores** to describe the position of a value;
+- describe the **shape** of a distribution (skewness) and use mean vs median as a quick indicator;
+- produce summaries **by group** and the **five-number summary** behind a boxplot.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+```
+
+## 1. Why summarise?
+
+A frequency table or a histogram shows a whole distribution. Often, though, we need to **compress** it into a few numbers: to compare species, to write a report, or to feed a later analysis. A good summary answers four questions:
+
+| Question | Family of statistics | Examples |
+|---|---|---|
+| Where is the **centre**? | Location | mean, median, mode |
+| How **spread out** are the values? | Spread (dispersion) | range, IQR, variance, standard deviation |
+| Where does a **particular value** stand? | Position | quantiles, percentiles, z-scores |
+| What **shape** does the distribution have? | Shape | skewness |
+
+No single number answers all four. Throughout the lesson we use the body mass (in grams) of the penguins. Many functions need `na.rm = TRUE`, because `body_mass` has `r sum(is.na(penguins$body_mass))` missing values; to keep the code short we create a vector without them:
+
+```{r}
+#| label: mass
+mass <- penguins$body_mass[!is.na(penguins$body_mass)]
+length(mass)
+```
+
+## 2. Location: where is the centre?
+
+### Mean and median
+
+The **mean** (average) adds all values and divides by how many there are. The **median** is the middle value once the data are sorted: half of the observations are below it and half above.
+
+```{r}
+#| label: mean-median
+mean(mass)
+median(mass)
+```
+
+The mean is the **balance point** of the data: if each penguin were a weight placed on a ruler at its body mass, the ruler would balance at the mean. The median is the **halfway point** by count. Here the mean (`r round(mean(mass))` g) is a bit larger than the median (`r median(mass)` g); Section 5 explains why.
+
+### Robustness: what happens with an outlier?
+
+Suppose that while typing the data someone enters 37500 instead of 3750 for the first bird — a single typo among `r length(mass)` values.
+
+```{r}
+#| label: outlier-demo
+mass_typo <- mass
+mass_typo[1] <- 37500
+
+c(mean_clean = mean(mass), mean_typo = mean(mass_typo))
+c(median_clean = median(mass), median_typo = median(mass_typo))
+```
+
+One wrong value moved the mean by about `r round(mean(mass_typo) - mean(mass))` g, while the median did not move at all. A statistic that is barely affected by a few extreme values is called **robust**. The median is robust; the mean is not.
+
+### Trimmed mean
+
+The **trimmed mean** is a compromise: it removes a fixed percentage of the smallest and largest values and averages the rest.
+
+```{r}
+#| label: trimmed
+c(trim10_clean = mean(mass, trim = 0.1),
+  trim10_typo  = mean(mass_typo, trim = 0.1))
+```
+
+`trim = 0.1` drops the lowest 10% and the highest 10%. The typo now changes the result by only a few grams.
+
+### Mode
+
+For numeric data the **mode** (most frequent value) is useful only for **discrete** variables with few distinct values, such as the number of gears in `mtcars` (see [Frequency tables](21-frequency-tables.qmd)). For a continuous variable almost every value is unique, so the mode depends on rounding and is rarely reported.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: what each "centre" minimises
+
+For data $x_1, \dots, x_n$:
+
+- the mean $\bar x = \frac1n\sum_i x_i$ is the value $c$ that minimises the sum of **squared** distances $\sum_i (x_i - c)^2$;
+- the median is the value $c$ that minimises the sum of **absolute** distances $\sum_i |x_i - c|$.
+
+Squaring gives large distances a big weight, which is why one far-away value can drag the mean. The **breakdown point** formalises robustness: it is the fraction of observations that can be made arbitrarily bad before the statistic becomes arbitrarily bad. It is $0$ for the mean (one value is enough), 50% for the median and equal to the trimming fraction for a trimmed mean.
+:::
+
+## 3. Spread: how different are the values?
+
+Two groups can have the same centre and still be very different. Spread measures how far the values typically are from each other.
+
+### Range and IQR
+
+```{r}
+#| label: range-iqr
+range(mass)                 # minimum and maximum
+diff(range(mass))           # the range as a single number
+IQR(mass)                   # interquartile range = Q3 - Q1
+```
+
+The **range** depends only on the two most extreme values, so it is very sensitive to outliers and tends to grow with the sample size. The **interquartile range (IQR)** is the width of the middle 50% of the data (from the first quartile Q1 to the third quartile Q3, see Section 4). It is robust.
+
+### Variance and standard deviation: the intuition
+
+The most used measure of spread is the **standard deviation (SD)**. Think of it as "**the typical distance of an observation from the mean**". Let us build it on five small numbers:
+
+```{r}
+#| label: sd-by-hand
+x <- c(2, 4, 4, 5, 9)
+dev <- x - mean(x)          # deviations from the mean
+dev
+sum(dev)                    # always 0: positives and negatives cancel
+sum(dev^2) / (length(x) - 1)  # variance
+var(x)
+sqrt(var(x))                # standard deviation
+sd(x)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+1. The **deviations** say how far each value is from the mean (`r mean(x)`), with a sign.
+2. They always add up to 0, so their plain average is useless. Squaring makes them all positive.
+3. The **variance** is (almost) the average squared deviation. Its unit is "squared units" (g² for body mass), which is hard to interpret.
+4. The **standard deviation** is the square root of the variance, so it is back in the original units. Here a typical value is about `r round(sd(x), 1)` away from the mean.
+:::
+
+For the penguins:
+
+```{r}
+#| label: sd-mass
+c(var = var(mass), sd = sd(mass))
+c(sd_clean = sd(mass), sd_typo = sd(mass_typo))
+```
+
+A typical penguin's mass is about `r round(sd(mass))` g away from the average. But the SD is **not robust**: the single typo more than doubles it, while the IQR barely changes (`r IQR(mass)` vs `r IQR(mass_typo)`). A robust alternative to the SD is the **median absolute deviation**, `mad()`.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: why divide by $n-1$?
+
+The sample variance is
+
+$$
+s^2 = \frac{1}{n-1}\sum_{i=1}^n (x_i - \bar x)^2 .
+$$
+
+We would like to know the spread around the **true** population mean $\mu$, but we only know the sample mean $\bar x$. Because $\bar x$ is computed from the same data, it is always "closer" to the data than $\mu$ is (it minimises the sum of squares). So $\sum (x_i - \bar x)^2$ is on average a bit too small, and dividing by $n - 1$ instead of $n$ corrects exactly for that. Equivalently, once $\bar x$ is fixed only $n-1$ deviations are free (they must sum to 0): we have $n - 1$ **degrees of freedom**.
+
+A simulation shows the effect. We draw many samples of size 5 from a population with SD $= 10$ (variance $= 100$):
+
+```{r}
+#| label: n-minus-1
+set.seed(2026)
+sims <- replicate(10000, {
+  x <- rnorm(5, mean = 0, sd = 10)
+  c(divide_n = sum((x - mean(x))^2) / 5, divide_n1 = var(x))
+})
+rowMeans(sims)
+```
+
+Dividing by $n$ gives on average about `r round(rowMeans(sims)[["divide_n"]])` — it **underestimates** 100 by the factor $(n-1)/n = 0.8$. Dividing by $n - 1$ is right on average (it is *unbiased*). With large $n$ the difference is negligible.
+:::
+
+## 4. Position: quantiles, percentiles and z-scores
+
+### Quantiles
+
+The **$p$-quantile** is the value below which a proportion $p$ of the data lies. Percentiles are quantiles expressed in percent; the **quartiles** split the data into four parts (Q1 = 25th percentile, Q2 = median, Q3 = 75th percentile).
+
+```{r}
+#| label: quantiles
+quantile(mass)                        # min, Q1, median, Q3, max
+quantile(mass, probs = c(0.1, 0.9))   # 10th and 90th percentiles
+```
+
+10% of the penguins weigh `r quantile(mass, 0.1)` g or less; 90% weigh `r quantile(mass, 0.9)` g or less. The opposite question — "what percentage of birds weigh at most 5000 g?" — is answered by a proportion:
+
+```{r}
+#| label: percentile-rank
+mean(mass <= 5000)
+```
+
+(`mass <= 5000` is a logical vector and the mean of `TRUE`/`FALSE` values is the proportion of `TRUE`.)
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: there are nine ways to compute a quantile
+
+With a finite sample, the 25th percentile often falls *between* two observations, and there are several reasonable rules for interpolating. `quantile()` implements nine of them through the `type` argument; R's default is `type = 7`, SAS and SPSS use `type = 6`, and Hyndman & Fan (1996) recommend `type = 8`. For six numbers they really differ:
+
+```{r}
+#| label: quantile-types
+small <- c(1, 3, 4, 8, 10, 15)
+sapply(c(6, 7, 8), \(t) quantile(small, 0.25, type = t))
+```
+
+For hundreds of observations the differences are tiny, but they explain why two programs can report slightly different quartiles for the same data.
+:::
+
+### z-scores and standardisation
+
+Is a 4500 g penguin heavy? It depends on the species. The **z-score** expresses a value as *the number of standard deviations above (+) or below (−) the mean*:
+
+$$
+z = \frac{x - \bar x}{s}.
+$$
+
+```{r}
+#| label: zscore-species
+penguins |>
+  filter(!is.na(body_mass)) |>
+  mutate(z = (body_mass - mean(body_mass)) / sd(body_mass),
+         .by = species) |>
+  filter(body_mass == 4500) |>
+  select(species, body_mass, z)
+```
+
+The same 4500 g is far **above** average for an Adelie or Chinstrap penguin, and well **below** average for a Gentoo. Because `.by = species`, each bird is standardised against its own species. After standardisation every variable has mean 0 and SD 1, whatever its original unit: z-scores let us compare things measured on different scales.
+
+The function `scale()` standardises too, but it returns a **matrix**, which is awkward inside a data frame. Use `as.numeric(scale(x))`, or write the formula as above.
+
+```{r}
+#| label: scale
+z_mass <- as.numeric(scale(mass))
+c(mean = mean(z_mass), sd = sd(z_mass))
+mean(abs(z_mass) <= 2)
+```
+
+For roughly bell-shaped data about 95% of the values have $|z| \le 2$; here the proportion is `r round(mean(abs(z_mass) <= 2), 3)`. A value with $|z| > 3$ is unusual and worth checking. (The "95%" is a property of the normal distribution, see [Distributions](../07-probability/29-distributions.qmd); for strongly skewed data it does not hold.)
+
+## 5. Shape: symmetric or skewed?
+
+The **shape** of a distribution describes how the values are arranged around the centre. A distribution is **symmetric** if its left and right halves are mirror images. It is **right-skewed** (positively skewed) if it has a long tail towards large values and **left-skewed** (negatively skewed) if the long tail points to small values.
+
+```{r}
+#| label: fig-shapes
+#| fig-cap: "Three shapes. Dashed line: mean; solid line: median. Gentoo body mass is roughly symmetric, Ozone has a long right tail, solar radiation a longer left tail."
+shape_df <- bind_rows(
+  tibble(variable = "Gentoo body mass (g)",
+         value = penguins$body_mass[penguins$species == "Gentoo"]),
+  tibble(variable = "Ozone (ppb)", value = airquality$Ozone),
+  tibble(variable = "Solar radiation (lang)", value = airquality$Solar.R)
+) |>
+  filter(!is.na(value))
+
+centres <- shape_df |>
+  summarise(mean = mean(value), median = median(value), .by = variable)
+
+ggplot(shape_df, aes(value)) +
+  geom_histogram(bins = 20, fill = "grey70", colour = "white") +
+  geom_vline(data = centres, aes(xintercept = mean), linetype = "dashed") +
+  geom_vline(data = centres, aes(xintercept = median)) +
+  facet_wrap(~ variable, scales = "free") +
+  labs(x = NULL, y = "Count")
+```
+
+### Mean vs median as a quick indicator
+
+The mean is pulled towards the long tail; the median is not. So:
+
+- mean ≈ median → roughly symmetric;
+- mean > median → right-skewed (typical for incomes, waiting times, concentrations);
+- mean < median → left-skewed.
+
+```{r}
+#| label: mean-vs-median
+centres
+```
+
+For Ozone the mean is `r round(mean(airquality$Ozone, na.rm = TRUE), 1)` and the median only `r median(airquality$Ozone, na.rm = TRUE)`: a few very polluted days pull the mean up. For a skewed variable the median usually describes a "typical" value better.
+
+### A number for skewness
+
+The **sample skewness** averages the *cubed* z-scores. Cubing keeps the sign, so long right tails give large positive values and long left tails large negative values; in a symmetric distribution they cancel out.
+
+```{r}
+#| label: skewness
+skewness <- function(x) {
+  x <- x[!is.na(x)]
+  m <- mean(x)
+  mean((x - m)^3) / mean((x - m)^2)^(3 / 2)
+}
+
+c(gentoo_mass = skewness(penguins$body_mass[penguins$species == "Gentoo"]),
+  ozone       = skewness(airquality$Ozone),
+  solar       = skewness(airquality$Solar.R))
+```
+
+As a rough guide, values between −0.5 and 0.5 indicate approximate symmetry and values beyond ±1 strong skewness. Always look at the plot as well: a single number cannot tell you, for example, that a distribution has two peaks.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: moments, skewness and kurtosis
+
+The function above computes
+
+$$
+g_1 = \frac{\frac1n\sum_i (x_i - \bar x)^3}{\left(\frac1n\sum_i (x_i - \bar x)^2\right)^{3/2}} ,
+$$
+
+the third **central moment** divided by the second raised to $3/2$. Packages such as `e1071` or `moments` offer this and slightly different, bias-adjusted versions (they differ noticeably only for small $n$). The fourth standardised moment, **kurtosis**, describes how heavy the tails are compared with a normal distribution (whose kurtosis is 3; "excess kurtosis" subtracts 3).
+:::
+
+## 6. Relative spread: the coefficient of variation
+
+Is body mass more variable than bill length? Their SDs (`r round(sd(mass))` g vs `r round(sd(penguins$bill_len, na.rm = TRUE), 1)` mm) cannot be compared: different units. The **coefficient of variation** (CV) divides the SD by the mean, giving a unit-free relative spread:
+
+```{r}
+#| label: cv
+cv <- function(x) sd(x, na.rm = TRUE) / mean(x, na.rm = TRUE)
+c(body_mass = cv(penguins$body_mass), bill_len = cv(penguins$bill_len),
+  flipper_len = cv(penguins$flipper_len))
+```
+
+Body mass varies about `r round(100 * cv(penguins$body_mass))`% around its mean, flipper length only about `r round(100 * cv(penguins$flipper_len))`%. The CV makes sense only for variables measured on a **ratio scale** (with a true zero and only positive values, like mass or length). It is meaningless for temperatures in °C or for z-scores, whose mean can be 0 or negative.
+
+## 7. Everything at once: `summary()` and grouped summaries
+
+`summary()` gives the minimum, quartiles, mean, maximum and the number of `NA`s for every numeric column (and counts for factors):
+
+```{r}
+#| label: summary
+summary(penguins[, c("species", "bill_len", "body_mass")])
+```
+
+Overall summaries can hide very different groups. Combine `summarise()` with `.by` (see [Grouped summaries](../02-data/10-grouped-summaries.qmd)):
+
+```{r}
+#| label: grouped
+penguins |>
+  filter(!is.na(body_mass)) |>
+  summarise(
+    n      = n(),
+    mean   = mean(body_mass),
+    median = median(body_mass),
+    sd     = sd(body_mass),
+    iqr    = IQR(body_mass),
+    cv     = sd / mean,
+    .by = species
+  )
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- Gentoo penguins are about 1.3–1.4 kg heavier than the other two species, which have similar centres.
+- Within each species mean and median are close: the groups are roughly symmetric. The overall right skew of `body_mass` comes mostly from **mixing** a heavy species with two lighter ones.
+- The SDs are of similar size, and so are the CVs (around 10–12%).
+- Always report `n` with group summaries: a mean based on 5 birds deserves less trust than one based on 150.
+:::
+
+## 8. The five-number summary: a bridge to boxplots
+
+The **five-number summary** — minimum, Q1, median, Q3, maximum — describes centre, spread and (roughly) shape in five numbers. `fivenum()` computes it with Tukey's definition of the quartiles ("hinges"), which can differ slightly from `quantile()`:
+
+```{r}
+#| label: fivenum
+fivenum(airquality$Ozone)
+quantile(airquality$Ozone, na.rm = TRUE)
+```
+
+(Q3 is `r fivenum(airquality$Ozone)[4]` with `fivenum()` and `r quantile(airquality$Ozone, 0.75, na.rm = TRUE)` with `quantile()`: two conventions, as in the quantile box above.)
+
+The **boxplot** is a drawing of the five-number summary, with a rule for flagging unusual values: points more than 1.5 × IQR beyond the box are shown individually.
+
+```{r}
+#| label: fig-box-preview
+#| fig-cap: "A boxplot of ozone: the box goes from Q1 to Q3, the line inside is the median, whiskers reach the most extreme values within 1.5 × IQR of the box; the points beyond are flagged as potential outliers."
+#| fig-asp: 0.35
+ggplot(airquality, aes(x = Ozone, y = "")) +
+  geom_boxplot(na.rm = TRUE) +
+  labs(x = "Ozone (ppb)", y = NULL)
+```
+
+You will learn to read every part of it in [Distribution plots](../06-visualization/25-distribution-plots.qmd).
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Forgetting `na.rm = TRUE`.** `mean(penguins$body_mass)` returns `NA`. The missing values are not ignored automatically — and that is a feature: R forces you to notice them.
+2. **Reporting only the mean for skewed data.** For incomes, waiting times or concentrations, report the median (and IQR) as well, or instead.
+3. **Reading the SD as the "maximum distance" or the "range".** It is a typical distance from the mean; many values are farther away than one SD.
+4. **Using `scale()` inside `mutate()` without `as.numeric()`.** It returns a one-column matrix with attributes, which can cause surprising behaviour later.
+5. **Comparing SDs of variables measured in different units.** Use z-scores or the coefficient of variation (for ratio-scale variables).
+6. **Trusting a summary without a plot.** Very different distributions can share the same mean and SD (you will see a dramatic example in [Correlation](../06-visualization/27-correlation.qmd)).
+:::
+
+## 9. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. In a company, the mean salary is €52,000 and the median salary is €38,000. What does this tell you about the shape of the salary distribution?
+
+The mean is much larger than the median: the distribution is **right-skewed**, with a few very high salaries pulling the mean up. The median better describes a "typical" employee.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. A penguin has a z-score of −1.5 for body mass within its species. Interpret it.
+
+It weighs 1.5 standard deviations **less** than the average penguin of its species: light, but not extraordinarily so.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. You add one huge value to a dataset. Which of these change a lot: mean, median, SD, IQR, range?
+
+The mean, the SD and the range (non-robust). The median and the IQR change little or not at all (robust).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q4. Why is the variance hard to interpret directly, and how does the SD fix this?
+
+The variance is measured in squared units (g², mm²). The SD is its square root, so it is in the same unit as the data and can be read as a typical distance from the mean.
+:::
+
+## 10. Exercises
+
+### Interactive (run in your browser)
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — centre and spread of `mpg`.** Compute the mean, median, SD and IQR of fuel consumption (`mpg`) in `mtcars`. Is the distribution symmetric or skewed?
+
+```{webr}
+#| exercise: ex_22_1
+x <- mtcars$mpg
+c(mean = ______, median = ______, sd = ______, iqr = ______)
+```
+
+::: {.hint exercise="ex_22_1"}
+The functions are `mean()`, `median()`, `sd()` and `IQR()`.
+:::
+
+::: {.solution exercise="ex_22_1"}
+```r
+x <- mtcars$mpg
+c(mean = mean(x), median = median(x), sd = sd(x), iqr = IQR(x))
+```
+The mean (about 20.1) is larger than the median (19.2): a mild right skew — a few very economical cars make the right tail longer.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — predict, then check.** Before running the code, predict which numbers will change when the largest `hp` value in `mtcars` is multiplied by 10. Then run it.
+
+```{webr}
+#| exercise: ex_22_2
+hp  <- mtcars$hp
+hp2 <- hp
+hp2[which.max(hp2)] <- 10 * max(hp2)
+
+stats <- function(v) c(mean = mean(v), median = median(v),
+                       sd = sd(v), iqr = IQR(v), trim = mean(v, trim = 0.1))
+rbind(original = stats(hp), changed = stats(______))
+```
+
+::: {.hint exercise="ex_22_2"}
+Pass `hp2` to `stats()`. Which statistics use the values of the extremes, and which only their position in the sorted data?
+:::
+
+::: {.solution exercise="ex_22_2"}
+```r
+rbind(original = stats(hp), changed = stats(hp2))
+```
+The mean and especially the SD change a lot; the median, the IQR and the 10% trimmed mean do not change at all, because the modified car is in the top 10% that gets trimmed and it stays the largest value.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — grouped summary.** Using `dplyr`, compute for each species the number of birds with a known flipper length, the mean, the median and the SD of `flipper_len`. Which species has the longest flippers on average?
+
+```{webr}
+#| exercise: ex_22_3
+library(dplyr)
+penguins |>
+  filter(!is.na(flipper_len)) |>
+  summarise(
+    n      = ______,
+    mean   = ______,
+    median = ______,
+    sd     = ______,
+    .by = ______
+  )
+```
+
+::: {.hint exercise="ex_22_3"}
+Use `n()`, `mean(flipper_len)`, `median(flipper_len)`, `sd(flipper_len)` and `.by = species`.
+:::
+
+::: {.solution exercise="ex_22_3"}
+```r
+penguins |>
+  filter(!is.na(flipper_len)) |>
+  summarise(n = n(), mean = mean(flipper_len),
+            median = median(flipper_len), sd = sd(flipper_len),
+            .by = species)
+```
+Gentoo penguins have by far the longest flippers (mean about 217 mm, versus about 190 mm for Adelie and 196 mm for Chinstrap). Within each species mean and median are close.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 4 — z-scores across variables.** The car `"Maserati Bora"` in `mtcars`: is it more extreme in horsepower (`hp`) or in weight (`wt`)? Compare z-scores.
+
+```{webr}
+#| exercise: ex_22_4
+z <- function(v) (v - mean(v)) / sd(v)
+z_hp <- z(mtcars$hp)
+z_wt <- z(mtcars$wt)
+i <- which(rownames(mtcars) == "Maserati Bora")
+c(hp = ______, wt = ______)
+```
+
+::: {.hint exercise="ex_22_4"}
+Index the z-score vectors with `i`: `z_hp[i]`.
+:::
+
+::: {.solution exercise="ex_22_4"}
+```r
+c(hp = z_hp[i], wt = z_wt[i])
+```
+Its horsepower is about 2.7 SDs above the mean, its weight only about 0.4 SD above: it is far more unusual in power than in weight. z-scores make variables measured in different units comparable.
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★]{.stars} **Exercise 5 — shape of `airquality` variables.** Using the `skewness()` function from Section 5, compute the skewness of `Ozone`, `Solar.R`, `Wind` and `Temp`. For each, compare the mean with the median and draw a histogram. Do the three indicators (number, mean vs median, picture) agree?
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+vars <- c("Ozone", "Solar.R", "Wind", "Temp")
+sapply(airquality[vars], skewness)
+sapply(airquality[vars], \(v) c(mean = mean(v, na.rm = TRUE),
+                                median = median(v, na.rm = TRUE)))
+
+ggplot(airquality, aes(Temp)) +
+  geom_histogram(bins = 15) +
+  labs(x = "Temperature (°F)", y = "Count")
+```
+Ozone is strongly right-skewed (skewness about 1.2, mean ≈ 42 > median 31.5). Solar.R is moderately left-skewed (about −0.4, mean < median). Wind (about 0.3) and Temp (about −0.4) are mildly skewed. The three indicators agree on the direction.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 6 — your own summary function.** Write a function `describe(x)` that returns, as a named vector, `n` (non-missing), `mean`, `sd`, `min`, `q1`, `median`, `q3`, `max` and `skew`. Apply it to every numeric column of `penguins` with `sapply()`, and to `body_mass` for each species with `tapply()`.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+describe <- function(x) {
+  x <- x[!is.na(x)]
+  q <- quantile(x, c(0.25, 0.5, 0.75))
+  c(n = length(x), mean = mean(x), sd = sd(x), min = min(x),
+    q1 = q[[1]], median = q[[2]], q3 = q[[3]], max = max(x),
+    skew = skewness(x))
+}
+
+num_cols <- c("bill_len", "bill_dep", "flipper_len", "body_mass")
+round(sapply(penguins[num_cols], describe), 2)
+tapply(penguins$body_mass, penguins$species, describe)
+```
+:::
+:::
+
+## Summary
+
+| Idea | R | Robust? |
+|---|---|---|
+| Mean / trimmed mean | `mean(x)`, `mean(x, trim = 0.1)` | No / partly |
+| Median | `median(x)` | Yes |
+| Range, IQR | `range(x)`, `IQR(x)` | No, Yes |
+| Variance, SD, MAD | `var(x)`, `sd(x)`, `mad(x)` | No, No, Yes |
+| Quantiles | `quantile(x, probs = )`; proportion below: `mean(x <= v)` | Yes |
+| z-scores | `(x - mean(x)) / sd(x)`, `as.numeric(scale(x))` | — |
+| Coefficient of variation | `sd(x) / mean(x)` | No |
+| Skewness | `mean((x - m)^3) / mean((x - m)^2)^1.5` | No |
+| Five-number summary | `fivenum(x)`, `summary(x)` | Yes |
+| By group | `summarise(..., .by = g)` | — |
+
+- Describe **centre, spread, position and shape** — no single number does everything.
+- The **median and IQR** are robust; the **mean and SD** are sensitive to outliers but are the basis of most of statistics.
+- The SD is the **typical distance from the mean**; we divide by $n - 1$ to correct for estimating the mean.
+- **Mean > median** suggests right skew; **mean < median** left skew. Always confirm with a plot.
+- Summaries **by group** often reveal what the overall summary hides.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), chapter "Exploring numerical data", <https://openintro-ims.netlify.app>
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2e), chapter "Exploratory data analysis", <https://r4ds.hadley.nz>
+- Hyndman, R. J. & Fan, Y. (1996). Sample quantiles in statistical packages. *The American Statistician*, 50(4), 361–365.
+:::

@@ -1,0 +1,160 @@
+/* ==========================================================================
+   An R Tutorial for Beginners — shared styles (light + dark via CSS tokens
+   defined in theme-light.scss / theme-dark.scss)
+   ========================================================================== */
+
+/* ---------- Typography ---------- */
+h1, h2, h3, h4 { letter-spacing: -0.015em; }
+h1.title, .quarto-title h1 { font-weight: 800; letter-spacing: -0.03em; }
+h2 {
+  margin-top: 2.6rem;
+  padding-bottom: .35rem;
+  border-bottom: 1px solid var(--rt-line);
+}
+.quarto-title .subtitle { color: var(--rt-muted); font-weight: 500; }
+p, li { text-wrap: pretty; }
+.display-serif { font-family: "Fraunces", Georgia, serif; font-weight: 700; }
+
+/* ---------- Navbar ---------- */
+.navbar { border-bottom: 1px solid var(--rt-line); box-shadow: none; }
+.navbar-brand .navbar-title { font-weight: 800; letter-spacing: -0.02em; }
+.navbar .nav-link { font-weight: 500; }
+
+/* ---------- Sidebar ---------- */
+.sidebar-item-section > .sidebar-item-container .sidebar-item-text { font-weight: 700; }
+.sidebar nav[role="doc-toc"] ul > li > a.active,
+.sidebar-link.active { font-weight: 600; }
+
+/* ---------- Code ---------- */
+div.sourceCode, pre.sourceCode { border-radius: .6rem; }
+pre > code.sourceCode { font-size: .86em; }
+.cell-output pre { border-radius: .5rem; font-size: .84em; opacity: .95; }
+
+/* ---------- Lesson meta strip ---------- */
+.lesson-meta {
+  display: flex; flex-wrap: wrap; gap: .5rem;
+  margin: .25rem 0 1.5rem 0;
+}
+.lesson-meta span {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .2rem .7rem; border-radius: 999px;
+  font-size: .82rem; font-weight: 600;
+  border: 1px solid var(--rt-line); background: var(--rt-card); color: var(--rt-muted);
+}
+.lesson-meta .level-1 { color: #fff; background: var(--rt-teal);  border-color: transparent; }
+.lesson-meta .level-2 { color: #fff; background: var(--rt-primary); border-color: transparent; }
+.lesson-meta .level-3 { color: #fff; background: #7C4DDB; border-color: transparent; }
+.lesson-meta .level-4 { color: #fff; background: var(--rt-coral); border-color: transparent; }
+
+/* ---------- Callout flavours used by the lesson template ---------- */
+.callout { border-radius: .7rem !important; border-left-width: 5px !important; }
+.callout.objectives  { border-left-color: var(--rt-teal) !important; }
+.callout.objectives .callout-header { background: color-mix(in srgb, var(--rt-teal) 12%, transparent) !important; }
+.callout.read-output { border-left-color: var(--rt-primary) !important; }
+.callout.deeper      { border-left-color: #7C4DDB !important; }
+.callout.deeper .callout-header { background: color-mix(in srgb, #7C4DDB 10%, transparent) !important; }
+.callout.pitfall     { border-left-color: var(--rt-coral) !important; }
+
+/* ---------- Exercises ---------- */
+.exercise {
+  border: 1px solid var(--rt-line); border-radius: .8rem;
+  padding: 1rem 1.25rem .5rem 1.25rem; margin: 1.25rem 0;
+  background: var(--rt-card);
+}
+.exercise > p:first-child { margin-top: 0; }
+.stars { color: var(--rt-amber); letter-spacing: .1em; font-weight: 700; }
+
+/* quarto-live editor polish */
+.exercise-editor, .quarto-live-editor, .cm-editor { border-radius: .6rem; }
+
+/* ---------- Home page ---------- */
+.hero {
+  position: relative;
+  margin: 0 0 2.5rem 0; padding: 3.2rem 2.2rem 2.6rem 2.2rem;
+  border-radius: 1.4rem;
+  background:
+    radial-gradient(1200px 400px at 0% 0%, var(--rt-hero-1), transparent 60%),
+    radial-gradient(900px 400px at 100% 100%, var(--rt-hero-2), transparent 60%),
+    var(--rt-card);
+  border: 1px solid var(--rt-line);
+  overflow: hidden;
+}
+.hero h1 {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: clamp(2.2rem, 5vw, 3.4rem); line-height: 1.08;
+  margin: .4rem 0 1rem 0; border: none;
+}
+.hero .eyebrow {
+  text-transform: uppercase; letter-spacing: .14em; font-size: .78rem;
+  font-weight: 700; color: var(--rt-coral);
+}
+.hero .lead { font-size: 1.18rem; color: var(--rt-muted); max-width: 40rem; }
+.hero .cta { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.6rem; }
+.hero .cta a {
+  text-decoration: none; font-weight: 700; padding: .7rem 1.25rem;
+  border-radius: .7rem; border: 1px solid var(--rt-primary);
+}
+.hero .cta a.primary { background: var(--rt-primary); color: #fff; }
+.hero .cta a.ghost   { color: var(--rt-primary); background: transparent; }
+.hero .cta a:hover   { filter: brightness(1.08); transform: translateY(-1px); }
+.hero .code-deco {
+  position: absolute; right: -10px; bottom: -14px; opacity: .10;
+  font-family: "JetBrains Mono", monospace; font-size: 5.5rem; font-weight: 600;
+  white-space: nowrap; pointer-events: none; user-select: none;
+}
+
+.stats {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: .75rem; margin: 0 0 2.5rem 0;
+}
+.stats div {
+  border: 1px solid var(--rt-line); border-radius: .9rem; background: var(--rt-card);
+  padding: 1rem; text-align: center;
+}
+.stats strong { display: block; font-size: 1.8rem; font-weight: 800; color: var(--rt-primary); }
+.stats span { color: var(--rt-muted); font-size: .9rem; }
+
+.level-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1rem; margin: 1rem 0 2.5rem 0;
+}
+.level-card {
+  position: relative; border: 1px solid var(--rt-line); border-radius: 1rem;
+  background: var(--rt-card); padding: 1.2rem 1.2rem 1rem 1.2rem;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.level-card:hover { transform: translateY(-3px); box-shadow: 0 10px 28px rgba(0,0,0,.08); }
+.level-card .num {
+  display: inline-block; font-size: .75rem; font-weight: 800; letter-spacing: .12em;
+  text-transform: uppercase; padding: .15rem .55rem; border-radius: 999px; color: #fff;
+}
+.level-card.l1 .num { background: var(--rt-teal); }
+.level-card.l2 .num { background: var(--rt-primary); }
+.level-card.l3 .num { background: #7C4DDB; }
+.level-card.l4 .num { background: var(--rt-coral); }
+.level-card h3 { margin: .6rem 0 .4rem 0; font-size: 1.2rem; }
+.level-card p { color: var(--rt-muted); font-size: .95rem; margin-bottom: .6rem; }
+.level-card a.stretched { position: absolute; inset: 0; }
+
+.feature-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem; margin: 1rem 0 2rem 0;
+}
+.feature-grid > div { padding: .25rem 0; }
+.feature-grid h4 { margin: .2rem 0 .3rem 0; font-size: 1.05rem; }
+.feature-grid p  { color: var(--rt-muted); font-size: .95rem; }
+.feature-grid .icon { font-size: 1.5rem; }
+
+/* ---------- Tables ---------- */
+table { font-size: .93rem; }
+thead th { border-bottom-width: 2px !important; }
+
+/* ---------- Footer ---------- */
+.nav-footer { border-top: 1px solid var(--rt-line); font-size: .88rem; }
+
+/* ---------- Small screens ---------- */
+@media (max-width: 640px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .hero { padding: 2.2rem 1.2rem 1.8rem 1.2rem; }
+  .hero .code-deco { display: none; }
+}

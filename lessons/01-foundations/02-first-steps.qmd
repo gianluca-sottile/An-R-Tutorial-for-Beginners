@@ -1,0 +1,481 @@
+---
+title: "First steps in R"
+subtitle: "Scripts, objects, functions, getting help and a tidy project workflow"
+description: "Learn the everyday mechanics of R: console vs scripts, comments, assignment, naming, calling functions with arguments, reading help pages and error messages, and organising your work in RStudio Projects with here, Quarto and renv."
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Level 1 · Foundations]{.level-1} [⏱ ~50 min]{} [Prerequisites: [What is R?](01-what-is-r.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- write code in a **script** with comments, and run it line by line;
+- create **objects** with `<-` and give them good names;
+- call **functions** using positional and named **arguments**;
+- find help with `?`, `help()`, `example()` and vignettes, and **read error messages**;
+- organise your work in an **RStudio Project** and build file paths with `here::here()` instead of `setwd()`.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+# Base R only. We use here::here() once, with the package::function() style.
+```
+
+## 1. Why do we need good habits from day one?
+
+Two students analyse the same data. Student A types commands directly into the Console until the plot "looks right", then closes RStudio. Student B writes each step into a file, with a short comment explaining why. A month later the supervisor asks for the same plot with one penguin species removed.
+
+Student A has to rediscover everything from scratch. Student B changes one line and re-runs the file.
+
+This lesson is about becoming Student B. None of it is difficult, but these habits — scripts, clear names, projects, relative paths — save you hours every week.
+
+## 2. Console vs scripts
+
+You can type code in two places:
+
+| | **Console** | **Script** (`.R` file in the Source pane) |
+|---|---|---|
+| What happens | Each line runs immediately | Nothing runs until you send it to the Console |
+| Is it saved? | No (only in History, messily) | Yes — it is a text file |
+| Use it for | Quick checks: `nrow(penguins)`, `?mean` | **Everything you want to keep** |
+
+Create a script with *File → New File → R Script* (or Ctrl/Cmd + Shift + N). Run the current line, or a selected block, with **Ctrl + Enter** (Windows/Linux) or **Cmd + Enter** (macOS). Save it with a meaningful name, such as `penguin-summary.R`.
+
+### Comments
+
+Anything after `#` on a line is a **comment**: R ignores it. Comments are for humans — including you in three months.
+
+```{r}
+#| label: comments
+# Average body mass of all penguins, in grams
+mean(penguins$body_mass, na.rm = TRUE)  # na.rm = TRUE skips missing values
+```
+
+Good comments explain **why**, not *what*. `# take the mean` above `mean(x)` adds nothing; `# use the median because body mass is skewed` adds a lot.
+
+## 3. Objects and assignment
+
+R stores results in **objects**. You create an object by **assigning** a value to a name with the arrow `<-` (read it as "gets"):
+
+```{r}
+#| label: assign
+n_penguins <- nrow(penguins)
+n_penguins
+```
+
+The first line computes `nrow(penguins)` and stores the result under the name `n_penguins`; nothing is printed. The second line just types the name, and R prints its value. The object now appears in the *Environment* pane.
+
+Objects can be reused and combined:
+
+```{r}
+#| label: reuse
+n_species <- 3
+n_penguins / n_species     # average number of penguins per species
+```
+
+And they can be **overwritten** without warning:
+
+```{r}
+#| label: overwrite
+x <- 10
+x <- x + 5    # take the old value of x, add 5, store it back in x
+x
+```
+
+::: {.callout-note}
+## `<-` or `=`?
+
+`x = 10` also works at the top level, but the R community uses `<-` for assignment and keeps `=` for naming arguments inside function calls (Section 4). Following this convention makes code easier to read. In RStudio, **Alt + -** (Windows/Linux) or **Option + -** (macOS) types `<-` with spaces around it.
+:::
+
+### Naming rules
+
+A name must start with a letter (or a dot not followed by a number) and can contain letters, numbers, `.` and `_`. R is **case-sensitive**: `Mass`, `mass` and `MASS` are three different objects.
+
+| Name | Valid? | Comment |
+|---|---|---|
+| `body_mass_kg` | ✓ | Recommended style: `snake_case`, descriptive |
+| `bodyMassKg` | ✓ | Valid, but not the tidyverse style |
+| `x2` | ✓ | Fine for a quick calculation, poor for anything you keep |
+| `2x` | ✗ | Cannot start with a number |
+| `body mass` | ✗ | No spaces |
+| `mean` | ✓ but avoid | Valid, but confusing: `mean()` is already a built-in function |
+
+Avoid also `T`, `F`, `c`, `data` and `df` as names: they are already functions or constants in R.
+
+## 4. Calling functions
+
+A **function** takes inputs (called **arguments**), does something, and returns an output. You call it by writing its name followed by parentheses:
+
+```{r}
+#| label: fun-call
+round(3.14159)
+```
+
+Most functions have several arguments. Look at `round()`: it has an argument `x` (the number) and an argument `digits` (how many decimals, default `0`). You can supply arguments in two ways:
+
+```{r}
+#| label: fun-args
+round(3.14159, 2)                # positional: matched by order
+round(x = 3.14159, digits = 2)   # named: matched by name
+round(digits = 2, x = 3.14159)   # named arguments can come in any order
+```
+
+All three lines give the same result. A common and readable compromise: give the **first one or two** arguments by position, and **name all the others**.
+
+```{r}
+#| label: seq-named
+seq(1, 20, by = 3)
+```
+
+Arguments that have a **default value** can be omitted. To see the arguments and their defaults, use `args()` or the help page:
+
+```{r}
+#| label: args
+args(round)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+`function (x, digits = 0, ...)` means: `round()` takes an argument `x` with **no default** (so you must provide it) and `digits` with default `0`. The `...` ("dots") means the function can accept further arguments that it passes on to other methods. Ignore the `NULL` on the last line: it is just what `args()` returns after printing.
+:::
+
+Functions can be **nested**: the inner one is evaluated first.
+
+```{r}
+#| label: nested
+round(mean(penguins$flipper_len, na.rm = TRUE), 1)
+```
+
+Read it from the inside out: compute the mean flipper length (skipping missing values), then round it to one decimal. In [Lesson 9](../02-data/09-dplyr-verbs.qmd) you will meet the **pipe** `|>`, which lets you write the same thing left to right:
+
+```{r}
+#| label: pipe-teaser
+penguins$flipper_len |> mean(na.rm = TRUE) |> round(1)
+```
+
+## 5. Getting help
+
+Nobody remembers every function. Knowing how to find help is a core skill.
+
+| You want… | Type |
+|---|---|
+| The help page of a function you know | `?mean` or `help("mean")` |
+| To run the examples at the bottom of a help page | `example(mean)` |
+| To search help pages for a word | `??regression` or `help.search("regression")` |
+| Long-form tutorials that come with a package | `vignette(package = "dplyr")`, then `vignette("dplyr", package = "dplyr")` |
+| To see which arguments a function takes | `args(fun)`, or press **Tab** after `fun(` in RStudio |
+
+Every help page has the same sections. Read them in this order: **Description** (what it does), **Usage** (how to call it), **Arguments** (what each input means), **Value** (what it returns), and **Examples** (code you can copy). The examples are often the fastest way to understand a function.
+
+### Reading error messages
+
+Errors are normal: experienced programmers see dozens a day. The trick is to **read** them instead of panicking. R distinguishes three kinds of feedback:
+
+| Kind | Starts with | Meaning |
+|---|---|---|
+| **Error** | `Error` | R stopped; nothing was computed. |
+| **Warning** | `Warning` | R computed something, but suspects a problem. **Check the result.** |
+| **Message** | (anything else) | Just information. |
+
+```{r}
+#| label: error-examples
+#| warning: true
+#| error: true
+sqrt("16")
+log(-1)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- `sqrt("16")` produces an **error**: `non-numeric argument to mathematical function`. The quotes make `"16"` a piece of text, not a number. Fix: `sqrt(16)`.
+- `log(-1)` produces a **warning** (`NaNs produced`) and returns `NaN` ("not a number"): the logarithm of a negative number is undefined. R did not stop, but the result is not usable.
+:::
+
+When you get an error, a good routine is:
+
+1. Read the message, slowly. It often says exactly what is wrong (`object 'peguins' not found` → typo).
+2. Check spelling, capital letters, commas, matching parentheses and quotes.
+3. Run the line piece by piece (the innermost function first).
+4. Copy the error message into a search engine, *without* your own object names.
+
+### Asking a good question
+
+If you are still stuck, ask a teacher, a classmate or a forum such as the [Posit Community](https://forum.posit.co). A good question contains a **reprex** — a *minimal reproducible example*: the smallest piece of code that anyone can copy, paste and run to see your problem. It uses built-in data (or a few lines of made-up data), loads the needed packages, and shows the error. The `reprex` package can format such an example for you. Very often, while building the reprex, you find the bug yourself.
+
+## 6. Projects and the working directory
+
+Every R session has a **working directory**: the folder where R looks for files when you give it a file name without a full path. You can see it with:
+
+```{r}
+#| label: getwd
+#| eval: false
+getwd()
+```
+
+### RStudio Projects
+
+An **RStudio Project** is a folder that contains everything for one analysis (data, scripts, reports) plus a small `.Rproj` file. Create one with *File → New Project → New Directory*. When you open a project (double-click the `.Rproj` file), RStudio automatically sets the working directory to that folder and starts a fresh R session. Positron offers the same idea through *File → Open Folder*.
+
+A typical project layout:
+
+```
+penguin-analysis/
+├── penguin-analysis.Rproj
+├── data/
+│   └── penguins_2025.csv
+├── R/
+│   └── clean-data.R
+└── report.qmd
+```
+
+### Why never `setwd()`?
+
+You will see old code starting with a line like `setwd("C:/Users/maria/Desktop/thesis")`. **Do not do this.** That path exists only on Maria's computer: on anyone else's machine (including Maria's new laptop) the script fails on line 1. Use a project instead, and refer to files with paths **relative** to the project folder.
+
+The `here` package makes relative paths robust: `here::here()` always starts from the project root, no matter which sub-folder your script or Quarto document lives in.
+
+```{r}
+#| label: here-example
+#| eval: false
+here::here()                                # the project root folder
+here::here("data", "penguins_2025.csv")     # .../penguin-analysis/data/penguins_2025.csv
+penguins_new <- read.csv(here::here("data", "penguins_2025.csv"))
+```
+
+These lines are not run here because the file does not exist on this website; try them inside your own project.
+
+## 7. Quarto documents in five lines
+
+A **Quarto document** (`.qmd`) mixes text and code. When you *render* it (the **Render** button), Quarto runs the code and produces a report — HTML, PDF or Word — with the results inserted. A minimal example:
+
+````markdown
+---
+title: "Penguin report"
+---
+
+Penguins weigh, on average:
+
+```{{r}}
+mean(penguins$body_mass, na.rm = TRUE)
+```
+````
+
+The part between `---` lines is the **header** (YAML). The block that starts with ```` ```{r} ```` is a **code chunk**: R code that is run when the document is rendered, with its output placed right below. Everything else is ordinary text. This whole course is written this way.
+
+## 8. `renv` in two sentences
+
+Packages change over time, so code that works today may behave differently after an update. The `renv` package records the exact package versions a project uses in a file called `renv.lock`, so that you (or a colleague) can restore the same versions later with `renv::restore()`.
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Working only in the Console.** Anything not in a script is lost when you close R. Write scripts from the start.
+2. **`x < - 5` instead of `x <- 5`.** With a space in the middle, R reads "is `x` less than minus 5?" (and fails if `x` does not exist). Keep `<-` together.
+3. **Capital letters and typos.** `Mean(x)` or `penguins$Body_mass` fail or return `NULL`: R is case-sensitive.
+4. **Ignoring warnings.** A warning means R produced a result it does not trust. Check it before moving on.
+5. **`setwd()` with an absolute path.** It breaks on every other computer. Use an RStudio Project and `here::here()`.
+:::
+
+## 9. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. What is printed by `y <- 3 * 4`?
+
+Nothing. An assignment stores the value (12) in `y` silently. Type `y` (or wrap the assignment in parentheses, `(y <- 3 * 4)`) to print it.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. Are `round(2.567, 1)` and `round(digits = 1, 2.567)` the same?
+
+Yes. Named arguments are matched first (`digits = 1`); the remaining unnamed value is then matched by position to the first unused argument, `x`. Both return 2.6. The second form is legal but harder to read.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. A classmate's script begins with `setwd("/Users/luca/Documents/R")`. What do you suggest?
+
+Delete that line, put the script and data inside an RStudio Project, and build file paths with `here::here("data", "file.csv")`. The code will then run unchanged on any computer.
+:::
+
+## 10. Exercises
+
+### Interactive (run in your browser)
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — objects.** A penguin weighs 4,250 g. Store this value in an object called `mass_g`, then create `mass_kg` by dividing by 1000, and print `mass_kg`.
+
+```{webr}
+#| exercise: ex_02_1
+mass_g <- ______
+mass_kg <- ______ / 1000
+mass_kg
+```
+
+::: {.hint exercise="ex_02_1"}
+Assignment is `name <- value`. In the second line, divide the object `mass_g`.
+:::
+
+::: {.solution exercise="ex_02_1"}
+```r
+mass_g <- 4250
+mass_kg <- mass_g / 1000
+mass_kg
+```
+The result is 4.25. Notice that `mass_kg` is computed from `mass_g`: if you change the first line, re-running the script updates everything.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — named arguments.** (a) Use `seq()` to create the numbers from 0 to 100 in steps of 25, naming the `by` argument. (b) Use `seq()` again to create **exactly 5** equally spaced numbers between 0 and 1 (look at the `length.out` argument). (c) Round `pi` to 3 decimals using a named argument.
+
+```{webr}
+#| exercise: ex_02_2
+seq(0, 100, ______ = 25)
+seq(0, 1, ______ = 5)
+round(pi, ______ = 3)
+```
+
+::: {.hint exercise="ex_02_2"}
+The argument names are `by`, `length.out` and `digits`. Run `args(seq.default)` to see them all.
+:::
+
+::: {.solution exercise="ex_02_2"}
+```r
+seq(0, 100, by = 25)        # 0 25 50 75 100
+seq(0, 1, length.out = 5)   # 0.00 0.25 0.50 0.75 1.00
+round(pi, digits = 3)       # 3.142
+```
+Naming `by` and `length.out` matters: `seq(0, 1, 5)` would be read as `by = 5` and return just `0`.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — debug.** Each line below contains one mistake. Run the code, read the error message, and fix each line so that it runs.
+
+```{webr}
+#| exercise: ex_02_3
+mean_mass <- mean(penguins$body_weight, na.rm = TRUE)
+Mean_mass
+round(mean_mass digits = 0)
+sqrt("25")
+```
+
+::: {.hint exercise="ex_02_3"}
+Run one line at a time. Look for: a wrong column name (run `names(penguins)` to see the real ones), a capital letter, a missing comma, and text where a number is needed.
+:::
+
+::: {.solution exercise="ex_02_3"}
+```r
+mean_mass <- mean(penguins$body_mass, na.rm = TRUE)
+mean_mass
+round(mean_mass, digits = 0)
+sqrt(25)
+```
+The first bug is the sneakiest: there is no column `body_weight`, so `penguins$body_weight` returns `NULL` and `mean()` returns `NA` with a *warning* (`argument is not numeric or logical`), not an error. Always read warnings.
+:::
+:::
+
+::: {.exercise}
+[★]{.stars} **Exercise 4 — arguments and examples.** (a) Use `args()` to find the arguments of `median()` and the default value of `na.rm`. (b) Run the examples from its help page with `example()`. (c) Use what you learned to compute the median of `c(1, NA, 3)`. (Help pages themselves open best in RStudio or Positron: on your own computer, also try `?median`.)
+
+```{webr}
+#| exercise: ex_02_4
+args(______)
+example(______)
+median(c(1, NA, 3), ______)
+```
+
+::: {.hint exercise="ex_02_4"}
+Both `args()` and `example()` take the function name, e.g. `example(median)`. The missing argument in (c) is `na.rm = TRUE`.
+:::
+
+::: {.solution exercise="ex_02_4"}
+```r
+args(median)                       # function (x, na.rm = FALSE, ...)
+example(median)
+median(c(1, NA, 3), na.rm = TRUE)  # 2
+```
+`na.rm` is a logical value: if `TRUE`, missing values are removed before computing the median. Its default is `FALSE`, so `median(c(1, NA, 3))` returns `NA`.
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★]{.stars} **Exercise 5 — your first project.** (a) Create a new RStudio Project called `r-course`. (b) Inside it, create a folder `data` and a script `first-script.R`. (c) In the script, write (with comments) code that prints the number of rows of `penguins` and the mean bill length, then save it. (d) Close RStudio, reopen the project by double-clicking `r-course.Rproj`, and run `here::here("data")`. What does it print?
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+# first-script.R — first look at the penguins data
+nrow(penguins)                               # number of penguins
+mean(penguins$bill_len, na.rm = TRUE)        # mean bill length (mm)
+
+here::here("data")   # full path to <your project>/data
+```
+`here::here("data")` prints the full path of the `data` folder inside your project. If you move the project to another computer, the printed path changes, but your code does not need to.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 6 — a five-line Quarto report.** In your project, create *File → New File → Quarto Document*, delete the template content and write a short report with a title, one sentence and one chunk that computes the median flipper length of the penguins. Render it to HTML.
+
+::: {.callout-tip collapse="true"}
+## Solution
+````markdown
+---
+title: "My first report"
+---
+
+The median flipper length (mm) of the penguins is:
+
+```{{r}}
+median(penguins$flipper_len, na.rm = TRUE)
+```
+````
+Click **Render**. If it fails, read the error in the *Background Jobs* / *Render* pane: the line number points to the problem.
+:::
+:::
+
+## Summary
+
+| Idea / function | What it does |
+|---|---|
+| `#` | Starts a comment |
+| `name <- value` | Creates (or overwrites) an object |
+| `fun(arg1, name = value)` | Calls a function with positional and named arguments |
+| `args(fun)` | Shows the arguments and defaults of a function |
+| `?fun`, `help()`, `example()`, `vignette()` | Getting help |
+| Error / Warning / Message | Stopped / suspicious result / information |
+| RStudio Project, `here::here()` | Self-contained folder and robust relative paths |
+| Quarto (`.qmd`) | Text + code chunks rendered into a report |
+| `renv` | Records package versions for a project |
+
+- Keep **everything** you care about in scripts, not in the Console.
+- Use descriptive `snake_case` names and `<-` for assignment.
+- Name the arguments that are not obvious.
+- Read error **and warning** messages; build a reprex when you ask for help.
+- Never `setwd()`: use Projects and `here::here()`.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- *R for Data Science* (2e), chapters "Workflow: basics", "Workflow: scripts and projects" and "Workflow: getting help", <https://r4ds.hadley.nz>
+- Quarto — Get started, <https://quarto.org/docs/get-started/>
+- `here` package documentation, <https://here.r-lib.org>
+- `renv` package documentation, <https://rstudio.github.io/renv/>
+:::

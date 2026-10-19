@@ -1,0 +1,524 @@
+---
+title: "Multiple regression"
+subtitle: "Several predictors, factors, interactions — and the diagnostics that keep you honest"
+description: "Interpret coefficients 'holding the other predictors constant', use categorical predictors and interactions, detect multicollinearity and influential points, handle heteroscedasticity with robust standard errors, and report a model clearly."
+---
+
+::: {.lesson-meta}
+[Level 4 · Models & learning]{.level-4} [⏱ ~100 min]{} [Prerequisites: [Simple regression](38-simple-regression.qmd), [Factors](../01-foundations/06-factors.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- fit a regression with several predictors and interpret each coefficient **holding the others constant**;
+- include **categorical predictors**, read their dummy coding and change the reference level;
+- fit and visualise an **interaction** between a numeric predictor and a factor;
+- diagnose **multicollinearity** (VIF), **influential points** (leverage, Cook's distance) and **heteroscedasticity**, and compute robust standard errors;
+- show a model's predictions with a **partial effect plot** and report the model in words.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(broom)
+```
+
+## 1. Why more than one predictor?
+
+At the end of [Simple regression](38-simple-regression.qmd) we found that the slope of body mass on flipper length is about 50 g/mm across all penguins, but only about 33 g/mm within Adelie penguins. Gentoo penguins have *both* longer flippers *and* larger bodies, so part of the overall slope is really a **species difference**.
+
+With a single predictor, every other influence is mixed into its slope. **Multiple regression** puts several predictors in the same model, so that each coefficient describes the association of one predictor with the response **after accounting for the others**.
+
+## 2. Two numeric predictors: "holding the others constant"
+
+Fuel efficiency (`mpg`) in the `mtcars` data falls with car weight (`wt`, in 1000 lb). Heavier cars also tend to have more horsepower (`hp`): the correlation between `wt` and `hp` is `r round(cor(mtcars$wt, mtcars$hp), 2)`.
+
+```{r}
+#| label: two-models
+m_wt <- lm(mpg ~ wt, data = mtcars)
+m_wt_hp <- lm(mpg ~ wt + hp, data = mtcars)
+
+coef(m_wt)
+coef(m_wt_hp)
+```
+
+The coefficient of `wt` drops from `r round(coef(m_wt)["wt"], 2)` to `r round(coef(m_wt_hp)["wt"], 2)`. They answer different questions:
+
+- **Simple model:** cars that are 1000 lb heavier have, on average, `r round(abs(coef(m_wt)["wt"]), 1)` fewer mpg — partly because heavier cars also have more powerful engines.
+- **Multiple model:** among cars **with the same horsepower**, those that are 1000 lb heavier have, on average, `r round(abs(coef(m_wt_hp)["wt"]), 1)` fewer mpg.
+
+"Holding horsepower constant" is a statistical adjustment, not an experiment. Nobody added weight to a car while keeping its engine fixed; the model compares cars that differ in weight but have similar horsepower.
+
+```{r}
+#| label: summary-wt-hp
+summary(m_wt_hp)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- Each row of the coefficient table tests $H_0: \beta_j = 0$ **given the other predictors in the model**. Both `wt` and `hp` add information beyond the other.
+- **Multiple R-squared** is `r round(summary(m_wt_hp)$r.squared, 2)`. Adding a predictor can never decrease R²; **adjusted R²** (`r round(summary(m_wt_hp)$adj.r.squared, 2)`) penalises each extra parameter and is fairer for comparing models of different size (more in [Model selection](40-model-selection.qmd)).
+- The **F-statistic** now tests all slopes at once: $H_0: \beta_{wt} = \beta_{hp} = 0$.
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: what "adjusting" means (Frisch–Waugh–Lovell)
+
+In matrix form $y = X\beta + \varepsilon$, and OLS gives $\hat\beta = (X^\top X)^{-1} X^\top y$.
+
+The coefficient of `wt` in the multiple model equals the slope obtained by (1) regressing `mpg` on `hp` and keeping the residuals, (2) regressing `wt` on `hp` and keeping the residuals, (3) regressing the first residuals on the second. In words: it is the association between the parts of `mpg` and `wt` that `hp` cannot explain.
+
+```{r}
+#| label: fwl
+e_mpg <- resid(lm(mpg ~ hp, data = mtcars))
+e_wt  <- resid(lm(wt ~ hp, data = mtcars))
+coef(lm(e_mpg ~ e_wt))["e_wt"]
+```
+
+The same number as in `m_wt_hp`.
+:::
+
+## 3. Categorical predictors and dummy coding
+
+Now add `species` to the penguin model.
+
+```{r}
+#| label: additive
+m_add <- lm(body_mass ~ flipper_len + species, data = penguins)
+tidy(m_add)
+```
+
+A factor with $k$ levels enters the model as $k - 1$ **dummy variables** (0/1 indicators). The first level, here `Adelie`, is the **reference level** and has no dummy of its own. We can see this in the **model matrix**, the numeric table that `lm()` actually uses:
+
+```{r}
+#| label: model-matrix
+model.matrix(m_add)[c("1", "161", "302"), ]
+```
+
+Row 1 is an Adelie (both dummies 0), row 161 a Gentoo, row 302 a Chinstrap. (We select rows by their *names*: rows with missing values were dropped, so positions and names no longer coincide.)
+
+::: {.callout-tip .read-output}
+## How to read the coefficients
+
+- `flipper_len`: within a species, 1 mm longer flippers go with `r round(coef(m_add)["flipper_len"], 1)` g more body mass on average — much less than the `r round(coef(lm(body_mass ~ flipper_len, data = penguins))[2], 1)` g of the simple model.
+- `speciesChinstrap`: Chinstraps are on average `r round(abs(coef(m_add)["speciesChinstrap"]))` g **lighter than Adelies with the same flipper length**.
+- `speciesGentoo`: Gentoos are on average `r round(coef(m_add)["speciesGentoo"])` g **heavier than Adelies with the same flipper length**.
+- The intercept is the expected mass of an Adelie with 0 mm flippers — not meaningful.
+:::
+
+Geometrically, the model draws **three parallel lines**, one per species, with a common slope and different heights.
+
+### Changing the reference level
+
+Coefficients of a factor are always *differences from the reference*. To compare with Gentoo instead, change the reference with `relevel()` (base R) or `fct_relevel()` (forcats):
+
+```{r}
+#| label: relevel
+penguins_g <- penguins |>
+  mutate(species = fct_relevel(species, "Gentoo"))
+
+lm(body_mass ~ flipper_len + species, data = penguins_g) |> coef()
+```
+
+The fitted values are identical; only the parametrisation (and hence the meaning of each coefficient) changes. To test whether `species` as a whole matters, compare models with and without it (`anova(m_without, m_with)`, see Section 4) rather than looking at single dummies.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: why only $k-1$ dummies?
+
+With an intercept column of 1s and a dummy for *every* level, the dummies sum to the intercept column: the columns of $X$ are linearly dependent and $X^\top X$ cannot be inverted. R would report `NA` for one coefficient ("not defined because of singularities"). Dropping one level (treatment contrasts, R's default) removes the redundancy. Other codings exist (`contr.sum` for effect coding, `contr.poly` for ordered factors) and change the meaning of the coefficients, not the fit.
+:::
+
+## 4. Interactions: when slopes differ
+
+The additive model forces the three species to share one slope. Is that reasonable? An **interaction** lets the slope of `flipper_len` depend on `species`. In a formula, `a * b` means `a + b + a:b`.
+
+```{r}
+#| label: interaction
+m_int <- lm(body_mass ~ flipper_len * species, data = penguins)
+tidy(m_int)
+```
+
+```{r}
+#| label: interaction-values
+#| include: false
+b <- coef(m_int)
+slope_adelie <- b["flipper_len"]
+slope_chin <- b["flipper_len"] + b["flipper_len:speciesChinstrap"]
+slope_gentoo <- b["flipper_len"] + b["flipper_len:speciesGentoo"]
+```
+
+::: {.callout-tip .read-output}
+## How to read an interaction
+
+- `flipper_len` is now the slope **for the reference species** (Adelie): `r round(slope_adelie, 1)` g/mm.
+- `flipper_len:speciesChinstrap` is how much the Chinstrap slope **differs** from the Adelie slope. Chinstrap slope = `r round(slope_adelie, 1)` + `r round(b["flipper_len:speciesChinstrap"], 1)` = `r round(slope_chin, 1)` g/mm.
+- Gentoo slope = `r round(slope_adelie, 1)` + `r round(b["flipper_len:speciesGentoo"], 1)` = `r round(slope_gentoo, 1)` g/mm.
+- The `species` main effects are now differences in mass **at flipper length 0**: meaningless and huge. Centre the predictor (e.g. `I(flipper_len - 200)`) to make them differences at 200 mm.
+:::
+
+Visualise separate slopes by fitting one line per species. With `colour = species`, `geom_smooth(method = "lm")` fits exactly the lines of the interaction model:
+
+```{r}
+#| label: fig-interaction
+#| fig-cap: "Separate regression lines by species (the interaction model). The Gentoo line is steeper."
+#| warning: false
+ggplot(penguins, aes(flipper_len, body_mass, colour = species)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE, linewidth = 1) +
+  labs(x = "Flipper length (mm)", y = "Body mass (g)", colour = NULL)
+```
+
+Is the extra flexibility needed? The additive model is **nested** in the interaction model (it is the special case where both interaction coefficients are 0), so an F-test compares them:
+
+```{r}
+#| label: anova-int
+anova(m_add, m_int)
+```
+
+The p-value (`r format.pval(anova(m_add, m_int)[2, "Pr(>F)"], digits = 2)`) suggests that the slopes do differ — mainly because the Gentoo line is steeper. Note that the Chinstrap interaction on its own is far from significant: the overall F-test is the right way to judge "does the interaction matter?".
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: numeric × numeric interactions
+
+With two numeric predictors, `y ~ x1 * x2` gives $\hat y = b_0 + b_1 x_1 + b_2 x_2 + b_3 x_1 x_2$, so the slope of $x_1$ is $b_1 + b_3 x_2$: it changes *continuously* with $x_2$. Here $b_1$ is the slope of $x_1$ when $x_2 = 0$, which is why **centring** both variables (subtracting their means) is almost always a good idea before interpreting main effects.
+:::
+
+## 5. Multicollinearity and the VIF
+
+When predictors are strongly correlated with each other, the model struggles to separate their effects: the coefficients become **unstable** and their standard errors **inflated**. Consider four correlated car characteristics:
+
+```{r}
+#| label: collinear
+m_four <- lm(mpg ~ disp + hp + wt + drat, data = mtcars)
+cor(mtcars[, c("disp", "hp", "wt", "drat")]) |> round(2)
+```
+
+The **variance inflation factor** of predictor $j$ is $\text{VIF}_j = 1/(1 - R_j^2)$, where $R_j^2$ is the R² from regressing predictor $j$ on all the *other* predictors. It says how many times larger the variance of $\hat\beta_j$ is than it would be with uncorrelated predictors.
+
+```{r}
+#| label: vif
+car::vif(m_four)
+```
+
+Let us check one by hand:
+
+```{r}
+#| label: vif-hand
+r2_disp <- summary(lm(disp ~ hp + wt + drat, data = mtcars))$r.squared
+1 / (1 - r2_disp)
+```
+
+Engine displacement is largely predictable from the other three (R² = `r round(r2_disp, 2)`), so its standard error is inflated by a factor of about $\sqrt{`r round(1 / (1 - r2_disp), 1)`} \approx `r round(sqrt(1 / (1 - r2_disp)), 1)`$. Common rules of thumb flag VIF above 5 or 10.
+
+What to do about it depends on the goal:
+
+- **Prediction**: collinearity does not hurt predictions within the range of the data; you may leave it alone, or use [penalized regression](43-penalized-regression.qmd).
+- **Explanation**: you cannot separate effects that the data do not separate. Drop redundant variables, combine them into one index, or accept wide CIs and say so.
+
+For models with factors, `car::vif()` reports a generalized VIF (GVIF) per term, and `GVIF^(1/(2*Df))` is the version comparable to the square root of an ordinary VIF.
+
+## 6. Influential points: leverage and Cook's distance
+
+Some observations pull the fitted model more than others.
+
+- **Leverage** ($h_{ii}$, from `hatvalues()`) measures how unusual an observation's **predictor values** are. High-leverage points *can* move the line a lot.
+- **Cook's distance** combines leverage with the size of the residual: it measures how much *all* the fitted values would change if the observation were removed.
+
+```{r}
+#| label: influence
+cd <- cooks.distance(m_wt_hp)
+lev <- hatvalues(m_wt_hp)
+
+tibble::tibble(car = names(cd), cooks_d = cd, leverage = lev) |>
+  arrange(desc(cooks_d)) |>
+  head(4)
+```
+
+A common screening threshold is $4/n$ (= `r round(4 / nrow(mtcars), 3)` here) for Cook's distance and $2p/n$ for leverage ($p$ = number of coefficients). These are flags, not verdicts.
+
+```{r}
+#| label: fig-leverage
+#| fig-cap: "Residuals vs leverage with Cook's distance contours for mpg ~ wt + hp."
+plot(m_wt_hp, which = 5)
+```
+
+What happens without the most influential car?
+
+```{r}
+#| label: refit-without
+worst <- names(which.max(cd))
+worst
+update(m_wt_hp, data = mtcars[rownames(mtcars) != worst, ]) |> coef()
+```
+
+The `wt` coefficient moves from `r round(coef(m_wt_hp)["wt"], 2)` to `r round(coef(update(m_wt_hp, data = mtcars[rownames(mtcars) != worst, ]))["wt"], 2)`. **Never delete a point just because it is influential.** Check whether it is a data error; if it is genuine, report results with and without it, or use a model that fits it better (here: a curved relationship, see Exercise 5).
+
+## 7. Heteroscedasticity and robust standard errors
+
+The **E** of LINE asks for a constant error variance. When the spread of the residuals changes with the fitted values (**heteroscedasticity**), the coefficients are still unbiased, but the usual standard errors are wrong. A classic example is ozone concentration in New York (`airquality`):
+
+```{r}
+#| label: fig-ozone
+#| fig-cap: "Residuals vs fitted values for Ozone ~ Temp + Wind: the spread grows with the fitted value (a funnel)."
+m_oz <- lm(Ozone ~ Temp + Wind, data = airquality)
+
+augment(m_oz) |>
+  ggplot(aes(.fitted, .resid)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_point(alpha = 0.6) +
+  labs(x = "Fitted ozone (ppb)", y = "Residual")
+```
+
+The **Breusch–Pagan test** asks whether the squared residuals can be predicted from the predictors:
+
+```{r}
+#| label: bptest
+lmtest::bptest(m_oz)
+```
+
+A small p-value is evidence of non-constant variance (the plot is usually more informative than the test). **Heteroscedasticity-consistent ("robust", "sandwich") standard errors** remain valid without assuming constant variance:
+
+```{r}
+#| label: robust-se
+lmtest::coeftest(m_oz, vcov. = sandwich::vcovHC(m_oz, type = "HC3"))
+```
+
+Compare with `tidy(m_oz)`: the estimates are identical, but the robust SE of `Wind` is noticeably larger than the classical one, so the test is less confident. `HC3` is a good default for small and moderate samples. Alternatives: transform the response, or use a model whose variance naturally grows with the mean (a [GLM](42-poisson-regression.qmd)).
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: the sandwich
+
+The classical covariance is $\hat\sigma^2 (X^\top X)^{-1}$, which assumes $\operatorname{Var}(\varepsilon_i) = \sigma^2$ for all $i$. The sandwich estimator replaces it with
+
+$$
+(X^\top X)^{-1} \Big( \sum_i \omega_i\, x_i x_i^\top \Big) (X^\top X)^{-1},
+\qquad \omega_i = \frac{e_i^2}{(1 - h_{ii})^2} \ \text{for HC3},
+$$
+
+the "bread–meat–bread" shape that gives it its name. Each observation contributes its own squared residual instead of a common $\hat\sigma^2$.
+:::
+
+## 8. Partial effect plots: showing what the model says
+
+A table of coefficients is hard to read once there are interactions. A **partial effect plot** shows the model's predictions as one predictor varies, with the others **held at fixed values**. We do this with `predict()` on a grid.
+
+We add `sex` to the interaction model and plot predicted body mass against flipper length, by species, for **female** penguins:
+
+```{r}
+#| label: full-model
+m_full <- lm(body_mass ~ flipper_len * species + sex, data = penguins)
+```
+
+```{r}
+#| label: fig-partial
+#| fig-cap: "Predicted body mass of female penguins by flipper length and species, with 95% confidence bands. Each line covers only the observed range of its species."
+grid <- penguins |>
+  filter(!is.na(flipper_len)) |>
+  group_by(species) |>
+  reframe(flipper_len = seq(min(flipper_len), max(flipper_len),
+                            length.out = 50)) |>
+  mutate(sex = factor("female", levels = levels(penguins$sex)))
+
+pred <- predict(m_full, newdata = grid, interval = "confidence")
+grid <- bind_cols(grid, as.data.frame(pred))
+
+ggplot(grid, aes(flipper_len, fit, colour = species, fill = species)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.2, colour = NA) +
+  geom_line(linewidth = 1) +
+  labs(x = "Flipper length (mm)", y = "Predicted body mass (g)",
+       colour = NULL, fill = NULL)
+```
+
+Restricting each line to its species' observed range avoids extrapolation. Packages such as **marginaleffects** (`plot_predictions()`) and **ggeffects** automate this, but the logic is always the same: build a grid, predict, plot.
+
+Notice that once `sex` is in the model the species slopes are more similar (`anova(lm(body_mass ~ flipper_len + species + sex, data = penguins), m_full)` gives p ≈ `r round(anova(lm(body_mass ~ flipper_len + species + sex, data = penguins), m_full)[2, "Pr(>F)"], 2)`). Interactions — like any coefficient — depend on what else is in the model.
+
+## 9. Reporting a model
+
+A good report states the model, the sample, the key estimates **with CIs and units**, and how assumptions were checked. For the additive penguin model with sex:
+
+```{r}
+#| label: report-model
+m_report <- lm(body_mass ~ flipper_len + species + sex, data = penguins)
+tidy(m_report, conf.int = TRUE) |>
+  select(term, estimate, conf.low, conf.high, p.value)
+glance(m_report) |> select(r.squared, sigma, nobs)
+```
+
+```{r}
+#| label: report-values
+#| include: false
+tr <- tidy(m_report, conf.int = TRUE)
+fl <- tr[tr$term == "flipper_len", ]
+sx <- tr[tr$term == "sexmale", ]
+```
+
+> We modelled body mass (g) as a linear function of flipper length, species and sex (n = `r nobs(m_report)` penguins with complete data). Holding species and sex constant, each additional millimetre of flipper length was associated with `r round(fl$estimate, 1)` g more body mass (95% CI `r round(fl$conf.low, 1)` to `r round(fl$conf.high, 1)`). Males were on average `r round(sx$estimate)` g heavier than females of the same species and flipper length (95% CI `r round(sx$conf.low)` to `r round(sx$conf.high)`). The model explained `r round(100 * glance(m_report)$r.squared)`% of the variance in body mass; residual plots showed no marked departures from linearity or constant variance.
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Interpreting a main effect in the presence of an interaction as "the" effect.** With `x * group`, the coefficient of `x` is the slope in the *reference group* only.
+2. **Judging a factor by its individual dummies.** Whether `species` matters is a question for an F-test comparing models, not for one dummy's p-value — which depends on the arbitrary reference level.
+3. **"Controlling for" as magic.** Adjustment only removes the confounding of variables you *included*, measured *well*. It does not turn observational data into an experiment.
+4. **Deleting influential points to "clean" the data.** Investigate them; report sensitivity analyses.
+5. **Including a variable twice.** Two versions of the same information (e.g. a factor and its numeric code, or a variable and its sum with others) cause perfect collinearity and `NA` coefficients.
+6. **Reading p-values after looking at many models.** Choosing predictors based on the data makes the reported p-values too optimistic (see [Model selection](40-model-selection.qmd)).
+:::
+
+## 10. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. In `lm(mpg ~ wt + hp)`, the coefficient of `hp` is −0.032. Interpret it.
+
+Among cars of the same weight, each additional horsepower is associated with 0.032 fewer mpg on average (about 3.2 fewer mpg per 100 hp).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. A factor `region` has levels North, Centre, South (North is first). How many coefficients does `lm(y ~ region)` estimate, and what does the intercept mean?
+
+Three: the intercept and two dummies. The intercept is the mean of `y` in the North (the reference level); each dummy is the difference between that region's mean and the North's.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. True or false: a predictor with VIF = 12 makes the model's predictions unreliable.
+
+**False**, in general. High VIF inflates the uncertainty of that *coefficient*; predictions for new data similar to the training data can still be accurate.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q4. Robust (HC3) standard errors change which part of the output?
+
+Only the standard errors, and hence t values, p-values and CIs. The coefficient estimates and fitted values do not change.
+:::
+
+## 11. Exercises
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — reproduce.** Fit `mpg ~ wt + factor(am)` on `mtcars` (`am`: 0 = automatic, 1 = manual). Interpret the coefficient of `factor(am)1`. Then make "manual" the reference level and refit.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+cars2 <- mtcars |>
+  mutate(am = factor(am, levels = c(0, 1), labels = c("auto", "manual")))
+lm(mpg ~ wt + am, data = cars2) |> tidy(conf.int = TRUE)
+
+cars2 |>
+  mutate(am = fct_relevel(am, "manual")) |>
+  lm(mpg ~ wt + am, data = _) |>
+  coef()
+```
+Holding weight constant, manual cars have essentially the same mpg as automatics (difference about −0.02, CI from about −3 to 3). The large raw difference in mpg between transmissions is explained by manual cars being lighter. Relevelling only flips the sign of the coefficient.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — interpret an interaction.** From `m_int`, compute by hand the predicted body mass of a Gentoo with 220 mm flippers and of an Adelie with 190 mm flippers. Check with `predict()`.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+b <- coef(m_int)
+gentoo_220 <- b["(Intercept)"] + b["speciesGentoo"] +
+  (b["flipper_len"] + b["flipper_len:speciesGentoo"]) * 220
+adelie_190 <- b["(Intercept)"] + b["flipper_len"] * 190
+c(gentoo_220, adelie_190)
+
+predict(m_int, data.frame(flipper_len = c(220, 190),
+                          species = c("Gentoo", "Adelie")))
+```
+About 5230 g for the Gentoo and about 3700 g for the Adelie. For a Gentoo you add *both* the Gentoo intercept shift and the Gentoo slope shift.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — debug.** A student writes
+
+```r
+penguins2 <- penguins |>
+  mutate(is_adelie = species == "Adelie",
+         is_chinstrap = species == "Chinstrap",
+         is_gentoo = species == "Gentoo")
+lm(body_mass ~ is_adelie + is_chinstrap + is_gentoo, data = penguins2)
+```
+
+and gets `NA` for one coefficient. Explain why and give two ways to fix it.
+
+::: {.callout-tip collapse="true"}
+## Solution
+The three indicators always sum to 1, which equals the intercept column: the design matrix is singular (Section 3, *Going deeper*). R drops the last one and reports `NA`. Fixes: (1) leave the coding to R with `lm(body_mass ~ species, data = penguins)`; (2) drop one indicator (it becomes the reference); or (3) drop the intercept with `- 1` so that each coefficient is a group mean.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 4 — collinearity in action.** Fit `mpg ~ disp`, then `mpg ~ disp + wt`. What happens to the coefficient and the standard error of `disp`? Compute the VIF of `disp` in the second model by hand.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+tidy(lm(mpg ~ disp, data = mtcars))
+tidy(lm(mpg ~ disp + wt, data = mtcars))
+1 / (1 - summary(lm(disp ~ wt, data = mtcars))$r.squared)
+```
+Alone, `disp` has a clearly negative slope (about −0.041, SE about 0.005). Together with `wt` (correlation about 0.89) its slope shrinks to about −0.018, its SE roughly doubles, and it is no longer clearly different from zero. The VIF is about 4.7 (= 1/(1 − 0.89²)). The data cannot tell displacement and weight apart well.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 5 — mini-analysis.** For `mpg ~ wt + hp`, (a) draw the four diagnostic plots; (b) add a quadratic term for weight (`I(wt^2)`) and test whether it improves the fit with `anova()`; (c) does the most influential car (by Cook's distance) remain as influential?
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+par(mfrow = c(2, 2)); plot(m_wt_hp); par(mfrow = c(1, 1))
+
+m_quad <- lm(mpg ~ wt + I(wt^2) + hp, data = mtcars)
+anova(m_wt_hp, m_quad)
+
+sort(cooks.distance(m_wt_hp), decreasing = TRUE)[1:3]
+sort(cooks.distance(m_quad), decreasing = TRUE)[1:3]
+```
+The residuals-vs-fitted plot is U-shaped, a sign of curvature. The quadratic term improves the fit clearly (F-test p ≈ 0.004). The Chrysler Imperial, a very heavy car whose mpg the straight-line model underestimates, has the largest Cook's distance (about 0.42) in the linear model; in the quadratic model its Cook's distance drops to about 0.28 because the curve follows it better, and the Maserati Bora (an extreme `hp` value) becomes the most influential car (about 0.31). Influence is a property of a point *and* a model.
+:::
+:::
+
+## Summary
+
+| Idea / function | What it does |
+|---|---|
+| `lm(y ~ x1 + x2)` | coefficients adjusted for the other predictors |
+| `model.matrix()` | the numeric design matrix (dummies included) |
+| `relevel()`, `fct_relevel()` | change the reference level of a factor |
+| `y ~ x * group` | interaction: a different slope of `x` per group |
+| `anova(m_small, m_big)` | F-test for nested models |
+| `car::vif()` | variance inflation factors |
+| `hatvalues()`, `cooks.distance()`, `plot(m, which = 5)` | leverage and influence |
+| `lmtest::bptest()` | Breusch–Pagan test of constant variance |
+| `lmtest::coeftest(m, vcov. = sandwich::vcovHC(m))` | robust standard errors |
+| `predict()` on a grid | partial effect plots |
+
+- Each coefficient in a multiple regression is an association **holding the other predictors constant**.
+- Factors become $k-1$ dummies; coefficients are **differences from the reference level**.
+- With an interaction, the slope of one predictor **depends** on the other; visualise it.
+- Diagnose collinearity, influence and non-constant variance — and decide what to do based on whether your goal is explanation or prediction.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), chapter on multiple regression, <https://openintro-ims.netlify.app>
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2e), chapter 3, <https://www.statlearning.com>
+- Fox & Weisberg, *An R Companion to Applied Regression* — the book behind the `car` package, <https://www.john-fox.ca/Companion/>
+:::

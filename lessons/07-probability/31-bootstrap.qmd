@@ -1,0 +1,536 @@
+---
+title: "The bootstrap"
+subtitle: "One sample, many resamples: estimating uncertainty when there is no formula"
+description: "Learn the bootstrap step by step in base R: resample your data with replacement to estimate standard errors and percentile confidence intervals for a mean, a median and a correlation, see when the method fails, and meet rsample::bootstraps() and the link to bagging."
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Level 3 · Inference]{.level-3} [⏱ ~75 min]{} [Prerequisites: [Sampling distributions](30-sampling-distributions.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- explain the idea of the bootstrap: **resampling the sample** to approximate a sampling distribution;
+- implement the bootstrap in base R with `sample(x, replace = TRUE)` and `replicate()`;
+- compute a **bootstrap standard error** and a **percentile confidence interval** for a mean, a median and a correlation;
+- compare a bootstrap interval with the classical t-based interval;
+- recognise situations in which the bootstrap is unreliable (very small samples, extremes, dependent data).
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(ggplot2)
+library(rsample)
+```
+
+## 1. The problem: we have only one sample
+
+In the [previous lesson](30-sampling-distributions.qmd) we learned that the uncertainty of an estimate is described by its **sampling distribution**, and we saw it by drawing thousands of samples from a population we had built ourselves.
+
+In real research we cannot do that. We have **one** sample. For the mean we are lucky: theory gives the standard error $s/\sqrt n$ and the t-distribution gives a confidence interval. But what about
+
+- the **median** of a skewed variable?
+- a **correlation**?
+- the ratio of two means, a trimmed mean, the 90th percentile, a model's prediction error…?
+
+For many statistics there is no simple formula, or the formula relies on assumptions (normality, large $n$) that we are not willing to make. The **bootstrap**, proposed by Bradley Efron in 1979, offers a general, computer-based answer.
+
+## 2. The idea: resample the sample
+
+If we could sample repeatedly from the population, we would. We cannot, but we have the next best thing: the sample itself, which is our best picture of the population. The bootstrap **treats the sample as if it were the population** and draws new samples from it:
+
+| | Real world (impossible) | Bootstrap world (possible) |
+|---|---|---|
+| "Population" | the true population | our sample of size $n$ |
+| Samples | new samples of size $n$ from the population | **resamples** of size $n$ drawn *with replacement* from our sample |
+| Statistic | $\hat\theta$ in each new sample | $\hat\theta^*$ in each resample |
+| Variability | sampling distribution of $\hat\theta$ | bootstrap distribution of $\hat\theta^*$ |
+
+The key assumption: **the variability of $\hat\theta^*$ around $\hat\theta$ mimics the variability of $\hat\theta$ around the true parameter $\theta$.**
+
+Why *with replacement*? A resample of size $n$ drawn *without* replacement from $n$ values is just the same data shuffled. With replacement, some observations appear twice or three times and others not at all, exactly as a new random sample from the population would contain some kinds of units more often and others less.
+
+## 3. The algorithm step by step
+
+We use the ozone measurements in the built-in `airquality` data (New York, summer 1973). Ozone is right-skewed, so the mean and the median differ.
+
+```{r}
+#| label: ozone
+ozone <- airquality$Ozone[!is.na(airquality$Ozone)]
+n <- length(ozone)
+c(n = n, mean = mean(ozone), median = median(ozone))
+```
+
+**Step 1 — draw one resample** of size $n$ with replacement and compute the statistic:
+
+```{r}
+#| label: one-resample
+set.seed(1)
+resample <- sample(ozone, size = n, replace = TRUE)
+mean(resample)
+```
+
+Some days appear several times in the resample, others not at all:
+
+```{r}
+#| label: resample-counts
+set.seed(1)
+table(table(resample_id = sample(1:n, n, replace = TRUE)))
+```
+
+(The output reads: so many observations were drawn once, so many twice, and so on. On average only about 63% of the original observations appear in a resample; see the "Going deeper" box in Section 7.)
+
+**Step 2 — repeat many times** (B = 5,000 is plenty here) and store each statistic:
+
+```{r}
+#| label: boot-mean
+set.seed(1)
+boot_means <- replicate(5000, mean(sample(ozone, replace = TRUE)))
+```
+
+`sample(x, replace = TRUE)` uses `size = length(x)` by default: exactly what the bootstrap needs.
+
+**Step 3 — look at the bootstrap distribution:**
+
+```{r}
+#| label: fig-boot-mean
+#| fig-cap: "Bootstrap distribution of the mean ozone level (5,000 resamples). The solid line is the sample mean; dashed lines delimit the middle 95% of bootstrap means."
+ci_mean <- quantile(boot_means, c(0.025, 0.975))
+
+ggplot(data.frame(mean = boot_means), aes(mean)) +
+  geom_histogram(bins = 50, fill = "#0072B2", colour = "white") +
+  geom_vline(xintercept = mean(ozone), linewidth = 1) +
+  geom_vline(xintercept = ci_mean, linetype = "dashed", linewidth = 0.8) +
+  labs(x = "Bootstrap mean of ozone (ppb)", y = "Number of resamples")
+```
+
+**Step 4 — summarise the uncertainty.**
+
+- The **bootstrap standard error** is the SD of the bootstrap statistics.
+- The **percentile confidence interval** takes the 2.5% and 97.5% quantiles of the bootstrap statistics.
+
+```{r}
+#| label: boot-mean-summary
+sd(boot_means)              # bootstrap SE
+sd(ozone) / sqrt(n)         # classical SE, for comparison
+ci_mean                     # 95% percentile CI
+```
+
+::: {.callout-tip .read-output}
+## How to read these results
+
+- The bootstrap SE, `r round(sd(boot_means), 2)`, is very close to the formula $s/\sqrt n =$ `r round(sd(ozone) / sqrt(n), 2)`. For the mean the bootstrap simply rediscovers what theory already knew — a reassuring check.
+- The 95% percentile interval runs from `r round(ci_mean[1], 1)` to `r round(ci_mean[2], 1)` ppb: the range of mean ozone levels compatible with the data. [Confidence intervals](../08-inference/32-confidence-intervals.qmd) explains exactly what "95%" means.
+- Your numbers will differ slightly with a different seed; increase `B` if the second decimal matters.
+:::
+
+### Comparison with the t-based interval
+
+```{r}
+#| label: t-vs-boot
+t_ci <- t.test(ozone)$conf.int
+rbind(t_based = t_ci[1:2], bootstrap = ci_mean)
+```
+
+The two intervals are similar. The bootstrap interval is slightly **asymmetric** around the mean, because the bootstrap distribution reflects the right skew of the data; the t interval is symmetric by construction. With $n =$ `r n` the CLT makes both reasonable for the mean.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: the plug-in principle
+
+Let $F$ be the unknown population distribution and $\hat F$ the **empirical distribution** of the sample, which puts probability $1/n$ on each observation. Sampling with replacement from the data *is* sampling from $\hat F$. The bootstrap estimates the sampling distribution of $\hat\theta = t(X_1,\ldots,X_n)$, $X_i \sim F$, by the distribution of $\hat\theta^* = t(X^*_1, \ldots, X^*_n)$, $X^*_i \sim \hat F$. Since $\hat F \to F$ as $n$ grows, the approximation improves with $n$.
+
+The percentile interval is the simplest bootstrap CI. Refinements such as the **BCa** (bias-corrected and accelerated) interval correct for bias and skewness and are available in the `boot` package (`boot::boot.ci(type = "bca")`). Monte Carlo error from using a finite B is a separate, controllable issue: B ≈ 1,000 is usually enough for an SE, while a few thousand are advisable for percentile CIs.
+:::
+
+## 4. The real strength: statistics without a formula
+
+### The median
+
+The median is a natural summary for skewed data, but its standard error has no simple, assumption-free formula. For the bootstrap it makes no difference: replace `mean` with `median`.
+
+```{r}
+#| label: boot-median
+set.seed(2)
+boot_medians <- replicate(5000, median(sample(ozone, replace = TRUE)))
+sd(boot_medians)
+quantile(boot_medians, c(0.025, 0.975))
+```
+
+```{r}
+#| label: fig-boot-median
+#| fig-cap: "Bootstrap distribution of the median ozone level. It is lumpy because the median of a resample can only be one of the observed values (or the midpoint of two)."
+ggplot(data.frame(median = boot_medians), aes(median)) +
+  geom_histogram(binwidth = 0.5, fill = "#009E73") +
+  geom_vline(xintercept = median(ozone), linewidth = 1) +
+  labs(x = "Bootstrap median of ozone (ppb)", y = "Number of resamples")
+```
+
+The median of ozone is `r median(ozone)` ppb with a 95% bootstrap interval from `r round(quantile(boot_medians, 0.025), 1)` to `r round(quantile(boot_medians, 0.975), 1)` ppb. The SE of the median (`r round(sd(boot_medians), 2)`) is larger than the SE of the mean here; the median buys robustness at the price of some precision.
+
+### A correlation
+
+For a statistic computed from **pairs** of values, we must resample whole **rows** (units), keeping each pair together. We do this by resampling row *indices*. Example: the correlation between bill length and bill depth for Gentoo penguins.
+
+```{r}
+#| label: gentoo-cor
+gentoo <- penguins[penguins$species == "Gentoo",
+                   c("bill_len", "bill_dep")]
+gentoo <- gentoo[complete.cases(gentoo), ]
+r_obs <- cor(gentoo$bill_len, gentoo$bill_dep)
+r_obs
+```
+
+```{r}
+#| label: boot-cor
+set.seed(3)
+boot_cor <- replicate(5000, {
+  idx <- sample(nrow(gentoo), replace = TRUE)   # resample rows
+  cor(gentoo$bill_len[idx], gentoo$bill_dep[idx])
+})
+sd(boot_cor)
+quantile(boot_cor, c(0.025, 0.975))
+```
+
+```{r}
+#| label: fig-boot-cor
+#| fig-cap: "Bootstrap distribution of the correlation between bill length and bill depth in Gentoo penguins. Correlations cannot exceed 1, so the distribution is slightly skewed to the left."
+ggplot(data.frame(r = boot_cor), aes(r)) +
+  geom_histogram(bins = 50, fill = "#CC79A7", colour = "white") +
+  geom_vline(xintercept = r_obs, linewidth = 1) +
+  geom_vline(xintercept = quantile(boot_cor, c(0.025, 0.975)),
+             linetype = "dashed") +
+  labs(x = "Bootstrap correlation", y = "Number of resamples")
+```
+
+The interval from `r round(quantile(boot_cor, 0.025), 2)` to `r round(quantile(boot_cor, 0.975), 2)` excludes 0 comfortably: longer Gentoo bills tend to be deeper. Compare with the classical interval of `cor.test()`, which relies on a normal approximation (the Fisher transformation):
+
+```{r}
+#| label: cor-test
+cor.test(gentoo$bill_len, gentoo$bill_dep)$conf.int
+```
+
+### Summary of the three intervals
+
+```{r}
+#| label: ci-table
+data.frame(
+  statistic = c("mean ozone", "median ozone", "correlation (Gentoo)"),
+  estimate  = c(mean(ozone), median(ozone), r_obs),
+  boot_se   = c(sd(boot_means), sd(boot_medians), sd(boot_cor)),
+  lower     = c(ci_mean[1], quantile(boot_medians, 0.025),
+                quantile(boot_cor, 0.025)),
+  upper     = c(ci_mean[2], quantile(boot_medians, 0.975),
+                quantile(boot_cor, 0.975)),
+  row.names = NULL
+)
+```
+
+Same three lines of code each time: resample, compute, summarise. This generality is why the bootstrap is used everywhere, from medians to machine-learning performance metrics.
+
+## 5. When the bootstrap fails or is risky
+
+The bootstrap is not magic: it can only reproduce variability that is visible **in the sample**.
+
+### Very small samples
+
+With 5 observations, a resample can only contain those 5 values, and the bootstrap distribution underestimates how different a new sample could be. Let us check how often a 95% interval actually contains the true mean (its **coverage**) when $n = 5$ and the data are normal:
+
+```{r}
+#| label: small-n-coverage
+set.seed(4)
+covers <- replicate(1000, {
+  x <- rnorm(5)                                    # true mean is 0
+  boot <- colMeans(matrix(sample(x, 5 * 1000, replace = TRUE), nrow = 5))
+  pct <- quantile(boot, c(0.025, 0.975))
+  tci <- t.test(x)$conf.int
+  c(bootstrap = pct[[1]] < 0 & pct[[2]] > 0,
+    t_based   = tci[1] < 0 & tci[2] > 0)
+})
+rowMeans(covers)
+```
+
+(`matrix(sample(...), nrow = 5)` draws 1,000 resamples at once as the columns of a matrix, and `colMeans()` gives their means — a fast alternative to `replicate()`.)
+
+The "95%" percentile interval contains the true mean only about `r round(100 * rowMeans(covers)[["bootstrap"]])`% of the time: it is **too narrow**. The t interval, which builds the extra uncertainty of small samples into the t-distribution, keeps its promise (about `r round(100 * rowMeans(covers)[["t_based"]])`%). With small samples, prefer methods with good small-sample theory, or at least do not trust bootstrap intervals blindly.
+
+### Extremes: the maximum
+
+The bootstrap struggles with statistics that depend on one or two extreme observations. Consider the maximum of 30 values from $\text{Uniform}(0, 1)$; the true maximum of the population is 1.
+
+```{r}
+#| label: boot-max
+set.seed(5)
+x <- runif(30)
+boot_max <- replicate(5000, max(sample(x, replace = TRUE)))
+max(x)
+mean(boot_max == max(x))   # share of resamples whose max is the sample max
+max(boot_max) > max(x)     # can a resample ever exceed the sample max?
+```
+
+About `r round(100 * mean(boot_max == max(x)))`% of the resamples have exactly the same maximum as the sample, and no resample can ever go beyond it. The bootstrap distribution is a spike, nothing like the true (continuous) sampling distribution of the maximum, and it gives no hint that the true value 1 lies above every observation.
+
+### Dependent data
+
+The basic bootstrap resamples observations **independently**, so it assumes the observations *are* independent. In a time series, today resembles yesterday; shuffling days destroys that structure and the bootstrap underestimates the uncertainty. A quick simulation with an autocorrelated series:
+
+```{r}
+#| label: boot-dependent
+set.seed(6)
+series <- as.numeric(arima.sim(model = list(ar = 0.7), n = 100))
+naive_se <- sd(replicate(2000, mean(sample(series, replace = TRUE))))
+
+# the true SE, from many independent series generated the same way
+true_se <- sd(replicate(2000, mean(arima.sim(model = list(ar = 0.7), n = 100))))
+c(naive_bootstrap = naive_se, true = true_se)
+```
+
+`arima.sim()` generates a series in which each value depends on the previous one. The naive bootstrap SE is less than half the true SE: intervals would be far too optimistic. For time series, clustered or repeated-measures data, resample **blocks** of consecutive observations or whole **clusters** (e.g. all measurements of one patient) instead of single rows.
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Resampling without replacement.** `sample(x)` only shuffles the data: every resample has the same mean and the "SE" is 0. Always `replace = TRUE`.
+2. **Resampling columns separately.** For correlations, regressions or any multivariable statistic, resample **rows** (via indices), not each variable on its own — that destroys the relationship you are studying (Exercise 3).
+3. **Thinking the bootstrap creates information.** It does not add data; it only re-uses the sample. If the sample is small or unrepresentative, so is the bootstrap.
+4. **Bootstrapping dependent data as if it were independent** (time series, repeated measures, clusters). Resample the independent units.
+5. **Too few resamples or no seed.** Use at least 1,000 resamples (more for percentile CIs) and `set.seed()` so results are reproducible.
+:::
+
+## 6. A tidy alternative: `rsample::bootstraps()`
+
+The [tidymodels](https://www.tidymodels.org) package **rsample**, which we will use for machine learning, provides the same resampling in a data-frame form. `bootstraps(data, times = B)` returns a table with one row per resample; each row holds a `split` object, and `analysis(split)` extracts the resampled data.
+
+```{r}
+#| label: rsample-boot
+set.seed(3)
+boots <- bootstraps(gentoo, times = 1000)
+boots
+
+boot_cor_tidy <- vapply(boots$splits, \(s) {
+  d <- analysis(s)
+  cor(d$bill_len, d$bill_dep)
+}, numeric(1))
+
+quantile(boot_cor_tidy, c(0.025, 0.975))
+```
+
+`vapply(..., numeric(1))` applies the function to every split and checks that each result is a single number (see [Iteration](../03-programming/17-iteration.qmd)). The interval agrees with our base-R version up to Monte Carlo noise. The advantage of `rsample` is not the bootstrap itself — three lines of base R suffice — but that the same objects plug directly into the modelling tools of [The ML workflow](../10-ml/44-ml-workflow.qmd).
+
+## 7. Looking ahead: bootstrap aggregating ("bagging")
+
+The bootstrap reappears in machine learning in a different role. A single decision tree is very sensitive to the exact data it is fitted on: change a few rows and the tree can change completely. **Bagging** (*bootstrap aggregating*) fits one tree to **each bootstrap resample** and **averages** their predictions. Averaging many noisy but different models reduces variance, just as averaging many observations reduces the SE of a mean. **Random forests** add one more trick (each split considers only a random subset of the variables) and are among the most widely used prediction methods; see [Random forests](../10-ml/46-random-forests.qmd).
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: the 63.2% rule and out-of-bag observations
+
+The probability that a given observation is **not** picked in any of the $n$ draws of a resample is $(1 - 1/n)^n \to e^{-1} \approx 0.368$. So each resample contains on average about 63.2% of the distinct original observations, and the remaining ≈ 36.8% are "out of bag". Random forests use these left-out observations as a free test set (the *out-of-bag error*). A one-line check:
+
+```{r}
+#| label: oob
+set.seed(7)
+mean(replicate(2000, mean(!(1:100 %in% sample(100, replace = TRUE)))))
+```
+:::
+
+## 8. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. Why must bootstrap resamples be drawn *with* replacement and have the same size as the original sample?
+
+Without replacement, a resample of size $n$ is just a permutation of the data and every statistic stays the same. Same size $n$, because the variability of a statistic depends on the sample size: we want to mimic samples of the size we actually have.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. The bootstrap SE of the mean and $s/\sqrt n$ are almost identical. Why bother with the bootstrap then?
+
+For the mean there is no need — but the bootstrap works in exactly the same way for statistics that have no simple SE formula (median, correlation, ratios, quantiles, model metrics). The agreement for the mean is a useful check that the method works.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. You have daily temperatures for one year and want an interval for the annual mean. Is the ordinary bootstrap appropriate?
+
+No. Consecutive days are correlated, and resampling single days independently ignores that dependence, so the bootstrap SE would be too small. A block bootstrap (resampling runs of consecutive days) or a time-series model is needed.
+:::
+
+## 9. Exercises
+
+### Interactive (run in your browser)
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — bootstrap a mean.** Bootstrap the mean fuel consumption `mpg` in `mtcars` with 5,000 resamples. Report the bootstrap SE and the 95% percentile interval, and compare with the t-based interval from `t.test()`.
+
+```{webr}
+#| exercise: ex_31_1
+x <- mtcars$mpg
+set.seed(1)
+boot <- replicate(5000, mean(sample(x, replace = ______)))
+sd(______)
+quantile(boot, c(______, ______))
+t.test(x)$conf.int
+```
+
+::: {.hint exercise="ex_31_1"}
+Resample with `replace = TRUE`; the SE is `sd(boot)`; the 95% percentile interval uses the quantiles 0.025 and 0.975.
+:::
+
+::: {.solution exercise="ex_31_1"}
+```r
+x <- mtcars$mpg
+set.seed(1)
+boot <- replicate(5000, mean(sample(x, replace = TRUE)))
+sd(boot)                          # about 1.04
+quantile(boot, c(0.025, 0.975))   # about 18.1 to 22.2
+t.test(x)$conf.int                # about 17.9 to 22.3
+```
+The bootstrap interval is a little narrower than the t interval: with only 32 cars the percentile bootstrap tends to be slightly optimistic (Section 5), while the t-distribution accounts for estimating the SD.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — bootstrap a median.** The built-in vector `rivers` contains the lengths (in miles) of 141 major North American rivers; it is strongly right-skewed. Compute the median and a 95% bootstrap percentile interval for it. Then draw a histogram of the bootstrap medians: why does it look lumpy?
+
+```{webr}
+#| exercise: ex_31_2
+median(rivers)
+set.seed(2)
+boot_med <- replicate(5000, ______(sample(rivers, replace = TRUE)))
+quantile(boot_med, c(0.025, 0.975))
+hist(boot_med, breaks = 40, main = "Bootstrap medians", xlab = "Miles")
+```
+
+::: {.hint exercise="ex_31_2"}
+Replace the blank with the statistic you want to bootstrap: `median`.
+:::
+
+::: {.solution exercise="ex_31_2"}
+```r
+median(rivers)                                   # 425
+set.seed(2)
+boot_med <- replicate(5000, median(sample(rivers, replace = TRUE)))
+quantile(boot_med, c(0.025, 0.975))              # roughly 380 to 490
+hist(boot_med, breaks = 40, main = "Bootstrap medians", xlab = "Miles")
+```
+With $n = 141$ (odd), the median of each resample is always one of the observed river lengths, so the bootstrap distribution can take only a limited set of values — hence the gaps and spikes. The interval is asymmetric around 425, reflecting the skew.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — debug the bootstrap.** A student wants a bootstrap interval for the correlation between `speed` and `dist` in the built-in `cars` data (observed $r \approx 0.81$) and writes the code below. The interval is centred near 0! Find and fix the bug.
+
+```{webr}
+#| exercise: ex_31_3
+cor(cars$speed, cars$dist)
+set.seed(3)
+boot_r <- replicate(5000, {
+  s <- sample(cars$speed, replace = TRUE)
+  d <- sample(cars$dist, replace = TRUE)
+  cor(s, d)
+})
+quantile(boot_r, c(0.025, 0.975))
+```
+
+::: {.hint exercise="ex_31_3"}
+The two variables are resampled independently, so a car's speed is paired with *another* car's stopping distance. Resample row indices with `idx <- sample(nrow(cars), replace = TRUE)` and use `cars$speed[idx]` and `cars$dist[idx]`.
+:::
+
+::: {.solution exercise="ex_31_3"}
+```r
+set.seed(3)
+boot_r <- replicate(5000, {
+  idx <- sample(nrow(cars), replace = TRUE)
+  cor(cars$speed[idx], cars$dist[idx])
+})
+quantile(boot_r, c(0.025, 0.975))   # about 0.70 to 0.88
+```
+Resampling the columns separately breaks the pairs and simulates a world with no relationship, so the "interval" was centred on 0. Resampling whole rows keeps each car's speed and distance together.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 4 — predict the failure.** Draw a sample of 50 values from $\text{Uniform}(0, 10)$, so the true population maximum is 10. Before running the code, predict: (a) roughly what share of bootstrap maxima will equal the sample maximum? (b) Will the 95% percentile interval for the maximum contain 10?
+
+```{webr}
+#| exercise: ex_31_4
+set.seed(4)
+x <- runif(50, min = 0, max = 10)
+max(x)
+boot_max <- replicate(5000, max(sample(x, replace = TRUE)))
+mean(boot_max == ______)
+quantile(boot_max, c(0.025, 0.975))
+```
+
+::: {.hint exercise="ex_31_4"}
+Compare each bootstrap maximum with `max(x)`. The chance that the largest observation is drawn at least once in 50 draws is $1 - (1 - 1/50)^{50}$.
+:::
+
+::: {.solution exercise="ex_31_4"}
+```r
+mean(boot_max == max(x))              # about 0.64
+1 - (1 - 1/50)^50                     # theory: 0.636
+quantile(boot_max, c(0.025, 0.975))   # upper limit = max(x) < 10
+```
+About 64% of resamples contain the largest observation, so their maximum equals the sample maximum. No resample can exceed `max(x)`, so the interval never reaches the true value 10. For extremes, the bootstrap is the wrong tool.
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 5 — a difference between two groups.** For Adelie penguins, estimate the difference in mean body mass between males and females with a bootstrap CI. Resample **within each sex separately** (why?), and compare your interval with the Welch interval of `t.test(body_mass ~ sex, data = adelie)`.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+adelie <- penguins[penguins$species == "Adelie" & !is.na(penguins$sex) &
+                     !is.na(penguins$body_mass), ]
+m <- adelie$body_mass[adelie$sex == "male"]
+f <- adelie$body_mass[adelie$sex == "female"]
+mean(m) - mean(f)
+
+set.seed(5)
+boot_diff <- replicate(5000, {
+  mean(sample(m, replace = TRUE)) - mean(sample(f, replace = TRUE))
+})
+quantile(boot_diff, c(0.025, 0.975))
+t.test(body_mass ~ sex, data = adelie)$conf.int   # female - male: signs flip
+```
+The males are on average about 675 g heavier, and both intervals run from roughly 575 to 775 g (the `t.test()` interval is for female − male, so its signs are reversed). Resampling within each group keeps the group sizes fixed, as in the original design.
+:::
+:::
+
+## Summary
+
+| Step / function | Code | Purpose |
+|---|---|---|
+| One resample | `sample(x, replace = TRUE)` | New sample of size $n$ from the data |
+| Resample rows | `idx <- sample(nrow(df), replace = TRUE)`; `df[idx, ]` | Keep variables paired |
+| Bootstrap distribution | `replicate(B, stat(sample(x, replace = TRUE)))` | Approximate sampling distribution |
+| Bootstrap SE | `sd(boot)` | Precision of the estimate |
+| Percentile CI | `quantile(boot, c(0.025, 0.975))` | 95% interval |
+| Tidy resampling | `rsample::bootstraps(df, times = B)`, `analysis(split)` | Same idea in data-frame form |
+
+- The bootstrap **resamples the sample** with replacement to imitate drawing new samples from the population.
+- The same three steps — resample, compute, summarise — give SEs and CIs for statistics **without a formula**.
+- For the mean, bootstrap and t-based results agree closely when $n$ is moderate.
+- It is unreliable for **very small samples**, **extremes** and **dependent data**; resample the independent units.
+- Bootstrap + averaging = **bagging**, the core of random forests.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), chapter on bootstrap confidence intervals, <https://openintro-ims.netlify.app>
+- Kuhn & Silge, *Tidy Modeling with R*, chapter on resampling, <https://www.tmwr.org>
+- rsample documentation, <https://rsample.tidymodels.org>
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2e), section on the bootstrap, <https://www.statlearning.com>
+:::

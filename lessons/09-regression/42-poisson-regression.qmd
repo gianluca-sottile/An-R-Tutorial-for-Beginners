@@ -1,0 +1,676 @@
+---
+title: "Poisson regression"
+subtitle: "Modelling counts: rate ratios, exposure offsets and overdispersion"
+description: "Why ordinary regression fails for count data, how a Poisson GLM with a log link works, how to read coefficients as rate ratios, how to model rates with an offset, and what to do when the data are overdispersed (quasi-Poisson, negative binomial) or have too many zeros."
+---
+
+::: {.lesson-meta}
+[Level 4 · Models & learning]{.level-4} [⏱ ~100 min]{} [Prerequisites: [Logistic regression](41-logistic-regression.qmd), [Probability distributions](../07-probability/29-distributions.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- explain why `lm()` is a poor choice for **count** outcomes (impossible predictions, variance that grows with the mean);
+- fit a **Poisson regression** with `glm(family = poisson)` and interpret its coefficients as **rate ratios** with confidence intervals;
+- model **rates** (counts per unit of exposure) with an **offset**;
+- detect **overdispersion** with the Pearson statistic and handle it with **quasi-Poisson** or **negative binomial** models;
+- recognise when **excess zeros** call for a zero-inflated or hurdle model.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(broom)
+```
+
+## 1. Why not just use `lm()` for counts?
+
+Many outcomes are **counts**: the number of insects on a plant, of breaks in a length of yarn, of hospital admissions in a week, of goals in a match. Counts have three features that a straight line ignores:
+
+- they are **never negative**;
+- they are **whole numbers** (0, 1, 2, ...);
+- their **spread grows with their mean**: places with an average of 2 insects vary between 0 and 5, places with an average of 20 vary between 10 and 30.
+
+Let us simulate counts whose average grows with a predictor $x$ and fit an ordinary linear model:
+
+```{r}
+#| label: sim-counts
+set.seed(2026)
+sim <- tibble::tibble(x = runif(100, 0, 10),
+                      y = rpois(100, lambda = exp(-1 + 0.35 * x)))
+m_lm <- lm(y ~ x, data = sim)
+range(fitted(m_lm))
+sum(fitted(m_lm) < 0)
+```
+
+The linear model predicts **negative counts** for `r sum(fitted(m_lm) < 0)` of the 100 observations: an impossible answer.
+
+```{r}
+#| label: fig-sim-lm
+#| fig-cap: "Simulated counts. The straight line (lm) goes below zero for small x and misses the curvature; the spread of the points grows as the mean grows."
+ggplot(sim, aes(x, y)) +
+  geom_jitter(height = 0.1, width = 0, alpha = 0.6) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE,
+              colour = "#D55E00") +
+  geom_hline(yintercept = 0, linetype = 3) +
+  labs(x = "x", y = "Count")
+```
+
+The second problem is visible in a real dataset. `InsectSprays` records the number of insects found on 72 agricultural plots treated with one of six insecticides (A to F), 12 plots each.
+
+```{r}
+#| label: insect-mean-var
+InsectSprays |>
+  summarise(mean = mean(count), variance = var(count), .by = spray)
+```
+
+The sprays with a high mean count (A, B, F) also have a much larger variance than those with a low mean (C, D, E). `lm()` assumes the **same** variance everywhere, so its standard errors and p-values would be wrong. We need a model built for counts.
+
+## 2. The Poisson distribution
+
+The **Poisson distribution** describes the number of events that happen in a fixed amount of time or space when events occur independently at a constant average rate $\mu$ (you met it in [Probability distributions](../07-probability/29-distributions.qmd)). Its key property is
+
+$$
+\text{mean} = \text{variance} = \mu .
+$$
+
+```{r}
+#| label: fig-poisson-dist
+#| fig-cap: "Poisson distributions with mean 1, 4 and 10. As the mean grows, the distribution moves right, becomes more symmetric and more spread out."
+tidyr::expand_grid(mu = c(1, 4, 10), y = 0:20) |>
+  mutate(prob = dpois(y, mu), mu = paste("mean =", mu)) |>
+  ggplot(aes(y, prob)) +
+  geom_col(width = 0.8) +
+  facet_wrap(~ mu) +
+  labs(x = "Count", y = "Probability")
+```
+
+This "variance equals mean" property is exactly the pattern we saw in `InsectSprays` (roughly): Poisson regression builds it into the model instead of assuming a constant variance.
+
+## 3. Poisson regression: a GLM with a log link
+
+Like [logistic regression](41-logistic-regression.qmd), Poisson regression is a **generalized linear model** (GLM) with three ingredients:
+
+1. a **distribution** for $y$: Poisson, with mean $\mu$;
+2. a **linear predictor**: $\eta = \beta_0 + \beta_1 x_1 + \dots + \beta_p x_p$;
+3. a **link function** connecting them: the **logarithm**, $\log \mu = \eta$.
+
+The log link guarantees that the predicted mean $\mu = e^{\eta}$ is always **positive**, whatever the values of the predictors. It also makes effects **multiplicative**: adding 1 to $x_1$ adds $\beta_1$ to $\log\mu$, so it **multiplies** $\mu$ by $e^{\beta_1}$.
+
+Back to the simulated data:
+
+```{r}
+#| label: sim-glm
+m_sim <- glm(y ~ x, family = poisson, data = sim)
+coef(m_sim)
+exp(coef(m_sim))
+```
+
+The estimates (`r round(coef(m_sim)[1], 2)` and `r round(coef(m_sim)[2], 2)`) are close to the values used to simulate the data ($-1$ and $0.35$). Each unit increase in $x$ multiplies the expected count by about `r round(exp(coef(m_sim)[2]), 2)`, i.e. an increase of about `r round(100 * (exp(coef(m_sim)[2]) - 1))`%. And all fitted values are positive:
+
+```{r}
+#| label: fig-sim-glm
+#| fig-cap: "The Poisson regression curve (log link) follows the curvature of the data and never goes below zero."
+sim |>
+  mutate(fit_lm = fitted(m_lm), fit_pois = fitted(m_sim)) |>
+  ggplot(aes(x, y)) +
+  geom_jitter(height = 0.1, width = 0, alpha = 0.5) +
+  geom_line(aes(y = fit_lm, colour = "lm"), linewidth = 1) +
+  geom_line(aes(y = fit_pois, colour = "Poisson GLM"), linewidth = 1) +
+  geom_hline(yintercept = 0, linetype = 3) +
+  labs(x = "x", y = "Count", colour = NULL)
+```
+
+## 4. Fitting and reading a Poisson model
+
+Do the insecticides differ in effectiveness?
+
+```{r}
+#| label: fig-insects
+#| fig-cap: "Number of insects per plot for each of six sprays (12 plots each)."
+ggplot(InsectSprays, aes(spray, count)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.5) +
+  labs(x = "Spray", y = "Insects per plot")
+```
+
+```{r}
+#| label: insect-glm
+m_ins <- glm(count ~ spray, family = poisson, data = InsectSprays)
+summary(m_ins)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- **Coefficients** are on the **log scale**. Spray A is the reference level. The intercept, `r round(coef(m_ins)[1], 2)`, is the log of the mean count for spray A: $e^{`r round(coef(m_ins)[1], 3)`} = `r round(exp(coef(m_ins)[1]), 1)`$, exactly the sample mean of group A.
+- **`sprayC` = `r round(coef(m_ins)["sprayC"], 2)`**: the log of the mean count is `r abs(round(coef(m_ins)["sprayC"], 2))` lower for spray C than for spray A. Negative = fewer insects.
+- **`z value`, `Pr(>|z|)`**: Wald tests of $H_0: \beta = 0$ (no difference from spray A).
+- **Dispersion parameter for poisson family taken to be 1**: the model *assumes* variance = mean. We will check this in Section 7.
+- **Null / Residual deviance**: lack of fit of the intercept-only model and of our model, as in logistic regression. The drop from `r round(m_ins$null.deviance, 1)` to `r round(deviance(m_ins), 1)` shows that spray matters a lot.
+:::
+
+## 5. Interpretation: rate ratios
+
+Log counts are hard to think in. Exponentiating a coefficient gives a **rate ratio** (RR, also called *incidence rate ratio*): the factor by which the expected count is multiplied.
+
+```{r}
+#| label: rate-ratios
+exp(coef(m_ins))
+exp(confint(m_ins))    # profile-likelihood 95% CIs, then exponentiated
+```
+
+```{r}
+#| label: rr-values
+#| include: false
+rr_c <- exp(coef(m_ins))["sprayC"]
+rr_c_ci <- exp(confint(m_ins))["sprayC", ]
+rr_f <- exp(coef(m_ins))["sprayF"]
+```
+
+- **Spray C vs A**: RR = `r round(rr_c, 2)` (95% CI `r round(rr_c_ci[1], 2)` to `r round(rr_c_ci[2], 2)`). Plots treated with C have, on average, `r round(rr_c, 2)` times as many insects as plots treated with A — about `r round(100 * (1 - rr_c))`% fewer.
+- **Spray F vs A**: RR = `r round(rr_f, 2)`, with a CI that includes 1: no clear difference.
+- RR = 1 means no difference; RR > 1 more events, RR < 1 fewer. A CI that excludes 1 corresponds to p < 0.05.
+- The **intercept**'s exponentiated value is not a ratio: it is the expected count in the reference group.
+
+With **broom**:
+
+```{r}
+#| label: tidy-rr
+tidy(m_ins, exponentiate = TRUE, conf.int = TRUE)
+```
+
+Predicted counts come from `predict(..., type = "response")`; the default `type = "link"` returns the log of the expected count.
+
+```{r}
+#| label: insect-predict
+new_sprays <- tibble::tibble(spray = c("A", "C", "F"))
+new_sprays |>
+  mutate(expected = predict(m_ins, newdata = new_sprays, type = "response"))
+```
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: the Poisson likelihood
+
+For counts $y_i$ with means $\mu_i = \exp(x_i^\top\beta)$, the probability of the data is $\prod_i e^{-\mu_i}\mu_i^{y_i}/y_i!$, so the log-likelihood is
+
+$$
+\ell(\beta) = \sum_{i=1}^n \big[y_i \log\mu_i - \mu_i - \log(y_i!)\big].
+$$
+
+`glm()` maximises it by iteratively reweighted least squares. The **deviance** is
+
+$$
+D = 2\sum_{i=1}^n \Big[y_i \log\frac{y_i}{\hat\mu_i} - (y_i - \hat\mu_i)\Big],
+$$
+
+twice the gap between the log-likelihood of a perfect ("saturated") model and ours. As in logistic regression, the difference in deviance between nested models is approximately $\chi^2$ with as many degrees of freedom as added parameters (likelihood-ratio test). With a categorical predictor only, the fitted means equal the group sample means.
+:::
+
+## 6. Two factors and an interaction: `warpbreaks`
+
+`warpbreaks` records the number of **breaks** in the warp yarn per loom, for two types of wool (A, B) and three levels of tension (L = low, M = medium, H = high), 9 looms per combination.
+
+```{r}
+#| label: fig-warpbreaks
+#| fig-cap: "Number of warp breaks per loom by wool type and tension. Lines join the group means."
+ggplot(warpbreaks, aes(tension, breaks, colour = wool)) +
+  geom_jitter(width = 0.1, alpha = 0.6) +
+  stat_summary(aes(group = wool), fun = mean, geom = "line",
+               linewidth = 1) +
+  labs(x = "Tension", y = "Breaks per loom", colour = "Wool")
+```
+
+The lines are not parallel: going from low to medium tension reduces breaks a lot for wool A, but not for wool B. That suggests an **interaction**: the effect of tension depends on the wool. We compare the additive and the interaction model with a likelihood-ratio test:
+
+```{r}
+#| label: wb-models
+m_add <- glm(breaks ~ wool + tension, family = poisson, data = warpbreaks)
+m_int <- glm(breaks ~ wool * tension, family = poisson, data = warpbreaks)
+anova(m_add, m_int, test = "Chisq")
+```
+
+Taken at face value, the interaction is overwhelmingly significant. Keep this p-value in mind; we will revisit it in Section 7.
+
+```{r}
+#| label: wb-rr
+tidy(m_int, exponentiate = TRUE, conf.int = TRUE) |>
+  select(term, rate_ratio = estimate, conf.low, conf.high) |>
+  mutate(across(where(is.numeric), \(x) round(x, 2)))
+```
+
+With an interaction, the main-effect rate ratios refer to the **reference level of the other factor**:
+
+- `woolB` = `r round(exp(coef(m_int))["woolB"], 2)`: at **low** tension, wool B has `r round(exp(coef(m_int))["woolB"], 2)` times as many breaks as wool A.
+- `woolB:tensionM` = `r round(exp(coef(m_int))["woolB:tensionM"], 2)`: the wool B / wool A ratio at medium tension is `r round(exp(coef(m_int))["woolB:tensionM"], 2)` times the ratio at low tension, i.e. $`r round(exp(coef(m_int))["woolB"], 2)` \times `r round(exp(coef(m_int))["woolB:tensionM"], 2)` = `r round(exp(coef(m_int)["woolB"] + coef(m_int)["woolB:tensionM"]), 2)`$. At medium tension wool B is slightly *worse* than A.
+
+Interaction terms on a multiplicative scale are easy to misread. The clearest summary is a table of **predicted counts**:
+
+```{r}
+#| label: wb-predict
+wb_grid <- tidyr::expand_grid(wool = c("A", "B"), tension = c("L", "M", "H"))
+wb_grid |>
+  mutate(expected = predict(m_int, newdata = wb_grid, type = "response")) |>
+  tidyr::pivot_wider(names_from = tension, values_from = expected)
+```
+
+Because the model has a parameter for each of the 6 combinations, these predictions equal the six sample means.
+
+## 7. Overdispersion: when variance exceeds the mean
+
+The Poisson model **assumes** that the variance equals the mean. Real counts are often more variable than that — for example because looms differ in ways we did not measure. This is **overdispersion**. If we ignore it, the model is overconfident: **standard errors are too small**, confidence intervals too narrow and p-values too small.
+
+### Checking with the Pearson statistic
+
+A **Pearson residual** is $(y_i - \hat\mu_i)/\sqrt{\hat\mu_i}$: the raw residual divided by the standard deviation the Poisson model expects. If the model is right, the squared Pearson residuals average about 1, so
+
+$$
+\hat\phi = \frac{\sum_i r_i^2}{n - p} \approx 1,
+$$
+
+where $n - p$ is the residual degrees of freedom. Values clearly above 1 indicate overdispersion.
+
+```{r}
+#| label: dispersion
+dispersion <- function(model) {
+  sum(residuals(model, type = "pearson")^2) / df.residual(model)
+}
+dispersion(m_int)
+dispersion(m_ins)
+```
+
+For `warpbreaks` the estimated dispersion is `r round(dispersion(m_int), 2)`: the variance is almost four times what the Poisson model assumes. For `InsectSprays` it is `r round(dispersion(m_ins), 2)`: milder, but still above 1.
+
+How far from 1 is "clearly above"? A small simulation with data that really are Poisson shows the typical range:
+
+```{r}
+#| label: dispersion-null
+set.seed(3)
+disp_null <- replicate(500, {
+  d <- data.frame(g = gl(3, 20))
+  d$y <- rpois(60, lambda = c(3, 6, 9)[d$g])
+  dispersion(glm(y ~ g, family = poisson, data = d))
+})
+quantile(disp_null, c(0.025, 0.5, 0.975))
+```
+
+With 60 observations, genuine Poisson data give values between about `r round(quantile(disp_null, 0.025), 1)` and `r round(quantile(disp_null, 0.975), 1)`. A value near 3.8 is far outside that range. (Formally, $\sum r_i^2$ can be compared to a $\chi^2_{n-p}$ distribution, but the ratio itself is the useful number: it tells you *how much* the standard errors are off.)
+
+::: {.callout-note}
+## Overdispersion or a missing predictor?
+
+Before reaching for a new distribution, ask whether an important predictor is missing, or whether an interaction or a non-linear term is needed. Unexplained structure in the mean shows up as extra variance. Overdispersion models are for the variability that remains **after** the mean is modelled well.
+:::
+
+### Quasi-Poisson: inflate the standard errors
+
+The simplest fix keeps the Poisson mean model but assumes $\text{Var}(y) = \phi\,\mu$ and estimates $\phi$ from the data:
+
+```{r}
+#| label: quasipoisson
+m_qp <- glm(breaks ~ wool * tension, family = quasipoisson, data = warpbreaks)
+summary(m_qp)$dispersion
+
+tibble::tibble(term = names(coef(m_int)),
+               estimate = coef(m_int),
+               se_poisson = sqrt(diag(vcov(m_int))),
+               se_quasi = sqrt(diag(vcov(m_qp))))
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- The **coefficients are identical**: quasi-Poisson changes only the uncertainty, not the estimates.
+- Every standard error is multiplied by $\sqrt{\hat\phi} = `r round(sqrt(summary(m_qp)$dispersion), 2)`$.
+- `summary(m_qp)` reports **t** tests instead of z tests, because $\phi$ is estimated.
+:::
+
+Models are now compared with an **F-test** (as in `lm()`), because the dispersion is estimated:
+
+```{r}
+#| label: qp-anova
+m_qp_add <- glm(breaks ~ wool + tension, family = quasipoisson,
+                data = warpbreaks)
+anova(m_qp_add, m_qp, test = "F")
+```
+
+The interaction is still supported, but the p-value is now `r round(anova(m_qp_add, m_qp, test = "F")[2, "Pr(>F)"], 3)` instead of `r format.pval(anova(m_add, m_int, test = "Chisq")[2, "Pr(>Chi)"], digits = 2)`. The naive Poisson analysis overstated the evidence by several orders of magnitude.
+
+Quasi-Poisson has no likelihood, so there is **no AIC** (`AIC(m_qp)` returns `NA`).
+
+### Negative binomial regression
+
+The **negative binomial** distribution is a count distribution with an extra parameter $\theta$ that lets the variance grow faster than the mean:
+
+$$
+\text{Var}(y) = \mu + \frac{\mu^2}{\theta}.
+$$
+
+Small $\theta$ means strong overdispersion; as $\theta \to \infty$ it becomes the Poisson. It has a proper likelihood, so AIC and likelihood-ratio tests are available. It is fitted with `glm.nb()` from the **MASS** package (installed with R):
+
+```{r}
+#| label: negbin
+m_nb <- MASS::glm.nb(breaks ~ wool * tension, data = warpbreaks)
+m_nb$theta
+AIC(m_int, m_nb)
+```
+
+```{r}
+#| label: negbin-rr
+tidy(m_nb, exponentiate = TRUE, conf.int = TRUE) |>
+  select(term, rate_ratio = estimate, conf.low, conf.high) |>
+  mutate(across(where(is.numeric), \(x) round(x, 2)))
+```
+
+The estimated $\theta$ is `r round(m_nb$theta, 1)` and AIC drops from `r round(AIC(m_int), 1)` (Poisson) to `r round(AIC(m_nb), 1)`: the negative binomial describes these data much better. Here the rate ratios are the same as in the Poisson fit (with a full set of group means, both models reproduce the six sample means), but the confidence intervals are wider.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: quasi-Poisson or negative binomial?
+
+Both allow extra variance, but in different shapes:
+
+| | Variance | Weights given to large counts | Likelihood / AIC |
+|---|---|---|---|
+| Quasi-Poisson | $\phi\,\mu$ (proportional to the mean) | as in Poisson | no |
+| Negative binomial | $\mu + \mu^2/\theta$ (grows quadratically) | smaller (large counts are noisier) | yes |
+
+When the model contains continuous predictors, the two can give **different coefficients**, because they weight observations differently. A practical check is to group observations by fitted value and plot the observed variance against the mean: a straight line suggests quasi-Poisson, a curve bending upwards suggests the negative binomial. The negative binomial can be derived as a Poisson whose mean varies between units according to a gamma distribution — a model for *unobserved heterogeneity*.
+
+The likelihood-ratio test of Poisson against negative binomial is non-standard ($\theta = \infty$ is on the boundary of the parameter space), so comparing AIC, or simply looking at $\hat\phi$, is the usual practice.
+:::
+
+### Why it matters: a coverage simulation
+
+How bad is it to ignore overdispersion? We simulate 1000 studies with two groups of 30, true rate ratio 1.5, and negative-binomial (overdispersed) counts, and record how often the usual 95% Wald confidence interval for the rate ratio contains the true value:
+
+```{r}
+#| label: coverage
+set.seed(5)
+cover <- replicate(1000, {
+  g <- gl(2, 30, labels = c("a", "b"))
+  y <- rnbinom(60, mu = ifelse(g == "a", 4, 6), size = 2)
+  sapply(c("poisson", "quasipoisson"), \(fam) {
+    m <- glm(y ~ g, family = fam)
+    est <- coef(m)["gb"]
+    se <- sqrt(vcov(m)["gb", "gb"])
+    est - 1.96 * se < log(1.5) & log(1.5) < est + 1.96 * se
+  })
+})
+rowMeans(cover)
+```
+
+The "95%" Poisson intervals contain the truth only `r round(100 * rowMeans(cover)[1])`% of the time; the quasi-Poisson intervals `r round(100 * rowMeans(cover)[2])`%. Ignoring overdispersion produces intervals that are too narrow and too many false discoveries.
+
+## 8. Exposure and offsets: modelling rates
+
+Often the units we count over have different **sizes**: clinics serve different numbers of patients, roads have different lengths, observation periods have different durations. A clinic with 8000 person-years of follow-up will see more cases than one with 500 simply because it is bigger. What we want to compare is the **rate**: cases per person-year.
+
+We simulate 40 clinics. Urban clinics are large, rural clinics small, and the **true rate** is 2 cases per 1000 person-years in urban areas and 3 in rural areas (rate ratio 1.5).
+
+```{r}
+#| label: clinics-sim
+set.seed(1)
+n_cl <- 40
+clinics <- tibble::tibble(
+  area = factor(rep(c("urban", "rural"), each = n_cl / 2),
+                levels = c("urban", "rural")),
+  person_years = c(round(runif(n_cl / 2, 2000, 8000)),
+                   round(runif(n_cl / 2, 200, 2000)))
+)
+true_rate <- ifelse(clinics$area == "urban", 2, 3) / 1000
+clinics$cases <- rpois(n_cl, true_rate * clinics$person_years)
+
+clinics |>
+  summarise(cases = sum(cases), person_years = sum(person_years), .by = area)
+```
+
+A model of the raw counts answers the wrong question:
+
+```{r}
+#| label: clinics-naive
+m_naive <- glm(cases ~ area, family = poisson, data = clinics)
+exp(coef(m_naive))
+```
+
+It says that rural clinics have `r round(exp(coef(m_naive))["arearural"], 2)` times as many cases — because they are smaller, not because the risk is lower. To model the rate we write
+
+$$
+\log\frac{\mu_i}{t_i} = \beta_0 + \beta_1 x_i
+\quad\Longleftrightarrow\quad
+\log\mu_i = \log t_i + \beta_0 + \beta_1 x_i ,
+$$
+
+where $t_i$ is the exposure (person-years). The term $\log t_i$ enters the model with a coefficient **fixed at 1**: it is an **offset**, not a parameter to estimate.
+
+```{r}
+#| label: clinics-offset
+m_rate <- glm(cases ~ area + offset(log(person_years)),
+              family = poisson, data = clinics)
+exp(coef(m_rate))
+exp(confint(m_rate))
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- **Intercept**: $e^{\beta_0}$ = `r signif(exp(coef(m_rate))[1], 3)` cases per person-year in urban clinics, i.e. `r round(1000 * exp(coef(m_rate))[1], 2)` per 1000 person-years (true value: 2).
+- **`arearural`**: the rate ratio. Rural clinics have `r round(exp(coef(m_rate))["arearural"], 2)` times the rate of urban ones (95% CI `r round(exp(confint(m_rate))["arearural", 1], 2)` to `r round(exp(confint(m_rate))["arearural", 2], 2)`; true value 1.5). The naive model had the direction wrong.
+- The offset does not appear in the coefficient table, because it has no coefficient.
+:::
+
+Predictions need the exposure too. To get rates per 1000 person-years, predict for `person_years = 1000`:
+
+```{r}
+#| label: clinics-predict
+new_cl <- tibble::tibble(area = c("urban", "rural"), person_years = 1000)
+new_cl |>
+  mutate(cases_per_1000 = predict(m_rate, newdata = new_cl,
+                                  type = "response"))
+```
+
+Two practical points:
+
+- The offset must be on the **log** scale (because the link is log): `offset(log(person_years))`, not `offset(person_years)`.
+- Entering `log(person_years)` as an ordinary predictor (`+ log(person_years)`) is different: R would *estimate* its coefficient. That can be a useful check (an estimate close to 1 supports the "rate" assumption), but it is no longer a rate model.
+
+## 9. Too many zeros
+
+Sometimes the data contain many more zeros than a Poisson (or even a negative binomial) model predicts. Example: the number of cigarettes smoked yesterday — non-smokers always give 0, smokers give a count that is rarely 0. A first check is to compare the observed number of zeros with the number the fitted model expects, $\sum_i P(Y_i = 0) = \sum_i e^{-\hat\mu_i}$:
+
+```{r}
+#| label: zeros
+c(observed = sum(InsectSprays$count == 0),
+  expected = sum(dpois(0, fitted(m_ins))))
+```
+
+For `InsectSprays` they agree well, so there is no excess of zeros. When there is, two families of models are common:
+
+- **Zero-inflated** models: a mixture of a "structural zero" group (e.g. non-smokers) and a count model (which can also produce zeros);
+- **Hurdle** models: one part models zero vs positive, a second part models the positive counts.
+
+Both are available in the **pscl** package, with the same formula interface:
+
+```{r}
+#| label: zeroinfl
+#| eval: false
+# count part | zero part
+m_zip <- pscl::zeroinfl(y ~ x1 + x2 | x1, data = my_data, dist = "poisson")
+m_hnb <- pscl::hurdle(y ~ x1 + x2 | x1, data = my_data, dist = "negbin")
+```
+
+The **glmmTMB** package also fits these models and adds random effects. Use them when the zeros have a plausible separate mechanism, not just because the data contain zeros: a Poisson with a small mean produces many zeros on its own.
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Using `lm()` on counts** (or on `log(y + 1)`). Predictions can be negative, the variance is wrong, and back-transforming a log-mean is not the mean.
+2. **Reading coefficients as additive changes.** They are on the log scale: exponentiate for rate ratios, and use predicted counts for absolute differences.
+3. **Ignoring overdispersion.** Always compute the Pearson dispersion. Values well above 1 make Poisson p-values far too small; use quasi-Poisson or negative binomial.
+4. **Forgetting the exposure** when units differ in size or observation time, or writing `offset(t)` instead of `offset(log(t))`.
+5. **Comparing quasi-Poisson models with AIC or χ² tests.** There is no likelihood: use `anova(..., test = "F")`.
+6. **Misreading main effects in an interaction model.** With `wool * tension`, the `woolB` rate ratio refers to the reference tension only. Report predicted counts for all combinations.
+:::
+
+## 10. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. A Poisson coefficient is 0.18. What is the rate ratio, and what does it mean?
+
+$e^{0.18} \approx 1.20$: each one-unit increase in the predictor multiplies the expected count by 1.2, i.e. about 20% more events, holding the other predictors constant.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. You fit a quasi-Poisson model and the coefficients are exactly those of the Poisson model. Did something go wrong?
+
+No. Quasi-Poisson uses the same estimating equations as Poisson; it only rescales the standard errors by $\sqrt{\hat\phi}$.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. Why does the offset enter as `log(exposure)` with a coefficient fixed at 1?
+
+Because we model $\log(\mu/t) = \eta$, which is $\log\mu = \log t + \eta$. If $t$ doubles, the expected count doubles. Estimating the coefficient would allow other relationships, and the model would no longer be a model of the rate.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q4. The Pearson dispersion of your model is 0.95. Should you switch to a negative binomial?
+
+No: a value close to 1 is what a well-specified Poisson model produces. (Values clearly *below* 1 — underdispersion — are rarer and would need a different treatment.)
+:::
+
+## 11. Exercises
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — rate ratios.** Refit `m_ins` with spray C as the reference level (hint: `relevel()`). Report the rate ratio of spray A versus C with its 95% CI, and write one sentence interpreting it.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+ins_c <- InsectSprays |> mutate(spray = relevel(spray, ref = "C"))
+m_c <- glm(count ~ spray, family = poisson, data = ins_c)
+tidy(m_c, exponentiate = TRUE, conf.int = TRUE)
+```
+The RR for spray A vs C is about 7.0 (95% CI roughly 4.7 to 10.8): plots treated with A have about seven times as many insects as plots treated with C. It is simply $1/0.144$ — changing the reference level inverts the ratio; the model is the same.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — interpret an output.** From the coefficients of `m_int`, compute the rate ratio of wool B versus wool A at **medium** tension. Check your answer against the ratio of the two sample means.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+b <- coef(m_int)
+exp(b["woolB"] + b["woolB:tensionM"])
+
+means <- with(warpbreaks, tapply(breaks, list(wool, tension), mean))
+means["B", "M"] / means["A", "M"]
+```
+Both give about 1.20: at medium tension wool B has about 20% *more* breaks than wool A, while at low tension it has about 37% fewer (RR 0.63). The interaction is precisely this change in the ratio.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — overdispersion in InsectSprays.** The dispersion of `m_ins` is about 1.5. Refit the model with `family = quasipoisson`. What happens to the coefficient and the standard error of `sprayC`? Does the conclusion "spray C is much more effective than A" change?
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+m_ins_qp <- glm(count ~ spray, family = quasipoisson, data = InsectSprays)
+summary(m_ins_qp)$coefficients["sprayC", ]
+exp(confint.default(m_ins_qp))["sprayC", ]
+```
+The coefficient is unchanged ($-1.94$, RR 0.14); the standard error is multiplied by $\sqrt{1.51} \approx 1.23$. The Wald 95% CI for the rate ratio widens to roughly 0.09–0.24, still far from 1. The conclusion stands; only the precision is more honest. (`confint.default()` gives Wald intervals, which work for quasi models.)
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 4 — debug.** A colleague models the clinic data with
+
+```r
+glm(cases ~ area + offset(person_years), family = poisson, data = clinics)
+```
+
+and gets an error: *no valid set of coefficients has been found*. What is wrong? What would `glm(cases ~ area + log(person_years), ...)` estimate instead?
+
+::: {.callout-tip collapse="true"}
+## Solution
+The offset must be on the scale of the linear predictor, which is the **log** of the mean: `offset(log(person_years))`. With `offset(person_years)` the model claims that $\log\mu$ grows by 1 for every extra person-year, i.e. expected counts of order $e^{8000}$, and the fitting algorithm cannot even start.
+
+`+ log(person_years)` estimates a coefficient for log-exposure instead of fixing it at 1. For these simulated data the counts really are proportional to exposure, so the estimate should be compatible with 1 (it comes out at about 0.85, with a confidence interval that includes 1 — 40 clinics do not pin it down precisely). In real data, an estimate clearly different from 1 means that counts are not simply proportional to exposure.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 5 — predict the output.** In `m_rate`, suppose you measure exposure in **thousands** of person-years (`py_k = person_years / 1000`) and use `offset(log(py_k))`. Which coefficients change, and how? Check.
+
+::: {.callout-tip collapse="true"}
+## Solution
+Only the intercept changes: $\log(\mu) = \log(t/1000) + \beta_0' + \dots$ means $\beta_0' = \beta_0 + \log(1000)$, so $e^{\beta_0'}$ is the rate per 1000 person-years (about 1.9). The rate ratio for `arearural` is identical.
+
+```r
+clinics <- clinics |> mutate(py_k = person_years / 1000)
+m_rate_k <- glm(cases ~ area + offset(log(py_k)), family = poisson,
+                data = clinics)
+exp(coef(m_rate_k))
+```
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 6 — mini-analysis.** Using `warpbreaks`, fit the **additive** model `breaks ~ wool + tension` with Poisson, quasi-Poisson and negative binomial. For each, report the rate ratio for high vs low tension with its 95% CI (use `confint.default()` for all three for a fair comparison). Which intervals would you trust, and why?
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+f <- breaks ~ wool + tension
+fits <- list(
+  poisson = glm(f, family = poisson, data = warpbreaks),
+  quasi   = glm(f, family = quasipoisson, data = warpbreaks),
+  negbin  = MASS::glm.nb(f, data = warpbreaks)
+)
+sapply(fits, \(m) exp(c(coef(m)["tensionH"],
+                        confint.default(m)["tensionH", ])))
+sapply(fits[c(1, 3)], AIC)
+```
+All three give a rate ratio of about 0.6 (roughly 40% fewer breaks at high tension). The Poisson interval is the narrowest; the quasi-Poisson and negative binomial intervals are about twice as wide. Since the Pearson dispersion of this model is well above 1 (about 4.3) the Poisson interval is too optimistic; the quasi-Poisson and negative binomial intervals are the ones to report, and AIC clearly prefers the negative binomial over the Poisson.
+:::
+:::
+
+## Summary
+
+| Idea / function | What it does |
+|---|---|
+| `glm(y ~ x, family = poisson)` | Poisson regression, log link |
+| `exp(coef(m))`, `exp(confint(m))` | rate ratios and their CIs |
+| `tidy(m, exponentiate = TRUE, conf.int = TRUE)` | rate-ratio table |
+| `predict(m, newdata, type = "response")` | expected counts |
+| `anova(m0, m1, test = "Chisq")` | likelihood-ratio test (Poisson, NB) |
+| `offset(log(exposure))` | model rates per unit of exposure |
+| `sum(residuals(m, "pearson")^2) / df.residual(m)` | Pearson dispersion (≈ 1 for Poisson) |
+| `glm(..., family = quasipoisson)`, `anova(..., test = "F")` | inflate SEs for overdispersion |
+| `MASS::glm.nb()` | negative binomial regression |
+| `pscl::zeroinfl()`, `pscl::hurdle()` | models for excess zeros |
+
+- Counts are non-negative and their variance grows with the mean: use a **Poisson GLM with log link**, not `lm()`.
+- Exponentiated coefficients are **rate ratios**: multiplicative effects on the expected count.
+- When units differ in size or observation time, model the **rate** with an **offset**.
+- Always check **overdispersion**; if present, use quasi-Poisson or negative binomial — otherwise the p-values are far too small.
+- Excess zeros with a separate mechanism call for **zero-inflated** or **hurdle** models.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), <https://openintro-ims.netlify.app>
+- Roback & Legler, *Beyond Multiple Linear Regression*, chapter 4 on Poisson regression, <https://bookdown.org/roback/bookdown-BeyondMLR/>
+- Zeileis, Kleiber & Jackman, "Regression Models for Count Data in R", *Journal of Statistical Software* 27(8), 2008, <https://www.jstatsoft.org/article/view/v027i08>
+:::

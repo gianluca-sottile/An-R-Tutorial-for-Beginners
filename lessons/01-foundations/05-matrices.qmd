@@ -1,0 +1,454 @@
+---
+title: "Matrices"
+subtitle: "Two-dimensional tables of one type: create, bind, slice and multiply"
+description: "Create matrices with matrix(), fill them by row or column, add rows and columns, name dimensions, extract elements (including drop = FALSE), and use element-wise and matrix arithmetic, transposition, solve() and row/column summaries."
+aliases:
+  - ../../R-course_lesson-3.html
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Level 1 · Foundations]{.level-1} [⏱ ~50 min]{} [Prerequisites: [Vectors](04-vectors.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- create a matrix with `matrix()`, choosing how it is filled with `byrow`;
+- inspect and set its dimensions and names with `dim()` and `dimnames()`;
+- add rows and columns with `rbind()` and `cbind()`;
+- extract elements, rows and columns with `[row, col]`, keeping the matrix shape with `drop = FALSE`;
+- tell element-wise multiplication `*` from matrix multiplication `%*%`, and compute row and column summaries.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+# Base R only: nothing to load.
+```
+
+## 1. Why matrices?
+
+A vector is a single line of values. Many things in statistics are naturally **rectangular**: a table of exam marks with one row per student and one column per subject; the counts in a contingency table; a correlation table between variables; the pixel intensities of a grey-scale image.
+
+A **matrix** is a vector arranged in **rows and columns**. Like a vector, it has **one type only**: all numbers, or all text, or all logicals. This restriction makes matrices fast and is what allows linear algebra (the mathematics behind regression, PCA and many machine-learning methods), but it also explains why we usually store *datasets* in data frames instead (Section 8).
+
+## 2. Creating a matrix
+
+```{r}
+#| label: matrix-usage
+#| eval: false
+matrix(data, nrow = 1, ncol = 1, byrow = FALSE, dimnames = NULL)
+```
+
+- `data`: the values, usually a vector;
+- `nrow`, `ncol`: number of rows and columns (giving one is enough: R deduces the other);
+- `byrow`: if `FALSE` (default) values fill the matrix **column by column**; if `TRUE`, **row by row**;
+- `dimnames`: optional row and column names.
+
+```{r}
+#| label: byrow
+matrix_a <- matrix(1:10, nrow = 5, ncol = 2, byrow = TRUE)
+matrix_a
+
+matrix_b <- matrix(1:10, nrow = 5, ncol = 2, byrow = FALSE)
+matrix_b
+```
+
+Compare the two outputs: the same ten numbers, arranged differently. In `matrix_a` the numbers 1, 2 fill the first row; in `matrix_b` the numbers 1 to 5 fill the first column. **Column-wise filling is R's default**, and it is worth remembering because it also explains how R stores matrices internally: a matrix is just a vector, read column after column.
+
+```{r}
+#| label: dim
+m <- matrix(1:12, ncol = 3)
+m
+dim(m)       # rows, columns
+nrow(m)
+ncol(m)
+length(m)    # total number of elements = rows x columns
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+The labels `[1,]`, `[2,]`, … on the left are **row indices** and `[,1]`, `[,2]`, … on top are **column indices**: they show exactly how you would extract that row or column. `dim(m)` returns `r dim(m)`: `r nrow(m)` rows and `r ncol(m)` columns. Note that `length()` counts **all** elements (`r length(m)`), not the columns.
+:::
+
+### Names for rows and columns
+
+```{r}
+#| label: dimnames
+marks <- matrix(
+  c(28, 30, 24, 27, 22, 26),
+  nrow = 3,
+  dimnames = list(
+    c("anna", "ben", "carla"),       # row names
+    c("statistics", "programming")   # column names
+  )
+)
+marks
+rownames(marks)
+colnames(marks)
+```
+
+`dimnames` is a **list** of two vectors: row names first, column names second. You can also set them afterwards with `rownames(m) <- ...` and `colnames(m) <- ...`.
+
+## 3. Adding rows and columns: `cbind()` and `rbind()`
+
+`cbind()` binds objects side by side as **c**olumns; `rbind()` stacks them as **r**ows.
+
+```{r}
+#| label: cbind
+cbind(matrix_a, 1:5)          # add one column
+```
+
+```{r}
+#| label: rbind
+m2 <- rbind(m, c(100, 200, 300))   # add one row at the bottom
+m2
+dim(m2)
+```
+
+Two matrices can be bound together if they have the right shape: the **same number of rows** for `cbind()`, the **same number of columns** for `rbind()`.
+
+```{r}
+#| label: bind-two
+left  <- matrix(1:12,  ncol = 3)   # 4 x 3
+right <- matrix(13:24, ncol = 3)   # 4 x 3
+dim(cbind(left, right))            # 4 x 6
+dim(rbind(left, right))            # 8 x 3
+```
+
+With named arguments, the names become column (or row) names: `cbind(marks, history = c(25, 29, 30))` adds a column called `history`.
+
+## 4. Extracting elements: `[row, col]`
+
+Inside the square brackets, a **comma** separates the row selection (before) from the column selection (after). Leaving one side empty means "all".
+
+| Code | Selects |
+|---|---|
+| `m[1, 2]` | the element in row 1, column 2 |
+| `m[1:3, 2:3]` | rows 1–3 and columns 2–3 |
+| `m[, 1]` | all rows of column 1 |
+| `m[1, ]` | all columns of row 1 |
+| `m[-1, ]` | everything except row 1 |
+
+```{r}
+#| label: slice
+m
+m[1, 2]
+m[1:3, 2:3]
+m[, 1]
+m[1, ]
+```
+
+`m[1, 2]` is `r m[1, 2]`: row 1, column 2. Every indexing technique from [Vectors](04-vectors.qmd) works on each side of the comma: negative positions, logical conditions, names.
+
+```{r}
+#| label: slice-names
+marks["ben", "programming"]
+marks[marks[, "statistics"] >= 26, ]    # students with at least 26 in statistics
+```
+
+### `drop = FALSE`: keeping the matrix shape
+
+Notice that `m[, 1]` printed a plain **vector**, not a one-column matrix. When a selection has only one row or one column, R *drops* the unnecessary dimension. This is usually convenient, but inside functions it can break code that expects a matrix. Add `drop = FALSE` to keep the result two-dimensional:
+
+```{r}
+#| label: drop
+dim(m[, 1])               # NULL: it is a vector
+m[, 1, drop = FALSE]
+dim(m[, 1, drop = FALSE]) # 4 x 1
+```
+
+Without a comma, a single index treats the matrix as the underlying vector (column by column): `m[5]` is the 5th element counting down the columns, and `m[m > 6]` returns all the values greater than 6 as a vector.
+
+## 5. Matrix arithmetic
+
+Ordinary operators work **element by element**, exactly as for vectors:
+
+```{r}
+#| label: elementwise
+A <- matrix(c(2, 1, 1, 3), nrow = 2)
+B <- matrix(1:4, nrow = 2)
+A
+B
+A * B      # element by element
+A + 10     # 10 is recycled to every element
+```
+
+**Matrix multiplication** in the linear-algebra sense — rows times columns — uses a different operator, `%*%`:
+
+```{r}
+#| label: matmult
+A %*% B
+```
+
+The top-left element of `A %*% B` is (row 1 of `A`) · (column 1 of `B`) $= 2 \times 1 + 1 \times 2 = 4$. Confusing `*` with `%*%` does not produce an error when the matrices are square: it silently gives a different answer.
+
+Two more operations you will meet in statistics:
+
+```{r}
+#| label: transpose-solve
+t(B)                  # transpose: rows become columns
+solve(A)              # inverse of A
+round(A %*% solve(A), 10)   # identity matrix (rounded: floating point!)
+solve(A, c(5, 10))    # solves the system A x = (5, 10)
+```
+
+We rounded `A %*% solve(A)` because tiny floating-point errors (see [Data types](03-data-types.qmd)) would otherwise show up as numbers like $10^{-16}$ instead of exact zeros.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: matrix multiplication and linear systems
+
+For $A$ of size $n \times k$ and $B$ of size $k \times p$, the product $C = AB$ is the $n \times p$ matrix with
+$$
+c_{ij} = \sum_{l=1}^{k} a_{il}\, b_{lj} .
+$$
+The number of columns of $A$ must equal the number of rows of $B$. `solve(A, b)` finds the vector $x$ such that $Ax = b$; for our example,
+$$
+\begin{pmatrix} 2 & 1 \\ 1 & 3 \end{pmatrix}
+\begin{pmatrix} x_1 \\ x_2 \end{pmatrix}
+=
+\begin{pmatrix} 5 \\ 10 \end{pmatrix}
+\quad\Rightarrow\quad x = (1, 3).
+$$
+Least-squares regression ([Simple regression](../09-regression/38-simple-regression.qmd)) is, at its core, the solution of such a system: $\hat\beta = (X^\top X)^{-1} X^\top y$. R's `lm()` uses a numerically more stable method (a QR decomposition) rather than computing the inverse explicitly.
+:::
+
+## 6. Row and column summaries
+
+Summaries by row or by column are very common, and R has fast dedicated functions:
+
+```{r}
+#| label: row-col
+marks
+rowMeans(marks)     # average mark of each student
+colMeans(marks)     # average mark in each subject
+rowSums(marks)
+colSums(marks)
+```
+
+For any other function, `apply()` applies it to each row (`MARGIN = 1`) or each column (`MARGIN = 2`):
+
+```{r}
+#| label: apply
+apply(marks, 1, max)    # best mark of each student
+apply(marks, 2, sd)     # spread of marks in each subject
+```
+
+`apply()` is your first taste of *iteration without loops*; it is developed in [Iteration](../03-programming/17-iteration.qmd).
+
+## 7. One type only
+
+Try to put numbers and text in the same matrix:
+
+```{r}
+#| label: one-type
+matrix(c(1, "a", TRUE, 2), nrow = 2)
+```
+
+Everything was coerced to character (note the quotes), following the rules from [Data types](03-data-types.qmd). The same happens if you convert a dataset with mixed columns:
+
+```{r}
+#| label: one-type-penguins
+as.matrix(penguins[1:3, c("species", "bill_len")])
+```
+
+The bill lengths are now text: you can no longer compute their mean.
+
+## 8. Matrix or data frame?
+
+| | Matrix | Data frame |
+|---|---|---|
+| Types | One type for the whole table | One type **per column** |
+| Typical use | Linear algebra, numeric tables, images, distance and correlation tables | **Datasets**: rows = observations, columns = variables |
+| Row and column access | `m[i, j]` | `df[i, j]`, `df$col` |
+
+A real dataset almost always mixes types — `penguins` has factors (`species`, `island`, `sex`), decimals and integers — so we store it as a **data frame** ([Data frames](../02-data/08-data-frames.qmd)). Matrices appear when a method needs pure numbers: you will create them explicitly with `as.matrix()` before PCA or clustering, for instance.
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Forgetting that `matrix()` fills by column.** If your data are written row by row, use `byrow = TRUE`.
+2. **Forgetting the comma.** `m[2]` is the 2nd *element*; `m[2, ]` is the 2nd *row*.
+3. **Unexpected dropping.** `m[, 1]` is a vector, not a matrix. Use `drop = FALSE` when the shape matters.
+4. **`*` instead of `%*%`.** Element-wise and matrix products are different; with square matrices R will not warn you.
+5. **Mixed types.** A single text value turns the whole matrix into text.
+6. **Silent recycling in `cbind()`.** `cbind(1:3, 1:2)` only warns and recycles. Check dimensions with `dim()`.
+:::
+
+## 9. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. What is `matrix(1:6, nrow = 2)[2, 3]`?
+
+`6`. Filled by column, the matrix is `1 3 5` in row 1 and `2 4 6` in row 2; row 2, column 3 is 6.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. If `X` is a 100 x 3 matrix, what are `length(X)` and `dim(t(X))`?
+
+`length(X)` is 300 (all elements), and `dim(t(X))` is `3 100`.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. Why is `penguins` a data frame and not a matrix?
+
+Because its columns have different types (factors, numbers). A matrix would coerce everything to character.
+:::
+
+## 10. Exercises
+
+### Interactive (run in your browser)
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — build a matrix.** Create a 3 x 4 matrix `q` containing the numbers 1 to 12 **filled by row**. Then print its dimensions and the element in row 2, column 3.
+
+```{webr}
+#| exercise: ex_05_1
+q <- matrix(1:12, nrow = ______, byrow = ______)
+q
+dim(q)
+q[______, ______]
+```
+
+::: {.hint exercise="ex_05_1"}
+Three rows, `byrow = TRUE`, and `q[row, column]`.
+:::
+
+::: {.solution exercise="ex_05_1"}
+```r
+q <- matrix(1:12, nrow = 3, byrow = TRUE)
+q
+dim(q)     # 3 4
+q[2, 3]    # 7
+```
+Filled by row, row 2 contains 5, 6, 7, 8, so the third element is 7. With the default `byrow = FALSE`, it would be 8.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — slicing and `drop`.** Using the matrix `marks` below: (a) extract the programming marks of all students; (b) extract the same column *as a one-column matrix*; (c) add a column `history` with marks 25, 29, 30; (d) compute each student's average.
+
+```{webr}
+#| exercise: ex_05_2
+marks <- matrix(
+  c(28, 30, 24, 27, 22, 26), nrow = 3,
+  dimnames = list(c("anna", "ben", "carla"), c("statistics", "programming"))
+)
+marks[, "programming"]
+marks[, "programming", ______]
+marks <- cbind(marks, ______ = c(25, 29, 30))
+______(marks)
+```
+
+::: {.hint exercise="ex_05_2"}
+Use `drop = FALSE`; a named argument in `cbind()` becomes the column name; `rowMeans()` averages each row.
+:::
+
+::: {.solution exercise="ex_05_2"}
+```r
+marks[, "programming", drop = FALSE]
+marks <- cbind(marks, history = c(25, 29, 30))
+rowMeans(marks)    # anna 26.67, ben 27.00, carla 26.67
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — predict the output: `*` vs `%*%`.** Without running the code, predict the top-left element of each result. Then run it.
+
+```{webr}
+#| exercise: ex_05_3
+P <- matrix(c(1, 2, 3, 4), nrow = 2)
+Q <- matrix(c(0, 1, 1, 0), nrow = 2)
+P * Q
+P %*% Q
+Q %*% P
+```
+
+::: {.hint exercise="ex_05_3"}
+`P` is `1 3 / 2 4` (filled by column) and `Q` is `0 1 / 1 0`. For `%*%`, multiply row 1 of the left matrix by column 1 of the right one and add.
+:::
+
+::: {.solution exercise="ex_05_3"}
+`P * Q` has top-left $1 \times 0 = 0$. `P %*% Q` has top-left $1 \times 0 + 3 \times 1 = 3$ — multiplying by `Q` on the right **swaps the columns** of `P`. `Q %*% P` has top-left $0 \times 1 + 1 \times 2 = 2$ — multiplying on the left **swaps the rows**. So, unlike numbers, `P %*% Q` and `Q %*% P` differ.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 4 — column summaries on real data.** Build a numeric matrix with the four measurement columns of `penguins` for complete rows only, then compute the mean and the standard deviation of each column.
+
+```{webr}
+#| exercise: ex_05_4
+meas <- as.matrix(penguins[, c("bill_len", "bill_dep", "flipper_len", "body_mass")])
+meas <- meas[complete.cases(meas), ]
+dim(meas)
+______(meas)
+apply(meas, ______, sd)
+```
+
+::: {.hint exercise="ex_05_4"}
+`colMeans()` for the means; `MARGIN = 2` means "by column".
+:::
+
+::: {.solution exercise="ex_05_4"}
+```r
+colMeans(meas)
+apply(meas, 2, sd)
+```
+`complete.cases()` keeps the 342 rows without any missing value. The columns are on very different scales (millimetres vs grams): this is why methods such as PCA usually standardise variables first.
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 5 — a linear system.** A café sells coffee and croissants. On Monday, 3 coffees and 2 croissants cost 7.30 €; on Tuesday, 1 coffee and 4 croissants cost 7.10 €. Write the system as $A x = b$ and find the two prices with `solve()`. Check your answer with `%*%`.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+A <- matrix(c(3, 2,
+              1, 4), nrow = 2, byrow = TRUE)
+b <- c(7.30, 7.10)
+prices <- solve(A, b)
+prices          # coffee 1.50, croissant 1.40
+A %*% prices    # should give back 7.30 and 7.10
+```
+Each row of `A` is one day, each column one product; `byrow = TRUE` lets you type the system as you would write it on paper.
+:::
+:::
+
+## Summary
+
+| Function | What it does |
+|---|---|
+| `matrix(x, nrow, ncol, byrow)` | Create a matrix (filled by column by default) |
+| `dim()`, `nrow()`, `ncol()` | Dimensions |
+| `dimnames()`, `rownames()`, `colnames()` | Row and column names |
+| `cbind()`, `rbind()` | Add columns / rows |
+| `m[i, j]`, `m[i, ]`, `m[, j]`, `drop = FALSE` | Extract elements, rows, columns |
+| `*` vs `%*%` | Element-wise vs matrix product |
+| `t()`, `solve()` | Transpose; inverse or solve $Ax = b$ |
+| `rowSums()`, `colMeans()`, `apply()` | Row/column summaries |
+
+- A matrix is a vector with two dimensions and **one type**.
+- `[row, col]`: a comma separates rows from columns; an empty side means "all".
+- Single rows/columns are dropped to vectors unless `drop = FALSE`.
+- For datasets with mixed types, use data frames.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- Wickham, *Advanced R* (2e), section "Attributes" (matrices and arrays), <https://adv-r.hadley.nz/vectors-chap.html#attributes>
+- *An Introduction to R* (R Core Team), chapter "Arrays and matrices", <https://cran.r-project.org/doc/manuals/r-release/R-intro.html>
+:::

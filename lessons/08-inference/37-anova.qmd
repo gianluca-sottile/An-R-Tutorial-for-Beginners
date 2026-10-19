@@ -1,0 +1,595 @@
+---
+title: "Analysis of variance (ANOVA)"
+subtitle: "Comparing several means at once — one-way and two-way designs, diagnostics and transformations"
+description: "Understand ANOVA as a comparison of between-group and within-group variability, fit one-way and two-way models with aov(), check residuals, handle unequal variances with Welch's ANOVA or a transformation, and follow up with Tukey's comparisons."
+aliases:
+  - ../../R-course_lesson-22.html
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Level 3 · Inference]{.level-3} [⏱ ~90 min]{} [Prerequisites: [t-tests](34-t-tests.qmd), [Hypothesis testing](33-hypothesis-testing.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- explain why we use ANOVA instead of many t-tests, and what the **F ratio** compares;
+- fit a one-way ANOVA with `aov()` (or `lm()` + `anova()`) and report **η²**;
+- check the assumptions with **residual plots**, and use Welch's ANOVA or a **transformation** when variances differ;
+- identify which groups differ with **Tukey's HSD**;
+- fit and interpret a **two-way ANOVA** with an interaction, using an interaction plot.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(ggplot2)
+library(readr)
+```
+
+## 1. Why not just run many t-tests?
+
+`PlantGrowth` has **three** groups (a control and two treatments). With $k$ groups there are $k(k-1)/2$ pairs: 3 pairs for 3 groups, 10 pairs for 5 groups. Each t-test at $\alpha = 0.05$ has a 5% chance of a false positive, so with many tests the chance of *at least one* false alarm grows (see [Hypothesis testing](33-hypothesis-testing.qmd)).
+
+A quick simulation: 5 groups of 10 observations, all drawn from **the same** population, and all 10 pairwise t-tests.
+
+```{r}
+#| label: many-t
+set.seed(2026)
+any_sig <- replicate(2000, {
+  y <- rnorm(50)
+  g <- factor(rep(1:5, each = 10))
+  p <- pairwise.t.test(y, g, p.adjust.method = "none")$p.value
+  any(p < 0.05, na.rm = TRUE)
+})
+mean(any_sig)
+```
+
+Even though there are no differences at all, about `r round(100 * mean(any_sig))`% of these "studies" find at least one "significant" pair. **ANOVA** answers the overall question — *are all the means equal?* — with **one** test at level $\alpha$.
+
+## 2. The intuition: between versus within
+
+```{r}
+#| label: plant-summary
+PlantGrowth |>
+  summarise(n = n(), mean = mean(weight), sd = sd(weight), .by = group)
+```
+
+The group means differ. ANOVA asks whether they differ **more than we would expect given how much plants vary inside each group**. The total variability is split into two parts:
+
+- **between groups**: how far the group means are from the grand mean;
+- **within groups**: how far each plant is from its own group mean.
+
+```{r}
+#| label: fig-decomposition
+#| fig-cap: "Decomposition of variability in PlantGrowth. Coloured horizontal lines: group means. Dashed line: grand mean. Thin vertical lines: within-group deviations of each plant from its group mean."
+grand_mean <- mean(PlantGrowth$weight)
+
+plants <- PlantGrowth |>
+  mutate(id = row_number()) |>
+  mutate(group_mean = mean(weight), .by = group)
+
+ggplot(plants, aes(id, weight, colour = group)) +
+  geom_segment(aes(xend = id, y = group_mean, yend = weight), alpha = 0.6) +
+  geom_point(size = 2) +
+  geom_line(aes(y = group_mean), linewidth = 1.2) +
+  geom_hline(yintercept = grand_mean, linetype = "dashed") +
+  labs(x = "Plant", y = "Dried weight", colour = "Group")
+```
+
+If the coloured lines are far from the dashed line *compared with* the length of the thin vertical lines, the groups really differ. The **F statistic** measures exactly this:
+
+$$
+F = \frac{\text{variability between groups (per degree of freedom)}}{\text{variability within groups (per degree of freedom)}} = \frac{\text{MS}_\text{between}}{\text{MS}_\text{within}} .
+$$
+
+Under $H_0$ (all population means equal) both mean squares estimate the same noise, so $F$ is around 1. A large $F$ means the group means are more spread out than noise alone would produce. Let us compute it by hand:
+
+```{r}
+#| label: f-by-hand
+k <- 3
+n <- nrow(plants)
+ss_between <- sum((plants$group_mean - grand_mean)^2)
+ss_within  <- sum((plants$weight - plants$group_mean)^2)
+
+f_stat <- (ss_between / (k - 1)) / (ss_within / (n - k))
+c(ss_between = ss_between, ss_within = ss_within, F = f_stat)
+pf(f_stat, df1 = k - 1, df2 = n - k, lower.tail = FALSE)
+```
+
+The last line is the p-value: the probability that an F distribution with `r k - 1` and `r n - k` degrees of freedom exceeds `r round(f_stat, 2)`.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: the ANOVA identity
+
+With $k$ groups, $n_j$ observations in group $j$, group means $\bar y_j$ and grand mean $\bar y$:
+
+$$
+\underbrace{\sum_{j}\sum_{i}(y_{ij} - \bar y)^2}_{\text{SS}_\text{total}}
+= \underbrace{\sum_j n_j(\bar y_j - \bar y)^2}_{\text{SS}_\text{between}}
++ \underbrace{\sum_{j}\sum_{i}(y_{ij} - \bar y_j)^2}_{\text{SS}_\text{within}} .
+$$
+
+Dividing by the degrees of freedom $k-1$ and $n-k$ gives the mean squares. If the errors are independent, normal, with equal variance, then under $H_0$ the ratio follows an $F_{k-1,\,n-k}$ distribution. With two groups, $F = t^2$ for the equal-variance t-test: ANOVA generalises it.
+:::
+
+## 3. One-way ANOVA in R
+
+```{r}
+#| label: aov-plant
+fit_plant <- aov(weight ~ group, data = PlantGrowth)
+summary(fit_plant)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- **`group` row**: between-group variability. `Df` = $k - 1$ = 2; `Sum Sq` = SS between; `Mean Sq` = Sum Sq / Df.
+- **`Residuals` row**: within-group variability, with $n - k$ = 27 degrees of freedom.
+- **`F value`** = `r round(summary(fit_plant)[[1]][["F value"]][1], 2)` = Mean Sq(group) / Mean Sq(residuals) — the same as our hand calculation.
+- **`Pr(>F)`** = `r round(summary(fit_plant)[[1]][["Pr(>F)"]][1], 4)`: if all three population means were equal, an F at least this large would be rare. So at least one mean differs — but ANOVA does not say **which** (Section 6).
+:::
+
+ANOVA is a linear model with a categorical predictor; `lm()` + `anova()` gives the same table and prepares you for [Simple regression](../09-regression/38-simple-regression.qmd):
+
+```{r}
+#| label: lm-anova
+anova(lm(weight ~ group, data = PlantGrowth))
+```
+
+### Effect size: η² (eta squared)
+
+How much of the total variability do the groups explain?
+
+$$
+\eta^2 = \frac{\text{SS}_\text{between}}{\text{SS}_\text{total}} .
+$$
+
+```{r}
+#| label: eta2
+eta_squared <- function(fit) {
+  ss <- summary(fit)[[1]][["Sum Sq"]]
+  ss[1] / sum(ss)
+}
+eta_squared(fit_plant)
+```
+
+The treatment group explains about `r round(100 * eta_squared(fit_plant))`% of the variability in plant weight. (For one-way ANOVA, η² is the $R^2$ of the linear model.)
+
+## 4. Assumptions and residual diagnostics
+
+ANOVA assumes that the **residuals** (each observation minus its group mean) are
+
+1. **independent** — a design question, not something a plot can check;
+2. roughly **normal** — matters mostly for small groups;
+3. of **equal variance** in all groups (*homoscedasticity*) — matters especially when group sizes differ.
+
+Two plots check the last two:
+
+```{r}
+#| label: fig-diag-plant
+#| fig-cap: "Residual diagnostics for the PlantGrowth ANOVA. Left: residuals against fitted values (group means). Right: normal QQ-plot of the residuals."
+#| fig-width: 9
+#| fig-height: 4.5
+par(mfrow = c(1, 2))
+plot(fit_plant, which = 1:2)
+par(mfrow = c(1, 1))
+```
+
+::: {.callout-tip .read-output}
+## How to read the diagnostic plots
+
+- **Residuals vs Fitted**: each vertical strip is one group. We want strips of **similar height**, centred on 0. A funnel (spread growing with the fitted value) signals unequal variances.
+- **Q–Q Residuals**: points close to the diagonal suggest approximately normal residuals. Look for systematic curvature or a few extreme points, not for perfection.
+- Here the spreads are similar and the QQ-plot is acceptable: the assumptions look reasonable.
+:::
+
+A formal check of equal variances is **Bartlett's test** (base R), or **Levene's test**, which is less sensitive to non-normality (`car::leveneTest(weight ~ group, data = PlantGrowth)` in the `car` package):
+
+```{r}
+#| label: bartlett
+bartlett.test(weight ~ group, data = PlantGrowth)
+```
+
+Treat such tests as a complement to the plots, not a gate-keeper: as for normality tests, small samples hide problems and large samples flag trivial ones.
+
+### When variances differ: Welch's ANOVA
+
+Just as Welch's t-test is the safe default for two groups ([t-tests](34-t-tests.qmd)), `oneway.test()` compares several means **without assuming equal variances**:
+
+```{r}
+#| label: welch-anova
+oneway.test(weight ~ group, data = PlantGrowth)
+```
+
+Here it agrees with the classical ANOVA (p = `r round(oneway.test(weight ~ group, data = PlantGrowth)$p.value, 3)`), as expected when variances are similar. If the data are clearly non-normal with small groups, the rank-based **Kruskal–Wallis** test (`kruskal.test()`, see [Non-parametric tests](36-nonparametric-tests.qmd)) is another option.
+
+## 5. Which groups differ? Tukey's HSD
+
+**Post-hoc** comparisons look at all pairs while keeping the family-wise error rate at 5%. **Tukey's Honest Significant Difference** is the standard choice after a one-way ANOVA:
+
+```{r}
+#| label: tukey-plant
+tk_plant <- TukeyHSD(fit_plant)
+tk_plant
+```
+
+```{r}
+#| label: fig-tukey-plant
+#| fig-cap: "Tukey 95% family-wise confidence intervals for the pairwise differences in PlantGrowth. Intervals that do not cross zero indicate significant differences."
+plot(tk_plant, las = 1)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- **`diff`**: difference between the two group means (e.g. `trt2-ctrl` = trt2 − ctrl).
+- **`lwr`, `upr`**: 95% **family-wise** CIs: the method is built so that, in repeated experiments, *all three* intervals together cover the true differences 95% of the time.
+- **`p adj`**: adjusted p-value. Only **trt2 vs trt1** is significant (p = `r round(tk_plant$group["trt2-trt1", "p adj"], 3)`).
+- Compare with [Hypothesis testing](33-hypothesis-testing.qmd), where a *single* t-test of trt2 vs ctrl gave $p \approx 0.047$. Among three comparisons, Tukey's adjusted p for that pair is `r round(tk_plant$group["trt2-ctrl", "p adj"], 2)`: the evidence is weaker once we account for having looked at every pair.
+:::
+
+## 6. A harder case: the poisons experiment
+
+The `poisons` data (Box & Cox, 1964) come from a classic experiment: 48 animals were exposed to one of **3 poisons** and given one of **4 treatments** (antidotes), 4 animals per combination. The outcome is the survival `time` (in units of 10 hours). This is a **balanced two-way design**.
+
+```{r}
+#| label: read-poisons
+#| message: false
+poisons <- read_csv(data_path("poisons.csv"),
+                    col_select = c(time, poison, treat)) |>
+  mutate(poison = factor(poison), treat = factor(treat))
+
+count(poisons, poison, treat) |> head(4)
+```
+
+### One-way first: does the poison matter?
+
+```{r}
+#| label: poison-oneway
+poisons |>
+  summarise(n = n(), mean = mean(time), sd = sd(time), .by = poison)
+
+fit_poison <- aov(time ~ poison, data = poisons)
+summary(fit_poison)
+```
+
+The poison clearly matters. But notice the standard deviations: poison 3, with the shortest survival times, has a **much smaller spread**. This is a warning sign that will become very visible in the two-way analysis.
+
+### The two-way model: main effects and interaction
+
+With two factors we can estimate:
+
+- the **main effect** of each factor (does the poison matter, averaging over treatments? does the treatment matter?);
+- their **interaction**: does the effect of the treatment **depend on** the poison?
+
+The **interaction plot** shows the cell means: parallel lines mean no interaction.
+
+```{r}
+#| label: fig-interaction
+#| fig-cap: "Interaction plot for the poisons experiment: mean survival time for each treatment, one line per poison."
+ggplot(poisons, aes(treat, time, colour = poison, group = poison)) +
+  stat_summary(fun = mean, geom = "line", linewidth = 1) +
+  stat_summary(fun = mean, geom = "point", size = 3) +
+  labs(x = "Treatment", y = "Mean survival time (10 h)", colour = "Poison")
+```
+
+```{r}
+#| label: two-way
+fit_int <- aov(time ~ poison * treat, data = poisons)   # = poison + treat + poison:treat
+summary(fit_int)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- `poison` and `treat` rows: the two **main effects**, both clearly significant.
+- `poison:treat`: the **interaction**. Its p-value (`r round(summary(fit_int)[[1]][["Pr(>F)"]][3], 2)`) gives no strong evidence that the treatment effect depends on the poison — although the plot shows lines that are not quite parallel.
+- **Interpret the interaction first.** If it were important, a "main effect of treatment" would be an average over poisons that hides different stories.
+:::
+
+If there is no evidence of interaction, the simpler **additive** model is often used:
+
+```{r}
+#| label: additive
+fit_add <- aov(time ~ poison + treat, data = poisons)
+summary(fit_add)
+```
+
+### But first: check the residuals
+
+```{r}
+#| label: fig-diag-time
+#| fig-cap: "Residual diagnostics for the two-way model on survival time. The spread of the residuals grows with the fitted value."
+#| fig-width: 9
+#| fig-height: 4.5
+par(mfrow = c(1, 2))
+plot(fit_int, which = 1:2)
+par(mfrow = c(1, 1))
+```
+
+The **funnel** in the left panel is unmistakable: cells with long average survival have far more variable residuals. The standard deviations of the 12 cells range from `r round(min(tapply(poisons$time, interaction(poisons$poison, poisons$treat), sd)), 3)` to `r round(max(tapply(poisons$time, interaction(poisons$poison, poisons$treat), sd)), 3)` — a factor of more than 20 — and the QQ-plot shows heavy tails. Bartlett's test agrees:
+
+```{r}
+#| label: bartlett-time
+bartlett.test(time ~ interaction(poison, treat), data = poisons)$p.value
+```
+
+The equal-variance assumption is badly violated, so the F tests above are not trustworthy.
+
+### The fix: model the rate of dying
+
+When the standard deviation grows with the mean, a **transformation** of the response often stabilises it. Box and Cox showed that for these data the best power transformation is close to $y^{-1}$: the **reciprocal** of survival time. It has a natural meaning — $1/\text{time}$ is the **rate of dying** (how fast the animal dies).
+
+```{r}
+#| label: reciprocal
+poisons <- poisons |> mutate(rate = 1 / time)
+
+fit_rate <- aov(rate ~ poison * treat, data = poisons)
+summary(fit_rate)
+```
+
+```{r}
+#| label: fig-diag-rate
+#| fig-cap: "Residual diagnostics after the reciprocal transformation (rate of dying = 1 / time). The funnel has disappeared."
+#| fig-width: 9
+#| fig-height: 4.5
+par(mfrow = c(1, 2))
+plot(fit_rate, which = 1:2)
+par(mfrow = c(1, 1))
+bartlett.test(rate ~ interaction(poison, treat), data = poisons)$p.value
+```
+
+::: {.callout-tip .read-output}
+## Before and after the transformation
+
+- The residual spread no longer grows with the fitted value, and the QQ-plot is much closer to the line. Bartlett's p-value goes from `r format.pval(bartlett.test(time ~ interaction(poison, treat), data = poisons)$p.value, digits = 2)` to `r round(bartlett.test(rate ~ interaction(poison, treat), data = poisons)$p.value, 2)`.
+- On the rate scale the main effects are even clearer (F = `r round(summary(fit_rate)[[1]][["F value"]][1], 1)` for poison and `r round(summary(fit_rate)[[1]][["F value"]][2], 1)` for treatment), and the interaction becomes negligible (p = `r round(summary(fit_rate)[[1]][["Pr(>F)"]][3], 2)`): the apparent non-parallel lines on the time scale were largely a by-product of the unequal spread.
+- Conclusion: an **additive model for the rate of dying** describes these data well. Poisons and treatments act (approximately) independently on the rate.
+:::
+
+Post-hoc comparisons on the additive model for the rate:
+
+```{r}
+#| label: tukey-rate
+fit_rate_add <- aov(rate ~ poison + treat, data = poisons)
+TukeyHSD(fit_rate_add, which = "poison")
+```
+
+All three poisons differ; poison 3 has the highest rate of dying (it kills fastest). Remember to translate back when you report: a higher **rate** means a **shorter** survival time.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: the Box–Cox transformation
+
+Box and Cox (1964) proposed the family $y^{(\lambda)} = (y^\lambda - 1)/\lambda$ (and $\log y$ for $\lambda = 0$), and chose $\lambda$ by maximum likelihood. `MASS::boxcox()` (the `MASS` package ships with R) plots the profile log-likelihood:
+
+```{r}
+#| label: boxcox
+bc <- MASS::boxcox(time ~ poison * treat, data = poisons,
+                   lambda = seq(-2, 1, by = 0.05))
+bc$x[which.max(bc$y)]
+```
+
+The maximum is near $\lambda =$ `r bc$x[which.max(bc$y)]`, and $\lambda = -1$ (the reciprocal) lies well inside the 95% interval shown in the plot, while $\lambda = 1$ (no transformation) is far outside. Choosing the interpretable value $-1$ rather than the exact optimum is standard practice. The logarithm ($\lambda = 0$) is a milder correction; try it in Exercise 4.
+:::
+
+## 7. A second example: ToothGrowth
+
+`ToothGrowth` records tooth length in 60 guinea pigs given vitamin C at three doses (0.5, 1, 2 mg/day) by two methods (`supp`: orange juice `OJ` or ascorbic acid `VC`), 10 animals per cell. `dose` is stored as a number, so we convert it to a factor — otherwise `aov()` would fit a straight line in dose (see Exercise 3).
+
+```{r}
+#| label: toothgrowth
+tooth <- ToothGrowth |> mutate(dose = factor(dose))
+
+fit_tooth <- aov(len ~ supp * dose, data = tooth)
+summary(fit_tooth)
+```
+
+```{r}
+#| label: fig-tooth
+#| fig-cap: "Interaction plot for ToothGrowth: mean tooth length by dose and supplement type."
+ggplot(tooth, aes(dose, len, colour = supp, group = supp)) +
+  stat_summary(fun = mean, geom = "line", linewidth = 1) +
+  stat_summary(fun = mean, geom = "point", size = 3) +
+  labs(x = "Dose (mg/day)", y = "Mean tooth length", colour = "Supplement")
+```
+
+Here the interaction **is** significant (p = `r round(summary(fit_tooth)[[1]][["Pr(>F)"]][3], 3)`), and the plot shows why: orange juice gives longer teeth at low and medium doses, but at 2 mg/day the two supplements give practically the same result. A single "main effect of supplement" would summarise this poorly — the honest statement is *"orange juice helps more than ascorbic acid at low doses; the advantage disappears at the highest dose."*
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: unbalanced designs and types of sums of squares
+
+In balanced designs (same $n$ in every cell, as in poisons and ToothGrowth) the factors are uncorrelated and the ANOVA table does not depend on the order of the terms. In **unbalanced** designs it does. `summary(aov())` and `anova(lm())` use **sequential (type I)** sums of squares: each term is adjusted only for the terms *before* it.
+
+```{r}
+#| label: types-ss
+anova(lm(mpg ~ factor(cyl) + factor(am), data = mtcars))["factor(am)", ]
+anova(lm(mpg ~ factor(am) + factor(cyl), data = mtcars))["factor(am)", ]
+```
+
+The sum of squares for transmission is very different depending on whether it enters first or after the number of cylinders, because the two are associated in `mtcars`. Alternatives:
+
+- **Type II**: each main effect adjusted for the other main effects (`car::Anova(fit, type = 2)`; for additive models `drop1(fit, test = "F")` gives the same tests). A sensible default when interactions are absent.
+- **Type III**: each term adjusted for all others, including interactions (`car::Anova(fit, type = 3)`, which requires sum-to-zero contrasts such as `options(contrasts = c("contr.sum", "contr.poly"))`).
+
+With unbalanced data, state which type you used.
+:::
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Running all pairwise t-tests instead of ANOVA + adjusted comparisons.** The false-positive rate inflates quickly.
+2. **Forgetting to make the grouping variable a factor.** With a numeric `dose`, `aov()` fits a single slope (1 df) instead of comparing groups.
+3. **Skipping the residual plots.** A funnel shape (as in `poisons`) means unequal variances: use Welch's ANOVA (`oneway.test()`) for one factor, or transform the response.
+4. **Interpreting main effects while ignoring a real interaction.** Look at the interaction plot and the interaction test first.
+5. **Reading "significant F" as "all groups differ".** ANOVA says at least one mean differs; post-hoc tests say which.
+6. **Forgetting to translate back after a transformation.** Higher rate = shorter time.
+:::
+
+## 8. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. An ANOVA gives F ≈ 1. What does this suggest?
+
+The group means vary about as much as you would expect from the variability within groups: no evidence that the population means differ.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. In a two-way ANOVA the interaction is significant. Why should you be careful with the main effects?
+
+Because the effect of one factor depends on the level of the other. The main effect is an average over levels that may hide opposite or very different effects (as with supplement type in ToothGrowth).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. The residuals-vs-fitted plot shows a funnel opening to the right. Name two remedies.
+
+Transform the response (log, reciprocal, square root, guided by Box–Cox), or — for one factor — use Welch's ANOVA `oneway.test()`. A model for non-constant variance (for example a GLM, see [Poisson regression](../09-regression/42-poisson-regression.qmd)) is a further option.
+:::
+
+## 9. Exercises
+
+### Interactive (run in your browser)
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — one-way ANOVA and Tukey.** Do the six feeds in `chickwts` lead to different mean weights? Fit the ANOVA, compute η², and run Tukey's HSD.
+
+```{webr}
+#| exercise: ex_37_1
+fit <- aov(______ ~ ______, data = chickwts)
+summary(fit)
+ss <- summary(fit)[[1]][["Sum Sq"]]
+ss[1] / sum(ss)          # eta squared
+______(fit)
+```
+
+::: {.hint exercise="ex_37_1"}
+The outcome is `weight`, the factor is `feed`; post-hoc comparisons use `TukeyHSD()`.
+:::
+
+::: {.solution exercise="ex_37_1"}
+```r
+fit <- aov(weight ~ feed, data = chickwts)
+summary(fit)
+ss <- summary(fit)[[1]][["Sum Sq"]]
+ss[1] / sum(ss)          # about 0.54
+TukeyHSD(fit)
+```
+The F test is highly significant and feed explains about 54% of the variability in weight. Tukey's comparisons show, for example, that *horsebean* chicks are lighter than *casein*, *meatmeal*, *soybean* and *sunflower* chicks, while *casein* and *sunflower* do not differ.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — check the assumptions.** For the `InsectSprays` data (insect counts for six sprays), fit a one-way ANOVA and draw the residuals-vs-fitted plot. Then run Bartlett's test and Welch's ANOVA. What do you conclude about the classical ANOVA?
+
+```{webr}
+#| exercise: ex_37_2
+fit <- aov(count ~ spray, data = InsectSprays)
+plot(fit, which = ______)
+bartlett.test(count ~ spray, data = InsectSprays)
+______(count ~ spray, data = InsectSprays)
+```
+
+::: {.hint exercise="ex_37_2"}
+`which = 1` draws residuals vs fitted. Welch's ANOVA is `oneway.test()`.
+:::
+
+::: {.solution exercise="ex_37_2"}
+```r
+plot(fit, which = 1)
+bartlett.test(count ~ spray, data = InsectSprays)
+oneway.test(count ~ spray, data = InsectSprays)
+```
+The residual spread clearly grows with the fitted value (a funnel), and Bartlett's test is significant (p ≈ 0.0001): variances are unequal, as is typical for counts. Welch's ANOVA still finds a very strong difference between sprays, so the conclusion holds, but the classical F test should not be reported uncritically. A square-root transformation or a Poisson model would be natural alternatives.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — debug.** A student wants to compare the three doses in `ToothGrowth` and writes the code below. The ANOVA table shows only **1** degree of freedom for `dose`, not 2. Why? Fix it.
+
+```{webr}
+#| exercise: ex_37_3
+fit <- aov(len ~ dose, data = ToothGrowth)
+summary(fit)
+```
+
+::: {.hint exercise="ex_37_3"}
+Check `class(ToothGrowth$dose)`. How many parameters does a straight line need, and how many does a comparison of three groups need?
+:::
+
+::: {.solution exercise="ex_37_3"}
+```r
+class(ToothGrowth$dose)   # "numeric"
+fit <- aov(len ~ factor(dose), data = ToothGrowth)
+summary(fit)              # Df = 2
+TukeyHSD(fit)
+```
+Because `dose` is numeric, `aov()` fits a **linear trend** in dose (one slope, 1 df) instead of three group means. With `factor(dose)` the model compares the three groups (2 df). Tukey's test then shows that all three doses differ.
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 4 — log or reciprocal?** For the `poisons` data, fit the two-way model on `log(time)` and compare its diagnostics with those of the models on `time` and on `1 / time`. Which transformation stabilises the variance best?
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+fit_log <- aov(log(time) ~ poison * treat, data = poisons)
+par(mfrow = c(1, 2)); plot(fit_log, which = 1:2); par(mfrow = c(1, 1))
+
+cells <- interaction(poisons$poison, poisons$treat)
+c(time = bartlett.test(poisons$time ~ cells)$p.value,
+  log  = bartlett.test(log(poisons$time) ~ cells)$p.value,
+  rate = bartlett.test(poisons$rate ~ cells)$p.value)
+```
+The log helps a lot (Bartlett p ≈ 0.07 instead of ≈ 0.000005) but a mild funnel remains in the residual plot. The reciprocal removes it (p ≈ 0.54) and gives the best-looking QQ-plot, in agreement with the Box–Cox analysis ($\lambda \approx -0.8$, closer to −1 than to 0).
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 5 — interpret.** Write a short paragraph (3–4 sentences) reporting the ToothGrowth analysis of Section 7 for a reader without statistical training. Mention the role of dose, the interaction and what it means in practice.
+
+::: {.callout-tip collapse="true"}
+## Solution
+*Example:* "Tooth length increased clearly with the dose of vitamin C. Orange juice produced longer teeth than pure ascorbic acid at 0.5 and 1 mg/day (on average about 5–6 units more), but at 2 mg/day the two supplements gave practically identical results. In statistical terms, the effect of the supplement type depends on the dose (a significant interaction, p ≈ 0.02). So the choice of supplement matters at low doses, but not at the highest one."
+:::
+:::
+
+## Summary
+
+| Task | Code |
+|---|---|
+| One-way ANOVA | `aov(y ~ g, data = df)` + `summary()`; or `anova(lm(y ~ g))` |
+| Effect size η² | SS between / SS total |
+| Residual diagnostics | `plot(fit, which = 1:2)` |
+| Equal variances | `bartlett.test(y ~ g)`; `car::leveneTest(y ~ g)` |
+| Welch ANOVA | `oneway.test(y ~ g, data = df)` |
+| Rank-based alternative | `kruskal.test(y ~ g, data = df)` |
+| Post-hoc comparisons | `TukeyHSD(fit)`; `plot(TukeyHSD(fit))` |
+| Two-way ANOVA | `aov(y ~ A * B, data = df)` (interaction); `aov(y ~ A + B)` (additive) |
+| Transformation | `MASS::boxcox()`; e.g. `1 / time`, `log(y)` |
+
+- ANOVA compares **between-group** with **within-group** variability: $F$ = signal / noise.
+- One overall test controls the false-positive rate; Tukey's HSD then tells **which** groups differ.
+- Always look at the **residuals**: a funnel calls for Welch's ANOVA or a transformation.
+- In two-way designs, check the **interaction** before interpreting main effects.
+- Transformations can make a model both more valid *and* more interpretable (rate of dying).
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), chapter on comparing many means, <https://openintro-ims.netlify.app>
+- Box, G. E. P. & Cox, D. R. (1964). An analysis of transformations. *Journal of the Royal Statistical Society, Series B*, 26(2), 211–252.
+- R documentation: `?aov`, `?TukeyHSD`, `?oneway.test`, `?MASS::boxcox`
+:::

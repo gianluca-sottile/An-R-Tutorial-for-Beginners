@@ -1,0 +1,485 @@
+---
+title: "Vectors"
+subtitle: "The building block of everything in R: create, index, compute, and avoid the recycling trap"
+description: "Create vectors with c(), :, seq() and rep(); index them by position, by name and with logical conditions; use vectorised operations and summary functions; understand recycling and its silent bugs; handle NA; sort, order and rank; and test membership with %in%."
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Level 1 · Foundations]{.level-1} [⏱ ~60 min]{} [Prerequisites: [Data types and operators](03-data-types.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- create vectors with `c()`, `:`, `seq()` and `rep()`;
+- extract elements by position, negative position, logical condition and name;
+- apply **vectorised** operations and explain how **recycling** works — and when it silently produces wrong results;
+- answer questions with `which()`, `any()`, `all()`, `sum()` of logicals and `%in%`, handling `NA` with `na.rm`;
+- tell apart `sort()`, `order()` and `rank()`.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+# Base R only: nothing to load.
+```
+
+## 1. Why vectors?
+
+In R there are no "single numbers". Even `5` is a **vector** of length 1:
+
+```{r}
+#| label: length-one
+length(5)
+```
+
+Every column of a dataset is a vector. `penguins$body_mass` is a vector of `r length(penguins$body_mass)` numbers, one per penguin. Almost everything you will do in data analysis — computing an average, selecting the heavy penguins, counting the females, standardising a variable — is an operation on vectors.
+
+R is designed so that you can work with the **whole vector at once**, without writing loops. Once you master the ideas of this lesson, you will understand most of what happens inside `dplyr`, `ggplot2` and statistical functions.
+
+## 2. Creating vectors
+
+| Function | Example | Result |
+|---|---|---|
+| `c()` — *combine* | `c(4, 8, 15)` | `r c(4, 8, 15)` |
+| `:` — integer sequence | `3:7` | `r 3:7` |
+| `seq()` — general sequence | `seq(0, 1, by = 0.25)` | `r seq(0, 1, by = 0.25)` |
+| `rep()` — repeat | `rep(c("a", "b"), times = 3)` | `r rep(c("a", "b"), times = 3)` |
+
+```{r}
+#| label: create
+c(4, 8, 15, 16, 23, 42)
+10:1
+seq(0, 100, by = 20)
+seq(0, 1, length.out = 5)
+rep(c("a", "b"), times = 3)
+rep(c("a", "b"), each = 2)
+```
+
+`seq_len(n)` gives `1, 2, …, n` and `seq_along(x)` gives `1, 2, …, length(x)`. They are safer than `1:n` because they behave correctly when `n` is 0 (`1:0` is the vector `1 0`, of length 2!).
+
+A vector holds **one type** only. If you mix types, R coerces them (see [Data types](03-data-types.qmd)). The number of elements is given by `length()`.
+
+### Named vectors
+
+Elements can have **names**, which makes code more readable:
+
+```{r}
+#| label: named
+temps <- c(mon = 18, tue = 21, wed = 17, thu = 24, fri = 22)
+temps
+names(temps)
+```
+
+## 3. Indexing: getting elements out
+
+Square brackets `[ ]` extract elements. There are four ways to say which ones.
+
+### By position
+
+```{r}
+#| label: idx-pos
+temps[2]          # the second element
+temps[c(1, 3)]    # first and third
+temps[2:4]        # second to fourth
+```
+
+R counts from **1**, not 0. Asking for a position that does not exist returns `NA`, not an error: `temps[10]` is `NA`.
+
+### By negative position: "everything except"
+
+```{r}
+#| label: idx-neg
+temps[-1]           # drop the first
+temps[-c(1, 5)]     # drop the first and the last
+```
+
+### By logical condition
+
+A logical vector of the same length keeps the elements where it is `TRUE`:
+
+```{r}
+#| label: idx-lgl
+temps > 20
+temps[temps > 20]
+```
+
+Read `temps[temps > 20]` as "temps, *where* temps is greater than 20". This is the most important indexing technique in data analysis: it is what `dplyr::filter()` does behind the scenes.
+
+### By name
+
+```{r}
+#| label: idx-name
+temps["thu"]
+temps[c("mon", "fri")]
+```
+
+### Modifying elements
+
+The same brackets on the left of `<-` **replace** values:
+
+```{r}
+#| label: modify
+temps["wed"] <- 19
+temps[temps < 20] <- NA    # mark cold days as missing
+temps
+```
+
+## 4. Vectorised operations
+
+Arithmetic, comparisons and most mathematical functions work **element by element**:
+
+```{r}
+#| label: vectorised
+a <- c(1, 3, 5)
+b <- c(2, 4, 6)
+a + b
+a * b
+sqrt(b)
+```
+
+Summary functions instead take a whole vector and return **one** value:
+
+| Function | Returns |
+|---|---|
+| `sum()`, `prod()` | sum, product |
+| `mean()`, `median()` | average, middle value |
+| `min()`, `max()`, `range()` | smallest, largest, both |
+| `sd()`, `var()` | standard deviation, variance |
+| `length()` | number of elements |
+
+Combining the two gives powerful one-liners. For instance, this converts every body mass from grams to kilograms and then averages them:
+
+```{r}
+#| label: one-liner
+mean(penguins$body_mass / 1000, na.rm = TRUE)
+```
+
+## 5. Recycling — and its traps
+
+What happens if two vectors have **different lengths**? R **recycles** the shorter one: it repeats it until it is as long as the longer one.
+
+```{r}
+#| label: recycle
+1:6 * 2              # 2 is recycled six times
+1:6 + c(10, 20)      # c(10, 20) becomes c(10, 20, 10, 20, 10, 20)
+```
+
+The first case is what you want almost every time: multiplying a vector by a single number. The second is legal but rarely intended.
+
+When the longer length is **not a multiple** of the shorter, R warns you:
+
+```{r}
+#| label: recycle-warn
+#| warning: true
+1:5 + c(10, 20)
+```
+
+But when it **is** a multiple, there is **no warning at all**. This is how a silent bug was born in an older version of this very course. The goal was to rescale a vector to the interval [0, 1] with the formula
+
+$$
+x_{\text{scaled}} = \frac{x - \min(x)}{\max(x) - \min(x)} .
+$$
+
+and this was the code:
+
+```{r}
+#| label: normalize-bug
+x <- c(3, 7, 1, 9, 5, 4)
+(x - range(x)) / diff(range(x))
+```
+
+No error, no warning — and the answer is **wrong**: rescaled values cannot be negative. `range(x)` returns **two** numbers, `c(min, max)` = `c(1, 9)`. Since `x` has 6 elements (a multiple of 2), R recycled `c(1, 9)` into `c(1, 9, 1, 9, 1, 9)` and subtracted the minimum from some elements and the **maximum** from others. The correct code subtracts only the first element of the range:
+
+```{r}
+#| label: normalize-fix
+rng <- range(x)
+(x - rng[1]) / (rng[2] - rng[1])
+```
+
+::: {.callout-tip .read-output}
+## How to check a result like this
+
+Always sanity-check the output against what you know must be true: rescaled values must lie between 0 and 1, the smallest `x` (here `1`, in position 3) must become 0 and the largest (`9`, position 4) must become 1. The buggy version fails all three checks. You will turn this code into a proper function in [Functions](../03-programming/14-functions.qmd).
+:::
+
+## 6. Asking questions with logical vectors
+
+A comparison produces a logical vector. Several functions turn it into answers:
+
+| Question | Code |
+|---|---|
+| *Where* is the condition true? (positions) | `which(cond)` |
+| Is it true for *at least one*? | `any(cond)` |
+| Is it true for *all*? | `all(cond)` |
+| *How many* times is it true? | `sum(cond)` |
+| In what *proportion*? | `mean(cond)` |
+| Where is the largest / smallest value? | `which.max(x)`, `which.min(x)` |
+
+```{r}
+#| label: questions
+temps <- c(mon = 18, tue = 21, wed = 17, thu = 24, fri = 22)
+which(temps > 20)
+any(temps > 23)
+all(temps > 15)
+sum(temps > 20)
+mean(temps > 20)
+which.max(temps)
+```
+
+### Membership: `%in%`
+
+`x %in% y` asks, for each element of `x`, "is it one of the values in `y`?". It is much clearer than a chain of `==` and `|`.
+
+```{r}
+#| label: in
+c("Adelie", "Emperor") %in% c("Adelie", "Chinstrap", "Gentoo")
+sum(penguins$island %in% c("Dream", "Biscoe"))
+```
+
+## 7. Missing values in vectors
+
+Real data have gaps. In `penguins$body_mass`, `r sum(is.na(penguins$body_mass))` birds were not weighed. Summary functions return `NA` unless you tell them to skip missing values with `na.rm = TRUE` ("NA remove"):
+
+```{r}
+#| label: na-rm
+mass <- penguins$body_mass
+sum(is.na(mass))         # how many are missing?
+which(is.na(mass))       # which ones?
+mean(mass)
+mean(mass, na.rm = TRUE)
+```
+
+Logical indexing has a subtle side effect with `NA`: if the condition is `NA` for an element, the result contains an `NA` in that position. `which()` instead ignores `NA`s:
+
+```{r}
+#| label: na-index
+penguins$species[penguins$body_mass > 6000]          # includes NAs
+penguins$species[which(penguins$body_mass > 6000)]   # only real matches
+```
+
+## 8. `sort()`, `order()` and `rank()`
+
+These three functions are easy to confuse. They answer different questions:
+
+```{r}
+#| label: sort-order-rank
+v <- c(30, 10, 20, 50)
+sort(v)     # the values, sorted
+order(v)    # the POSITIONS that would sort v
+rank(v)     # the rank of each value, in the original order
+```
+
+| Function | Question it answers | For `v = c(30, 10, 20, 50)` |
+|---|---|---|
+| `sort(v)` | What are the values from smallest to largest? | `r sort(c(30, 10, 20, 50))` |
+| `order(v)` | Which element comes 1st, 2nd, …? | `r order(c(30, 10, 20, 50))` (the 2nd element, 10, comes first) |
+| `rank(v)` | What place does each element take? | `r rank(c(30, 10, 20, 50))` (30 is 3rd, 10 is 1st, …) |
+
+`order()` is the one you need most: `v[order(v)]` is the same as `sort(v)`, but you can also use the order of one vector to rearrange **another** — for example, to sort the rows of a data frame by one column ([Data frames](../02-data/08-data-frames.qmd)). Use `decreasing = TRUE` to reverse, and note that `sort()` drops `NA`s while `order()` puts them last. Ties in `rank()` get the average rank: `rank(c(10, 20, 20, 30))` is `r rank(c(10, 20, 20, 30))`.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: `order()` and `rank()` are inverses
+
+For a vector without ties, `order()` and `rank()` are inverse permutations: `rank(v)[order(v)]` is `1, 2, …, n`, and `order(order(v))` equals `rank(v)`. Ranks are the basis of the non-parametric tests you will meet in [Non-parametric tests](../08-inference/36-nonparametric-tests.qmd), which replace the data by their ranks to become robust to outliers.
+:::
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Silent recycling.** Combining vectors of different lengths does not stop R. If the longer length is a multiple of the shorter, there is no warning. Check lengths, and check results against what must be true.
+2. **Forgetting `na.rm = TRUE`.** One missing value turns `mean()`, `sum()`, `max()` into `NA`.
+3. **Logical indexing with `NA`s.** `x[x > 5]` keeps `NA`s where the condition is unknown. Use `x[which(x > 5)]` or `x[!is.na(x) & x > 5]`.
+4. **Confusing `order()` with `rank()`.** To sort, use `sort(x)` or `x[order(x)]` — never `x[rank(x)]`.
+5. **`1:length(x)` on an empty vector** gives `c(1, 0)`. Use `seq_along(x)`.
+6. **Using `==` with several values.** `x == c("a", "b")` recycles and compares position by position; you almost always want `x %in% c("a", "b")`.
+:::
+
+## 9. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. What is `c(10, 20, 30, 40)[-2]`?
+
+`10 30 40`. A negative index **removes** that position.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. What does `1:4 + c(100, 200)` return, and does R warn?
+
+`101 202 103 204`, with **no warning**, because 4 is a multiple of 2. `c(100, 200)` is recycled to `c(100, 200, 100, 200)`.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. For `x <- c(5, 2, 9)`, what are `order(x)` and `rank(x)`?
+
+`order(x)` is `2 1 3` (the smallest value is in position 2, then position 1, then 3). `rank(x)` is `2 1 3` too — a coincidence of this example! Try `x <- c(5, 9, 2)`: `order(x)` is `3 1 2`, `rank(x)` is `2 3 1`.
+:::
+
+## 10. Exercises
+
+### Interactive (run in your browser)
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — create and index.** (a) Create the vector of even numbers from 2 to 20 with `seq()`. (b) Extract its 3rd and 5th elements. (c) Extract all elements except the first two. (d) Extract the elements greater than 12.
+
+```{webr}
+#| exercise: ex_04_1
+ev <- seq(2, 20, by = ______)
+ev[c(______)]
+ev[-______]
+ev[ev ______ 12]
+```
+
+::: {.hint exercise="ex_04_1"}
+The step is 2. A negative index removes positions: `-(1:2)` or `-c(1, 2)`.
+:::
+
+::: {.solution exercise="ex_04_1"}
+```r
+ev <- seq(2, 20, by = 2)
+ev[c(3, 5)]     # 6 10
+ev[-c(1, 2)]    # 6 8 10 ... 20
+ev[ev > 12]     # 14 16 18 20
+```
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 2 — debug the rescaling.** The function below should rescale any vector to [0, 1], but it gives wrong values. Find the bug (Section 5 helps) and fix it. Then check your fix: the smallest flipper length must become 0 and the largest 1.
+
+```{webr}
+#| exercise: ex_04_2
+rescale01 <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng) / (rng[2] - rng[1])
+}
+
+rescale01(c(3, 7, 1, 9, 5, 4))
+
+fl <- rescale01(penguins$flipper_len)
+range(fl, na.rm = TRUE)
+```
+
+::: {.hint exercise="ex_04_2"}
+`rng` has two elements. Which one should be subtracted from every `x`?
+:::
+
+::: {.solution exercise="ex_04_2"}
+```r
+rescale01 <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  (x - rng[1]) / (rng[2] - rng[1])
+}
+rescale01(c(3, 7, 1, 9, 5, 4))   # 0.250 0.750 0.000 1.000 0.500 0.375
+range(rescale01(penguins$flipper_len), na.rm = TRUE)   # 0 1
+```
+With the bug, `x - rng` recycles `c(min, max)` along `x`. Because the lengths happen to be compatible (6 is a multiple of 2; and even when they are not, R only *warns*), the code runs and returns plausible-looking but wrong numbers — the most dangerous kind of bug.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — questions about penguins.** Using `penguins$bill_len`: (a) how many bill lengths are missing? (b) what is the longest bill? (c) what proportion of the penguins with a known bill length have a bill longer than 45 mm? (d) is any bill shorter than 30 mm?
+
+```{webr}
+#| exercise: ex_04_3
+bl <- penguins$bill_len
+sum(______(bl))
+max(bl, ______ = TRUE)
+mean(bl > 45, na.rm = TRUE)
+______(bl < 30, na.rm = TRUE)
+```
+
+::: {.hint exercise="ex_04_3"}
+`is.na()` detects missing values; `na.rm = TRUE` skips them; `any()` checks whether at least one value is `TRUE`.
+:::
+
+::: {.solution exercise="ex_04_3"}
+```r
+sum(is.na(bl))                  # 2
+max(bl, na.rm = TRUE)           # 59.6
+mean(bl > 45, na.rm = TRUE)     # about 0.48
+any(bl < 30, na.rm = TRUE)      # FALSE
+```
+Almost half of the birds have a bill longer than 45 mm; none is shorter than 30 mm.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 4 — predict, then run: sort, order, rank.** Write down your prediction for each line, then run the code.
+
+```{webr}
+#| exercise: ex_04_4
+scores <- c(ann = 72, bob = 95, cat = 60, dan = 88)
+sort(scores, decreasing = TRUE)
+order(scores)
+rank(scores)
+names(scores)[order(scores, decreasing = TRUE)][1:2]
+```
+
+::: {.hint exercise="ex_04_4"}
+`order()` returns positions (1 = ann, 2 = bob, …). The last line asks for the names of the two best students.
+:::
+
+::: {.solution exercise="ex_04_4"}
+```r
+sort(scores, decreasing = TRUE)  # bob 95, dan 88, ann 72, cat 60
+order(scores)                    # 3 1 4 2
+rank(scores)                     # ann 2, bob 4, cat 1, dan 3
+names(scores)[order(scores, decreasing = TRUE)][1:2]   # "bob" "dan"
+```
+The last line is a typical pattern: `order()` one vector, then use the result to rearrange another.
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★]{.stars} **Exercise 5 — membership and heavy penguins.** (a) How many penguins live on Dream **or** Torgersen? Use `%in%`. (b) Which species do the penguins heavier than 6,000 g belong to? Make sure your answer contains no `NA`. (c) In which position of the dataset is the penguin with the longest flipper, and what species is it?
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+sum(penguins$island %in% c("Dream", "Torgersen"))
+penguins$species[which(penguins$body_mass > 6000)]
+pos <- which.max(penguins$flipper_len)
+pos
+penguins$species[pos]
+```
+Both penguins heavier than 6,000 g are Gentoo, and so is the bird with the longest flipper. Note how `which()` removes the `NA`s that plain logical indexing would keep.
+:::
+:::
+
+## Summary
+
+| Function / idea | What it does |
+|---|---|
+| `c()`, `:`, `seq()`, `rep()` | Create vectors |
+| `seq_len()`, `seq_along()` | Safe integer sequences |
+| `length()`, `names()` | Size and names of a vector |
+| `x[i]`, `x[-i]`, `x[cond]`, `x["name"]` | Index by position, exclusion, condition, name |
+| Recycling | The shorter vector is repeated — warning only if lengths are not multiples |
+| `which()`, `any()`, `all()`, `sum()`, `mean()` on logicals | Where / any / all / how many / what proportion |
+| `%in%` | Membership test |
+| `na.rm = TRUE`, `is.na()` | Handle missing values |
+| `sort()`, `order()`, `rank()` | Sorted values / sorting positions / ranks |
+
+- Every value in R is a vector; most operations are **vectorised**.
+- Logical indexing (`x[cond]`) is the foundation of filtering data.
+- Recycling is convenient for `x * 2` and dangerous otherwise: check lengths and sanity-check results.
+- `order()` gives positions; use it to rearrange other vectors.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- *R for Data Science* (2e), chapters "Logical vectors" and "Numbers", <https://r4ds.hadley.nz>
+- Wickham, *Advanced R* (2e), chapter "Subsetting", <https://adv-r.hadley.nz/subsetting.html>
+:::

@@ -1,0 +1,480 @@
+---
+title: "Joining tables"
+subtitle: "Combine information from two data frames through a shared key"
+description: "Understand keys and the mutating joins left_join(), inner_join(), full_join(), right_join(), the filtering joins semi_join() and anti_join(), join_by() for different key names, duplicate keys and the many-to-many warning, and base R merge()."
+aliases:
+  - ../../R-course_lesson-8.html
+format:
+  live-html:
+    webr:
+      packages: ["dplyr", "tibble"]
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+library(tibble)
+```
+
+::: {.lesson-meta}
+[Level 1 · Foundations]{.level-1} [⏱ ~60 min]{} [Prerequisites: [Data manipulation with dplyr](09-dplyr-verbs.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- identify the **key** that links two tables and check whether it is unique;
+- choose between `left_join()`, `inner_join()`, `full_join()` and `right_join()`;
+- use `semi_join()` and `anti_join()` to keep or find rows **with** or **without** a match;
+- join on columns with different names using `join_by(a == b)`;
+- predict and check the number of rows after a join, and handle duplicate keys and the many-to-many warning;
+- translate each join into base R `merge()`.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(tibble)
+```
+
+## 1. Why join?
+
+Real data rarely arrive in a single table. A hospital keeps patients in one table and visits in another; a shop keeps products in one table and sales in another. Information about one **statistical unit** is spread over several tables, and each table may have a *different* unit (a patient vs a visit).
+
+To analyse it we must **join** the tables: for each row of one table, look up the matching rows of the other, using a column that both tables share — the **key**.
+
+## 2. Toy example: film-makers and films
+
+```{r}
+#| label: toy-data
+producers <- tibble(
+  surname     = c("Spielberg", "Scorsese", "Hitchcock", "Tarantino",
+                  "Polanski", "Lucas"),
+  nationality = c("US", "US", "UK", "US", "Poland", "US")
+)
+
+movies <- tibble(
+  surname = c("Spielberg", "Scorsese", "Hitchcock", "Hitchcock",
+              "Spielberg", "Tarantino", "Polanski", "Kubrick"),
+  title   = c("Super 8", "Taxi Driver", "Psycho", "North by Northwest",
+              "Catch Me If You Can", "Reservoir Dogs", "Chinatown",
+              "The Shining")
+)
+
+producers
+movies
+```
+
+The key is `surname`. Notice three things that make the example realistic:
+
+- in `producers` each surname appears **once** (the key is unique: one row per film-maker);
+- in `movies` a surname can appear **several times** (one row per film);
+- "Lucas" has no film in `movies`, and "Kubrick" has no row in `producers`.
+
+### Is the key unique?
+
+Always check before joining. `count()` + `filter()` lists duplicated keys:
+
+```{r}
+#| label: check-key
+producers |> count(surname) |> filter(n > 1)
+movies    |> count(surname) |> filter(n > 1)
+```
+
+`producers` has no duplicates; `movies` has two film-makers with two films each. The relationship is **one-to-many**: one producer, many films.
+
+## 3. Mutating joins: adding columns
+
+A **mutating join** adds the columns of `y` to `x`, matching rows by the key. The four types differ only in what happens to rows **without a match**.
+
+| Join | Rows of `x` without a match | Rows of `y` without a match |
+|---|---|---|
+| `inner_join(x, y)` | dropped | dropped |
+| `left_join(x, y)` | **kept** (new columns `NA`) | dropped |
+| `right_join(x, y)` | dropped | **kept** (columns of `x` `NA`) |
+| `full_join(x, y)` | **kept** | **kept** |
+
+### `inner_join()`: only matches
+
+```{r}
+#| label: inner
+inner <- producers |> inner_join(movies, by = join_by(surname))
+inner
+```
+
+Lucas (no film) and Kubrick (no producer row) disappear. Each Hitchcock and Spielberg film gets its own row, with the nationality repeated.
+
+### `left_join()`: keep everything in `x`
+
+```{r}
+#| label: left
+producers |> left_join(movies, by = join_by(surname))
+```
+
+All producers are kept; Lucas gets `NA` as `title`. `left_join()` is the join you will use most: you have a main table and want to **add information** to it, without losing any of its rows.
+
+### `right_join()` and `full_join()`
+
+```{r}
+#| label: right-full
+producers |> right_join(movies, by = join_by(surname))
+producers |> full_join(movies, by = join_by(surname))
+```
+
+`right_join(x, y)` keeps all rows of `y` (Kubrick appears with `NA` nationality); it is the same as `left_join(y, x)` with the columns in a different order. `full_join()` keeps everyone.
+
+::: {.callout-tip .read-output}
+## How to read this output: count the rows
+
+| Join | Rows | Why |
+|---|---|---|
+| `inner_join` | `r nrow(inner_join(producers, movies, by = "surname"))` | the 7 films whose maker is in `producers` |
+| `left_join` | `r nrow(left_join(producers, movies, by = "surname"))` | those 7 + Lucas |
+| `right_join` | `r nrow(right_join(producers, movies, by = "surname"))` | all 8 films (Kubrick with `NA`) |
+| `full_join` | `r nrow(full_join(producers, movies, by = "surname"))` | 7 + Lucas + Kubrick |
+
+Comparing `nrow()` before and after a join is the quickest sanity check you can do.
+:::
+
+## 4. Filtering joins: keeping rows, not columns
+
+Sometimes you do not want new columns: you want to know **which rows have (or do not have) a match**.
+
+```{r}
+#| label: semi-anti
+# producers that have at least one film
+producers |> semi_join(movies, by = join_by(surname))
+
+# producers with no film
+producers |> anti_join(movies, by = join_by(surname))
+
+# films whose maker is missing from producers
+movies |> anti_join(producers, by = join_by(surname))
+```
+
+`semi_join()` never duplicates rows (Spielberg appears once even though he has two films) and adds no columns. `anti_join()` is an excellent **data-quality tool**: before a join, it shows you exactly which keys will fail to match — often because of typos, different capitalisation or trailing spaces (see [Strings and dates](13-strings-dates.qmd)).
+
+## 5. Keys with different names: `join_by(a == b)`
+
+Often the same key has different names in the two tables.
+
+```{r}
+#| label: diff-names
+movies2 <- movies |> rename(director = surname)
+
+producers |> inner_join(movies2, by = join_by(surname == director))
+```
+
+Read `surname == director` as "match `surname` in the left table with `director` in the right table". The result keeps the left name. You can join on **several keys** at once, e.g. `join_by(id, year)` or `join_by(id == patient_id, year)`.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: `by` as a character vector
+
+Before dplyr 1.1 joins were written `by = "surname"` or `by = c("surname" = "director")`. These still work and you will see them often. `join_by()` is the modern form, and it also allows non-equality joins such as `join_by(id, date >= start)` (rolling and interval joins), which are beyond this lesson.
+:::
+
+## 6. Duplicate keys and the many-to-many warning
+
+Suppose someone adds a second row for Hitchcock, who became a US citizen later in life:
+
+```{r}
+#| label: dup-data
+producers_dup <- producers |>
+  add_row(surname = "Hitchcock", nationality = "US")
+
+producers_dup |> count(surname) |> filter(n > 1)
+```
+
+Now Hitchcock appears twice in **both** tables. A join pairs **every** matching row on the left with **every** matching row on the right: 2 × 2 = 4 Hitchcock rows.
+
+```{r}
+#| label: many-to-many
+#| warning: true
+producers_dup |> inner_join(movies, by = join_by(surname))
+```
+
+dplyr warns about an **unexpected many-to-many relationship**, because this is usually a mistake: the rows multiply and every statistic computed afterwards (counts, means, totals) is distorted. What to do:
+
+1. **Fix the data** if the duplicate is an error (here: decide which nationality to keep, or keep both in one row).
+2. If many-to-many is really what you want, say so: `inner_join(..., relationship = "many-to-many")` silences the warning.
+3. If you *expect* a unique key on one side, make dplyr check it for you:
+
+```{r}
+#| label: relationship-check
+#| error: true
+producers_dup |>
+  inner_join(movies, by = join_by(surname), relationship = "one-to-many")
+```
+
+With `relationship = "one-to-many"` dplyr throws an **error** as soon as a key in `x` is duplicated — the safest option in scripts.
+
+## 7. A realistic example: adding species information to penguins
+
+`penguins` stores the species by its common name. A small lookup table adds the scientific name and a label we want to use in plots:
+
+```{r}
+#| label: lookup
+penguins <- as_tibble(penguins)   # shorter printing
+
+species_info <- tibble(
+  species    = c("Adelie", "Chinstrap", "Gentoo"),
+  scientific = c("Pygoscelis adeliae", "Pygoscelis antarcticus",
+                 "Pygoscelis papua")
+)
+
+penguins_plus <- penguins |>
+  left_join(species_info, by = join_by(species))
+
+nrow(penguins)
+nrow(penguins_plus)
+penguins_plus |> count(species, scientific)
+```
+
+The number of rows is unchanged (`r nrow(penguins)`): each penguin matched exactly one species. This is the pattern **many-to-one**, the most common in practice.
+
+A second very common use is to attach **group summaries** back to the units. For example, the mean mass of each species:
+
+```{r}
+#| label: join-summary
+species_mass <- penguins |>
+  summarise(mean_mass = mean(body_mass, na.rm = TRUE), .by = species)
+
+penguins |>
+  select(species, body_mass) |>
+  left_join(species_mass, by = join_by(species)) |>
+  mutate(diff_from_mean = body_mass - mean_mass)
+```
+
+(The same result can be obtained in one step with a grouped `mutate()`, as shown in [Grouped summaries](10-grouped-summaries.qmd).)
+
+## 8. Base R: `merge()`
+
+`merge()` does the same jobs. Its default is an inner join; the `all*` arguments add unmatched rows.
+
+```{r}
+#| label: merge
+merge(producers, movies, by = "surname")                # inner
+merge(producers, movies, by = "surname", all.x = TRUE)  # left
+```
+
+```{r}
+#| label: merge-diff
+merge(producers, movies2, by.x = "surname", by.y = "director")
+```
+
+| dplyr | base R `merge()` |
+|---|---|
+| `inner_join(x, y, by = join_by(k))` | `merge(x, y, by = "k")` |
+| `left_join(x, y, by = join_by(k))` | `merge(x, y, by = "k", all.x = TRUE)` |
+| `right_join(x, y, by = join_by(k))` | `merge(x, y, by = "k", all.y = TRUE)` |
+| `full_join(x, y, by = join_by(k))` | `merge(x, y, by = "k", all = TRUE)` |
+| `join_by(a == b)` | `by.x = "a", by.y = "b"` |
+| `semi_join(x, y, ...)` | `x[x$k %in% y$k, ]` |
+| `anti_join(x, y, ...)` | `x[!x$k %in% y$k, ]` |
+
+One practical difference: `merge()` **sorts** the result by the key, while dplyr joins keep the row order of `x`.
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Not checking that the key is unique** on the side where it should be. Use `count(key) |> filter(n > 1)` before joining.
+2. **Rows that multiply silently.** Always compare `nrow()` before and after a join; a `left_join()` should not increase the rows of `x` if the key of `y` is unique.
+3. **Keys that look equal but are not:** `"Hitchcock"` vs `"hitchcock"` vs `"Hitchcock "`. Use `anti_join()` to find them and clean with `stringr`.
+4. **Keys of different types:** a numeric `id` in one table and a character `id` in the other cause an error. Convert one of them first.
+5. **Using `inner_join()` when you meant `left_join()`.** Units without a match vanish, and the sample you analyse is no longer the one you think.
+:::
+
+## 9. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. Table `x` has 100 patients (unique `id`), table `y` has 250 visits with `id`. How many rows can `left_join(x, y)` have?
+
+At least 100 (every patient is kept) and possibly more: each patient with *k* visits produces *k* rows. Patients without visits produce one row with `NA`s. If all 250 visits belong to patients in `x`, the result has 250 rows plus one row for each patient with no visit.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. What is the difference between `semi_join(x, y)` and `inner_join(x, y)`?
+
+Both keep only the rows of `x` that have a match. `inner_join()` **adds** the columns of `y` and can **duplicate** rows of `x` (one per match); `semi_join()` adds nothing and never duplicates.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. When does dplyr warn about a many-to-many relationship?
+
+When at least one row of `x` matches several rows of `y` **and** at least one row of `y` matches several rows of `x`. It is usually a sign of an unintended duplicate key.
+:::
+
+## 10. Exercises
+
+### Interactive (run in your browser)
+
+```{webr}
+#| setup: true
+#| exercise: ex_11_1
+species_info <- tibble::tibble(
+  species    = c("Adelie", "Gentoo"),
+  scientific = c("Pygoscelis adeliae", "Pygoscelis papua")
+)
+```
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — left or inner?** The table `species_info` (already created) has only Adelie and Gentoo. Join it to `penguins` with `left_join()` and with `inner_join()`, and compare the number of rows.
+
+```{webr}
+#| exercise: ex_11_1
+species_info
+a <- penguins |> left_join(species_info, by = join_by(______))
+b <- penguins |> ______(species_info, by = join_by(species))
+nrow(a)
+nrow(b)
+```
+
+::: {.hint exercise="ex_11_1"}
+The key is `species`. The second join is `inner_join`.
+:::
+
+::: {.solution exercise="ex_11_1"}
+```r
+a <- penguins |> left_join(species_info, by = join_by(species))
+b <- penguins |> inner_join(species_info, by = join_by(species))
+nrow(a)   # 344: all penguins, Chinstrap with scientific = NA
+nrow(b)   # 276: the 68 Chinstrap penguins are dropped
+```
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_11_2
+students <- tibble::tibble(
+  student_id = c(1, 2, 3, 4, 5),
+  name       = c("Ada", "Ben", "Chiara", "Dev", "Eli")
+)
+exams <- tibble::tibble(
+  id    = c(1, 1, 2, 4, 4, 4, 6),
+  exam  = c("Stats", "R", "Stats", "Stats", "R", "Maths", "Stats"),
+  grade = c(28, 30, 24, 27, 25, 30, 22)
+)
+```
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — different key names and filtering joins.** `students` has the key `student_id`, `exams` has `id`. (a) Add the student names to `exams`, keeping only exams of known students. (b) Which students took no exam? (c) Which exam rows belong to an unknown student?
+
+```{webr}
+#| exercise: ex_11_2
+# (a)
+exams |> inner_join(students, by = join_by(______ == ______))
+# (b)
+students |> ______(exams, by = join_by(student_id == id))
+# (c)
+exams |> ______(students, by = join_by(id == student_id))
+```
+
+::: {.hint exercise="ex_11_2"}
+In `join_by(a == b)`, `a` is the column of the left table. "No match" means `anti_join()`.
+:::
+
+::: {.solution exercise="ex_11_2"}
+```r
+exams |> inner_join(students, by = join_by(id == student_id))
+students |> anti_join(exams, by = join_by(student_id == id))
+exams |> anti_join(students, by = join_by(id == student_id))
+```
+(a) gives 6 rows; (b) Chiara and Eli took no exam; (c) the exam of student 6 has no matching student — a data-quality problem to investigate.
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_11_3
+shops <- tibble::tibble(
+  city = c("Rome", "Rome", "Milan"),
+  shop = c("R1", "R2", "M1")
+)
+weather <- tibble::tibble(
+  city = c("Rome", "Rome", "Milan"),
+  day  = c("Mon", "Tue", "Mon"),
+  temp = c(21, 23, 17)
+)
+```
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 3 — predict the rows.** Before running the code, predict how many rows the join returns and whether dplyr will warn. Then run it. Is the result useful?
+
+```{webr}
+#| exercise: ex_11_3
+shops |> left_join(weather, by = join_by(city))
+```
+
+::: {.hint exercise="ex_11_3"}
+Rome appears twice in each table: 2 × 2 combinations. Milan: 1 × 1.
+:::
+
+::: {.solution exercise="ex_11_3"}
+```r
+shops |>
+  left_join(weather, by = join_by(city), relationship = "many-to-many")
+```
+5 rows (4 for Rome + 1 for Milan), with a many-to-many warning. Here the result is meaningful — every shop gets the weather of every day in its city — so we declare `relationship = "many-to-many"`. If instead we expected one weather row per city, the warning would have revealed a mistake.
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★]{.stars} **Exercise 4 — base R translation.** Using `producers` and `movies` from section 2, reproduce `left_join()`, `full_join()` and `anti_join()` with base R only. Check with `nrow()` that you get 8, 9 and 1 rows.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+nrow(merge(producers, movies, by = "surname", all.x = TRUE))   # 8
+nrow(merge(producers, movies, by = "surname", all = TRUE))     # 9
+producers[!producers$surname %in% movies$surname, ]            # Lucas
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 5 — interpret.** A colleague joins a table of 1,000 customers (unique `customer_id`) with a table of orders and gets 3,412 rows. She then computes `mean(age)` on the result and reports it as "the mean age of our customers". What is wrong, and how would you fix it?
+
+::: {.callout-tip collapse="true"}
+## Solution
+After the join the unit is the **order**, not the customer: customers with many orders are counted many times, so the mean is weighted towards frequent buyers. Compute the mean age on the customer table (one row per customer), or summarise orders per customer first (`summarise(n_orders = n(), .by = customer_id)`) and then `left_join()` that summary to the customers.
+:::
+:::
+
+## Summary
+
+| Function | Keeps | Adds columns? |
+|---|---|---|
+| `inner_join(x, y)` | rows with a match in both | yes |
+| `left_join(x, y)` | all rows of `x` | yes |
+| `right_join(x, y)` | all rows of `y` | yes |
+| `full_join(x, y)` | all rows of both | yes |
+| `semi_join(x, y)` | rows of `x` with a match | no |
+| `anti_join(x, y)` | rows of `x` without a match | no |
+| `join_by(a == b)` | keys with different names | — |
+| `relationship = ...` | declare / check the key structure | — |
+
+- A join is only as good as its **key**: check uniqueness first.
+- Count rows before and after every join.
+- `left_join()` is the everyday choice; `anti_join()` is the everyday check.
+- Duplicate keys on both sides multiply rows: fix the data or declare `relationship = "many-to-many"`.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2e), chapter "Joins", <https://r4ds.hadley.nz>
+- dplyr reference for mutating joins and `join_by()`, <https://dplyr.tidyverse.org/reference/mutate-joins.html>
+:::

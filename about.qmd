@@ -1,0 +1,78 @@
+---
+title: "About this course"
+description: "Aims, prerequisites, learning outcomes, suggested schedule and resources of From Data to Models with R."
+---
+
+## The course in one paragraph
+
+*From Data to Models with R* is an open, beginner-friendly course in R programming and applied statistics. It starts from the very first line of R code and arrives at regression models, machine learning, dimensionality reduction and clustering, with an optional deep-learning track. It is designed for university students — and anyone else — who need to analyse data but **do not have a rigorous statistical background**: every statistical idea is introduced through a concrete problem, a picture or a simulation before any formula. The material can support a university module of up to **9 ECTS (about 72 contact hours)** and is freely available on GitHub.
+
+## Prerequisites
+
+- **No previous programming experience** is required.
+- **No previous statistics course** is required: Levels 2 and 3 build descriptive statistics, probability and inference from scratch. Students who already know these topics can move faster through them.
+- Basic computer literacy (managing files and folders, installing software) and a laptop on which you can install R and an editor. Many exercises also run in the browser, with nothing to install.
+- For the optional deep-learning lessons: a working local installation of `keras3` (see [Lesson 61](lessons/13-deep-learning/61-dl-setup.qmd)).
+
+## Learning outcomes
+
+**Knowledge.** By the end of the course students will understand:
+
+- the role of R as an environment for data analysis, visualisation and reproducible reporting, and its main object types;
+- the basic ideas of descriptive statistics, probability, sampling variability and statistical inference, including the correct interpretation of confidence intervals and p-values;
+- the logic of statistical models (linear and generalised linear models) and of supervised and unsupervised learning, including how models are validated and why they can overfit;
+- (optional track) the building blocks of neural networks and how they relate to statistical models.
+
+**Skills.** Students will be able to:
+
+- organise an analysis as a reproducible R project and write clear, modern R code (tidyverse, functions, iteration);
+- import, clean, reshape and join real data, and handle missing values in a principled way;
+- describe data with tables, summary statistics and well-designed ggplot2 graphics;
+- choose, run and interpret common tests and confidence intervals, and report effect sizes;
+- fit, diagnose, compare and interpret regression models and machine-learning models with tidymodels;
+- apply PCA, factor analysis, correspondence analysis and clustering methods, and critically assess their results.
+
+**Communication.** Students will be able to explain methods, assumptions, results and limitations in plain language, in written reports generated directly from code with Quarto.
+
+## Suggested schedule (72 hours)
+
+The schedule is indicative; instructors can adapt it.
+
+| Hours | Modules | Topics |
+|:---:|---|---|
+| 12 | 1–2 | R, editors and projects; data types, vectors, factors, lists; data frames and dplyr; joins and reshaping |
+| 6 | 3–4 | Functions, conditionals, loops and iteration; importing/exporting data; missing data |
+| 8 | 5–6 | Frequency tables, summary statistics, two-variable descriptions; ggplot2; correlation |
+| 12 | 7–8 | Probability by simulation; distributions; sampling distributions; bootstrap; confidence intervals; hypothesis tests; t-tests, χ² tests, non-parametric tests, ANOVA |
+| 14 | 9–10 | Linear, logistic and Poisson regression; model selection; penalised regression; the ML workflow with tidymodels; trees, random forests, boosting, SVMs |
+| 10 | 11–12 | PCA, factor analysis, correspondence analysis, MDS, t-SNE/UMAP; k-means, hierarchical, DBSCAN, model-based and spectral clustering |
+| 10 | Capstone | Guided end-to-end project and presentations |
+| *optional 6–10* | 13 | Deep learning with keras3: dense networks, autoencoders, LSTM/GRU, CNNs |
+
+## How the material is built
+
+- Every lesson is a [Quarto](https://quarto.org) document: text, code and results come from the same source, so the output you see is the output the code produces.
+- Interactive exercises run in your browser with [webR](https://docs.r-wasm.org/webr/latest/) through the [quarto-live](https://r-wasm.github.io/quarto-live/) extension.
+- Machine learning uses the [tidymodels](https://www.tidymodels.org) framework; [Lesson 44](lessons/10-ml/44-ml-workflow.qmd) explains why it replaced `caret` in this course.
+- Figures use a colour-blind-friendly palette.
+
+## Recommended free resources
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2e) — <https://r4ds.hadley.nz>
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e) — <https://openintro-ims.netlify.app>
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2e) — <https://www.statlearning.com>
+- Kuhn & Silge, *Tidy Modeling with R* — <https://www.tmwr.org>
+- Venables, Smith & R Core Team, *An Introduction to R* — on CRAN
+
+## Author
+
+**Gianluca Sottile** — University of Palermo.
+[Personal page](https://www.unipa.it/persone/docenti/s/gianluca.sottile) · [GitHub](https://github.com/gianluca-sottile) · gianluca.sottile@unipa.it
+
+## License and citation
+
+The course is released under the [Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) license (see [LICENSE](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners/blob/master/LICENSE)): you may reuse and adapt it, with attribution, under the same license. If you use it in your teaching, a link back is appreciated:
+
+> Sottile, G. (2026). *From Data to Models with R: A beginner's course in statistics and machine learning*. <https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/>
+
+Corrections and suggestions are welcome through [GitHub issues](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners/issues).

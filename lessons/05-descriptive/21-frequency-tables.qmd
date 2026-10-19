@@ -1,0 +1,530 @@
+---
+title: "Frequency tables"
+subtitle: "How often does each value occur? Counting, percentages and classes"
+description: "Describe the distribution of categorical and discrete variables with absolute, relative and cumulative frequencies, using table(), prop.table(), dplyr::count() and janitor::tabyl(), and group a continuous variable into classes with cut()."
+format:
+  live-html:
+    webr:
+      packages: ["dplyr"]
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+```
+
+::: {.lesson-meta}
+[Level 2 · Describe & explore]{.level-2} [⏱ ~60 min]{} [Prerequisites: [Factors](../01-foundations/06-factors.qmd), [Grouped summaries](../02-data/10-grouped-summaries.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- build **absolute**, **relative** and **cumulative** frequency tables in base R and with `dplyr`;
+- produce publication-ready one-way tables with `janitor::tabyl()` and the `adorn_*()` helpers;
+- find the **mode** of a categorical or discrete variable;
+- group a continuous variable into **classes** with `cut()` and explain why the choice of classes matters;
+- read a frequency table critically (denominators, missing values, rounding).
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(janitor)
+```
+
+## 1. Why count?
+
+The `penguins` data contain `r nrow(penguins)` birds. If someone asks *"which species did the researchers study?"*, printing the `species` column gives you `r nrow(penguins)` words in a row — correct, but useless. What we really want to know is:
+
+> Which values occur, and **how often** does each one occur?
+
+That list of values together with how often they occur is called the **distribution** of a variable. A **frequency table** is the simplest way to show a distribution. It is usually the first thing a statistician looks at for any categorical variable, and it is how every bar chart, histogram and percentage in a report is built.
+
+## 2. Which table for which variable?
+
+Recall the four types of variables from the [Factors](../01-foundations/06-factors.qmd) lesson:
+
+| Type | Example in `penguins` | Values have an order? | Typical summary |
+|---|---|---|---|
+| **Nominal** (categorical, unordered) | `species`, `island`, `sex` | No | Counts, percentages, mode |
+| **Ordinal** (categorical, ordered) | a "small / medium / large" size class | Yes | Counts, percentages, **cumulative** percentages, median category |
+| **Discrete** numeric (few distinct values) | `year` (2007, 2008, 2009) | Yes | Same as ordinal |
+| **Continuous** numeric | `body_mass`, `flipper_len` | Yes | Frequency table only after grouping into **classes** (Section 8) |
+
+Frequency tables work directly for the first three types. For a continuous variable almost every value is different, so a table of individual values would have hundreds of rows with a count of 1 — we first have to group the values.
+
+## 3. Absolute frequencies with `table()`
+
+The **absolute frequency** $n_i$ of a value is simply the number of observations that take that value.
+
+```{r}
+#| label: table-species
+table(penguins$species)
+```
+
+The output lists each level of the factor and how many penguins belong to it. The counts add up to the number of observations:
+
+```{r}
+#| label: table-sum
+sum(table(penguins$species))
+```
+
+### Missing values
+
+By default `table()` **silently drops `NA`**. The variable `sex` has missing values, and you would never know from the default output:
+
+```{r}
+#| label: table-sex
+table(penguins$sex)
+table(penguins$sex, useNA = "ifany")
+```
+
+`useNA = "ifany"` adds an `NA` column only when there are missing values. Get into the habit of using it: a table that hides `r sum(is.na(penguins$sex))` unknown birds tells a different story from one that shows them.
+
+## 4. Relative frequencies with `prop.table()`
+
+Counts are hard to compare between datasets of different size: 50 out of 100 is a lot, 50 out of 10,000 is not. The **relative frequency** divides each count by the total:
+
+$$
+f_i = \frac{n_i}{n}.
+$$
+
+```{r}
+#| label: prop-species
+tab_species <- table(penguins$species)
+prop.table(tab_species)
+round(100 * prop.table(tab_species), 1)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- The first table gives **proportions** (between 0 and 1); they add up to 1.
+- The second multiplies by 100 and rounds: **percentages**. About `r round(100 * prop.table(tab_species)[["Adelie"]])`% of the penguins in the data are Adelie.
+- Because of rounding, rounded percentages do not always add up to exactly 100 (for example 99.9 or 100.1). This is normal; mention it in a footnote rather than "fixing" a number by hand.
+- These are percentages **of the birds in this dataset**, not of all penguins in Antarctica. Whether they describe a wider population depends on how the birds were sampled — a question for [Level 3](../07-probability/30-sampling-distributions.qmd).
+:::
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: notation for frequency distributions
+
+Suppose a variable takes $K$ distinct values (or categories) $x_1, \dots, x_K$ in a sample of size $n$. Then
+
+- absolute frequencies: $n_1, \dots, n_K$ with $\sum_{i=1}^K n_i = n$;
+- relative frequencies: $f_i = n_i / n$ with $0 \le f_i \le 1$ and $\sum_{i=1}^K f_i = 1$;
+- for ordered values $x_1 < x_2 < \dots < x_K$, cumulative frequencies: $N_j = \sum_{i \le j} n_i$ and $F_j = \sum_{i \le j} f_i = N_j / n$, so that $F_K = 1$.
+
+The sequence $F_1, \dots, F_K$ is the **empirical cumulative distribution function** evaluated at the observed values; you will meet it again as a plot in [Distribution plots](../06-visualization/25-distribution-plots.qmd).
+:::
+
+## 5. The tidy way: `dplyr::count()`
+
+When your data are in a data frame (they usually are), `dplyr::count()` gives the same information as a data frame you can keep working with:
+
+```{r}
+#| label: count-island
+penguins |>
+  count(island) |>
+  mutate(prop = n / sum(n),
+         percent = round(100 * prop, 1))
+```
+
+`count(island)` is shorthand for `group_by(island) |> summarise(n = n())`. The `mutate()` adds the relative frequency. Two useful options:
+
+```{r}
+#| label: count-sort
+penguins |>
+  count(sex, sort = TRUE)   # largest group first; NA is kept as its own row
+```
+
+Note a difference from `table()`: `count()` **keeps missing values** as a row. So `n / sum(n)` uses *all* birds as the denominator. If you want the percentage among birds whose sex is known, filter the missing values out first (`filter(!is.na(sex))`). Both are legitimate — but you must say which one you report.
+
+## 6. Ready-to-publish tables with `janitor::tabyl()`
+
+The `janitor` package wraps all of this into one function whose output is a data frame with counts and percentages:
+
+```{r}
+#| label: tabyl-sex
+penguins |>
+  tabyl(sex)
+```
+
+`tabyl()` reports `percent` (denominator: all birds, including `NA`) **and** `valid_percent` (denominator: birds with a known value). The `adorn_*()` functions then polish the table for a report:
+
+```{r}
+#| label: tabyl-adorn
+penguins |>
+  tabyl(species) |>
+  adorn_totals("row") |>
+  adorn_pct_formatting(digits = 1)
+```
+
+`adorn_totals("row")` adds a *Total* row and `adorn_pct_formatting()` turns proportions into formatted percentages. Formatted percentages are **text**, so do this only as the very last step, after all calculations.
+
+## 7. The mode
+
+The **mode** is the most frequent value. It is the only "average" that makes sense for a nominal variable (you cannot compute the mean of `"Adelie"`, `"Gentoo"` and `"Chinstrap"`). R has no built-in function for the statistical mode (`mode()` tells you the *storage* type of an object!), but it is easy to find from a table:
+
+```{r}
+#| label: mode
+tab_island <- table(penguins$island)
+names(tab_island)[tab_island == max(tab_island)]
+```
+
+We compare with `max()` rather than using `which.max()` because a distribution can have **two or more modes** (ties); `which.max()` would silently return only the first one.
+
+## 8. Ordinal and discrete variables: cumulative frequencies
+
+When the values have a natural order, a new question becomes meaningful: *"how many observations are **at most** this value?"* The **cumulative frequency** answers it by adding up counts from the smallest value upwards.
+
+The number of forward gears in `mtcars` is a discrete variable:
+
+```{r}
+#| label: cumulative-gear
+tab_gear <- table(mtcars$gear)
+data.frame(
+  gears    = names(tab_gear),
+  n        = as.vector(tab_gear),
+  percent  = round(100 * as.vector(prop.table(tab_gear)), 1),
+  cum_perc = round(100 * cumsum(as.vector(prop.table(tab_gear))), 1)
+)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+Read the last column as "*at most* this many gears": `r round(100 * cumsum(prop.table(tab_gear))[["4"]], 1)`% of the cars have **4 gears or fewer**. The last cumulative percentage is always 100. A cumulative column would be meaningless for `species`, because "at most Chinstrap" has no meaning when the categories have no order.
+:::
+
+### The order of the levels matters
+
+`cumsum()` adds the counts **in the order in which they appear in the table**, and for a factor this is the order of its levels. For text data that order is alphabetical, which is usually wrong for ordinal answers. Here is a small survey:
+
+```{r}
+#| label: survey-wrong
+answers <- c("Agree", "Neutral", "Disagree", "Agree", "Strongly agree",
+             "Agree", "Neutral", "Strongly agree", "Disagree", "Agree")
+table(answers)    # alphabetical: Agree, Disagree, Neutral, Strongly agree
+```
+
+A cumulative percentage of this table would mix up the scale. Declare the order explicitly with an **ordered factor**:
+
+```{r}
+#| label: survey-right
+likert <- c("Strongly disagree", "Disagree", "Neutral",
+            "Agree", "Strongly agree")
+answers_f <- factor(answers, levels = likert, ordered = TRUE)
+
+tab_ans <- table(answers_f)
+round(100 * cumsum(prop.table(tab_ans)), 1)
+```
+
+Notice that the empty category "Strongly disagree" now appears with a count of 0: it is a possible answer that nobody chose, and that is information too. From the cumulative percentages we can read the **median category**: the first category whose cumulative percentage reaches 50% — here `r names(tab_ans)[which(cumsum(prop.table(tab_ans)) >= 0.5)[1]]`.
+
+## 9. Continuous variables: grouping into classes with `cut()`
+
+To tabulate `body_mass` we must group values into **classes** (also called *bins* or *intervals*). The function `cut()` does this:
+
+```{r}
+#| label: cut-500
+mass_class <- cut(penguins$body_mass,
+                  breaks = seq(2500, 6500, by = 500),
+                  dig.lab = 4)
+table(mass_class, useNA = "ifany")
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- `(3000,3500]` means "more than 3000 g and **up to and including** 3500 g". By default classes are open on the left and closed on the right (`right = TRUE`); use `right = FALSE` for `[3000,3500)`.
+- `breaks` must cover the whole range of the data, otherwise values outside become `NA`. Add `include.lowest = TRUE` if the minimum coincides with the first break.
+- `dig.lab = 4` stops R from writing the limits in scientific notation (`3e+03`).
+:::
+
+You can give the classes readable names with `labels`, which also creates an ordinal variable:
+
+```{r}
+#| label: cut-labels
+size_class <- cut(penguins$body_mass,
+                  breaks = c(-Inf, 3500, 4500, Inf),
+                  labels = c("small", "medium", "large"),
+                  ordered_result = TRUE)
+table(size_class, useNA = "ifany")
+```
+
+### Why the choice of classes matters
+
+Grouping always throws information away, and **different classes can tell different stories**. Compare the 500 g classes above with wider 900 g classes:
+
+```{r}
+#| label: cut-900
+table(cut(penguins$body_mass,
+          breaks = seq(2700, 6300, by = 900),
+          include.lowest = TRUE, dig.lab = 4))
+```
+
+With 500 g classes you can see that the most common masses are between 3500 and 4000 g and that there is a long "shoulder" of heavier birds (these are mainly Gentoo penguins). With four wide classes that detail disappears and the distribution just looks like a smooth hill. A few practical rules:
+
+- Use **round, equal-width** limits that are easy to read (500, 1000, …).
+- Aim for roughly 5–15 classes for a table; more for a histogram with lots of data.
+- Decide the classes **before** looking for a particular result. Choosing limits to make a pattern appear or disappear is a quiet form of cheating.
+- If you must use unequal widths (e.g., income bands), compare classes using **density** = relative frequency ÷ width, not raw counts — a wider class collects more observations simply because it is wider.
+
+You will see the same issue, in graphical form, with histogram bin widths in [Distribution plots](../06-visualization/25-distribution-plots.qmd).
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: rules of thumb for the number of classes
+
+Several formulas suggest a number of classes $k$ for $n$ observations: **Sturges** $k = \lceil \log_2 n \rceil + 1$ (R's default for `hist()`, via `nclass.Sturges()`), **Scott** (width $h = 3.49\, s\, n^{-1/3}$) and **Freedman–Diaconis** (width $h = 2\,\mathrm{IQR}\, n^{-1/3}$, robust to outliers). For our data:
+
+```{r}
+#| label: nclass
+mass <- penguins$body_mass[!is.na(penguins$body_mass)]
+c(sturges = nclass.Sturges(mass), scott = nclass.scott(mass),
+  fd = nclass.FD(mass))
+```
+
+They are starting points, not laws: always look at a few alternatives.
+:::
+
+## 10. Reading a frequency table correctly
+
+Before you trust (or publish) a frequency table, ask:
+
+1. **What is the denominator?** All observations, or only those with a known value? Are missing values shown?
+2. **How many observations are behind the percentages?** "67% of respondents" means something very different when $n = 3$ and when $n = 3000$. Always report $n$.
+3. **Are the categories exhaustive and mutually exclusive?** Each observation should fall in exactly one row.
+4. **For ordinal data, are the categories in the right order?** Otherwise cumulative columns are nonsense.
+5. **For grouped continuous data, what are the class limits** and are they closed on the left or on the right?
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Forgetting `useNA = "ifany"`.** `table()` drops missing values without warning, so percentages are silently computed on a smaller denominator.
+2. **Cumulating a nominal variable** or an ordinal variable whose levels are in alphabetical order. Set the levels explicitly with `factor(..., levels = ...)`.
+3. **Using `mode()` to get the statistical mode.** `mode(x)` returns `"numeric"` or `"character"` — the storage type, not the most frequent value.
+4. **Formatting too early.** After `adorn_pct_formatting()` or `paste0(x, "%")` the numbers are text; you can no longer sum or plot them.
+5. **`cut()` with breaks that do not cover the data.** Values outside the breaks become `NA`; check with `table(..., useNA = "ifany")`.
+:::
+
+## 11. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. In a table of eye colour, "Brown" has a relative frequency of 0.37. What does this number mean?
+
+37% of the observations in the data have brown eyes; it is the count of "Brown" divided by the total number of observations used in the table (check whether missing values were included in that total).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. For which of these variables does a cumulative percentage make sense: favourite colour, education level (primary / secondary / degree), number of siblings?
+
+Education level (ordinal) and number of siblings (discrete). Favourite colour is nominal: its categories have no order, so "at most blue" means nothing.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. What is the difference between `percent` and `valid_percent` in a `tabyl()`?
+
+`percent` divides by all observations, including `NA`; `valid_percent` divides only by the observations with a known value. They differ only when there are missing values.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q4. Two colleagues group the same income data into classes and get tables with different shapes. Can both be "right"?
+
+Yes — both describe the same data at different resolutions. That is exactly why class limits must be reported, chosen in advance and, ideally, checked with more than one choice.
+:::
+
+## 12. Exercises
+
+### Interactive (run in your browser)
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — counts and percentages.** Build the frequency table of the number of cylinders (`cyl`) in `mtcars`, then the percentages rounded to one decimal.
+
+```{webr}
+#| exercise: ex_21_1
+tab <- table(______)
+tab
+round(100 * ______(tab), 1)
+```
+
+::: {.hint exercise="ex_21_1"}
+Use `mtcars$cyl` inside `table()`, and `prop.table()` to turn counts into proportions.
+:::
+
+::: {.solution exercise="ex_21_1"}
+```r
+tab <- table(mtcars$cyl)
+tab
+round(100 * prop.table(tab), 1)
+```
+Cars with 8 cylinders are the most frequent group (14 of 32, about 44%): 8 is the **mode**.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — the tidy way, with and without `NA`.** Using `dplyr`, compute the percentage of male and female penguins (a) out of **all** birds, (b) out of the birds whose sex is **known**.
+
+```{webr}
+#| exercise: ex_21_2
+library(dplyr)
+
+# (a) all birds
+penguins |>
+  count(sex) |>
+  mutate(percent = ______)
+
+# (b) only birds with known sex
+penguins |>
+  filter(______) |>
+  count(sex) |>
+  mutate(percent = ______)
+```
+
+::: {.hint exercise="ex_21_2"}
+The percentage is `100 * n / sum(n)`. To keep only known values use `!is.na(sex)`.
+:::
+
+::: {.solution exercise="ex_21_2"}
+```r
+penguins |>
+  count(sex) |>
+  mutate(percent = 100 * n / sum(n))
+
+penguins |>
+  filter(!is.na(sex)) |>
+  count(sex) |>
+  mutate(percent = 100 * n / sum(n))
+```
+In (a) the percentages for female and male are a little below 50% each because 11 birds are `NA`. In (b) they are close to 50%. Neither is wrong; a report must say which denominator was used.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — classes and cumulative percentages.** The `faithful` data record the waiting time (minutes) between eruptions of the Old Faithful geyser. Group `waiting` into 10-minute classes from 40 to 100, build the table, and add the cumulative percentages. What percentage of waiting times are 70 minutes or less?
+
+```{webr}
+#| exercise: ex_21_3
+w_class <- cut(faithful$waiting, breaks = seq(______, ______, by = ______))
+tab <- table(w_class, useNA = "ifany")
+tab
+round(100 * cumsum(prop.table(tab)), 1)
+```
+
+::: {.hint exercise="ex_21_3"}
+`seq(40, 100, by = 10)`. Classes are of the form `(60,70]`, so "70 or less" is the cumulative percentage in the `(60,70]` row.
+:::
+
+::: {.solution exercise="ex_21_3"}
+```r
+w_class <- cut(faithful$waiting, breaks = seq(40, 100, by = 10))
+tab <- table(w_class, useNA = "ifany")
+tab
+round(100 * cumsum(prop.table(tab)), 1)
+```
+About 39% of waiting times are at most 70 minutes. Notice the shape of the counts: there are **two peaks** (around 50–60 and 70–90 minutes) with fewer values in between — a *bimodal* distribution, which a single average would hide.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 4 — debug the cumulative table.** A colleague reports that "50% of customers rated the service *Fair* or worse". Run the code and find the bug.
+
+```{webr}
+#| exercise: ex_21_4
+ratings <- c("Good", "Poor", "Fair", "Good", "Excellent", "Fair",
+             "Good", "Excellent", "Good", "Excellent")
+tab <- table(ratings)
+cumsum(prop.table(tab))
+```
+
+::: {.hint exercise="ex_21_4"}
+Look at the order of the categories in `tab`. Is it the natural order of the scale?
+:::
+
+::: {.solution exercise="ex_21_4"}
+```r
+ratings_f <- factor(ratings,
+                    levels = c("Poor", "Fair", "Good", "Excellent"),
+                    ordered = TRUE)
+tab <- table(ratings_f)
+cumsum(prop.table(tab))
+```
+With character data the categories are sorted **alphabetically** (Excellent, Fair, Good, Poor), so the colleague's 50% is the share of "Excellent" *plus* "Fair" — a meaningless sum. With the correct order, only 30% of ratings are "Fair" or worse, and 70% are "Good" or worse.
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★]{.stars} **Exercise 5 — a report-ready table.** With `janitor`, build a one-way table of `island` in `penguins` with a total row and percentages formatted with one decimal. Then do the same for `year`. Which island is the mode? Is the number of birds similar across years?
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+penguins |>
+  tabyl(island) |>
+  adorn_totals("row") |>
+  adorn_pct_formatting(digits = 1)
+
+penguins |>
+  tabyl(year) |>
+  adorn_totals("row") |>
+  adorn_pct_formatting(digits = 1)
+```
+Biscoe is the mode (168 birds, about 49%). The three years have similar numbers of birds (110, 114 and 120).
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 6 — how classes change the story.** Group `penguins$flipper_len` into classes of width 5 mm, 10 mm and 25 mm (choose sensible start and end points that cover the range of the data). For each choice, describe the shape of the distribution in one sentence. Which choice would you use in a report, and why?
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+range(penguins$flipper_len, na.rm = TRUE)   # 172 to 231
+
+for (w in c(5, 10, 25)) {
+  br <- seq(170, 235, by = w)
+  if (max(br) < 231) br <- c(br, max(br) + w)
+  print(table(cut(penguins$flipper_len, breaks = br)))
+}
+```
+With narrow classes the table shows two groups of values (around 190 mm and around 215 mm — Adelie/Chinstrap versus Gentoo). With 25 mm classes there are only three classes and the two groups disappear. Classes of about 10 mm keep the main feature while staying readable.
+:::
+:::
+
+## Summary
+
+| Task | Base R | Tidyverse / janitor |
+|---|---|---|
+| Absolute frequencies | `table(x, useNA = "ifany")` | `count(df, x)` |
+| Relative frequencies | `prop.table(table(x))` | `mutate(prop = n / sum(n))` |
+| Percentages for a report | `round(100 * prop.table(t), 1)` | `tabyl(df, x) \|> adorn_pct_formatting()` |
+| Totals | `addmargins(t)` | `adorn_totals("row")` |
+| Cumulative frequencies | `cumsum(prop.table(t))` | `mutate(cum = cumsum(prop))` |
+| Mode | `names(t)[t == max(t)]` | `count(df, x, sort = TRUE)` |
+| Classes for a continuous variable | `cut(x, breaks = ..., labels = ...)` | `mutate(cls = cut(x, ...))` |
+
+- A frequency table shows the **distribution** of a variable: which values occur and how often.
+- Always know (and report) your **denominator** and how many observations are behind each percentage.
+- Cumulative frequencies only make sense for **ordered** values — check the order of the factor levels.
+- Grouping a continuous variable loses information; the **choice of classes** can change the impression, so choose it sensibly and in advance.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2e), chapter "Factors", <https://r4ds.hadley.nz>
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), chapter "Exploring categorical data", <https://openintro-ims.netlify.app>
+- `janitor` documentation, "tabyls: a tidy, fully-featured approach to counting things", <https://sfirke.github.io/janitor/>
+:::

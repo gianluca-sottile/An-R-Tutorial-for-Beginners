@@ -1,0 +1,515 @@
+---
+title: "Iteration with apply and purrr"
+subtitle: "Apply a function to every element, column or group — without writing the loop"
+description: "Use apply(), lapply(), sapply(), vapply(), tapply() and mapply(), and their modern purrr equivalents map(), map_dbl(), map2(), imap() and list_rbind(), to iterate over lists, data frame columns and groups, ending with a 'many models' example."
+aliases:
+  - ../../R-course_lesson-13.html
+format:
+  live-html:
+    webr:
+      packages: ["purrr"]
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(purrr)
+```
+
+::: {.lesson-meta}
+[Level 1 · Foundations]{.level-1} [⏱ ~60 min]{} [Prerequisites: [Writing functions](14-functions.qmd), [Loops](16-loops.qmd), [Lists](../01-foundations/07-lists.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- apply a function over the rows or columns of a matrix with `apply()`;
+- iterate over lists and data frame columns with `lapply()`, `sapply()`, `vapply()` and their `purrr` equivalents;
+- explain **type stability** and choose functions whose output type you can predict;
+- apply a function **by group** with `tapply()` or `split()` + `map()`;
+- fit one model per group and collect the results in a single table.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(purrr)
+library(tibble)
+```
+
+## 1. Why iteration functions?
+
+In [Loops](16-loops.qmd) you computed the mean of four penguin columns with a `for` loop. It needed five lines: create a container, name it, loop over positions, extract a column, store the result. Only one of those lines said what we actually wanted: *"the mean"*.
+
+An **iteration function** (also called a *functional*) takes a function and applies it to every element of a vector or list, handling all the bookkeeping for you:
+
+```{r}
+#| label: motivation
+num_cols <- penguins[, c("bill_len", "bill_dep", "flipper_len", "body_mass")]
+
+sapply(num_cols, mean, na.rm = TRUE)                  # base R
+map_dbl(num_cols, \(x) mean(x, na.rm = TRUE))         # purrr
+```
+
+Both lines say "for each column, compute the mean". They are shorter, harder to get wrong, and easy to read. Under the hood they are still loops, so they are not magically faster; the gain is **clarity**.
+
+## 2. `apply()`: rows and columns of a matrix
+
+`apply(X, MARGIN, FUN, ...)` applies `FUN` to each row (`MARGIN = 1`) or each column (`MARGIN = 2`) of a matrix `X`. Extra arguments in `...` are passed on to `FUN`.
+
+```{r}
+#| label: apply
+m1 <- matrix(1:30, nrow = 5, ncol = 6)
+m1
+
+apply(m1, 2, sum)       # one value per column
+apply(m1, 1, max)       # one value per row
+```
+
+For sums and means there are dedicated (and faster) functions: `rowSums()`, `colSums()`, `rowMeans()`, `colMeans()`.
+
+```{r}
+#| label: colsums
+colSums(m1)
+```
+
+If `FUN` returns more than one value, `apply()` puts the results in the **columns** of a matrix, which is often transposed compared to what you expect:
+
+```{r}
+#| label: apply-range
+apply(m1, 2, range)     # 2 rows (min, max), one column per column of m1
+```
+
+::: {.callout-warning}
+## `apply()` on a data frame
+`apply()` first converts a data frame into a **matrix**. If there is a single text or factor column, *everything* becomes text, and `mean()` returns `NA` with a warning. Use `apply()` for matrices; for data frames, use `lapply()`, `sapply()`, `map()` or `across()`.
+:::
+
+## 3. `lapply()`: always returns a list
+
+`lapply(X, FUN, ...)` applies `FUN` to each element of `X` (a vector, a list or the columns of a data frame) and **always returns a list** of the same length.
+
+```{r}
+#| label: lapply
+# cars ships with R; data() just makes the source explicit
+data(cars, package = "datasets")
+lapply(cars, range)
+```
+
+Another example, with a character vector:
+
+```{r}
+#| label: lapply-movies
+movies <- c("SPYDERMAN", "BATMAN", "VERTIGO", "CHINATOWN")
+movies_lower <- lapply(movies, tolower)
+str(movies_lower)
+unlist(movies_lower)     # back to a character vector
+```
+
+(`tolower()` is already vectorised, so `tolower(movies)` gives the same character vector directly: iterate only when you need to.)
+
+A list is the most flexible container: each element can have a different length or type. That flexibility is also the downside: you often want a plain vector instead.
+
+## 4. `sapply()` and `vapply()`: simplify the result
+
+`sapply()` calls `lapply()` and then tries to **simplify** the result into a vector or a matrix:
+
+```{r}
+#| label: sapply
+sapply(cars, min)
+sapply(cars, range)      # each result has length 2 -> a 2-column matrix
+
+avg_range <- function(x) (min(x) + max(x)) / 2
+sapply(cars, avg_range)
+```
+
+### The problem: type instability
+
+What `sapply()` returns depends on **what the function returns**. If the results have different lengths, it silently gives a list instead:
+
+```{r}
+#| label: sapply-unstable
+above_mean <- function(x) x[x > mean(x)]
+
+res <- sapply(cars, above_mean)
+class(res)               # a list, not a vector or matrix
+lengths(res)
+```
+
+And with an empty input it returns an empty *list*:
+
+```{r}
+#| label: sapply-empty
+sapply(list(), length)
+```
+
+A function whose output type depends on the input values is called **type unstable**. Interactively this is harmless; inside a function or a script it can cause errors far away from their cause.
+
+### `vapply()`: say what you expect
+
+`vapply()` adds an argument `FUN.VALUE` that describes the result of **each** call: `numeric(1)` (one number), `character(1)`, `logical(1)`, or `numeric(2)` for two numbers. If a result does not match, `vapply()` stops with an error immediately.
+
+```{r}
+#| label: vapply
+#| error: true
+vapply(cars, min, numeric(1))
+vapply(cars, range, numeric(2))
+vapply(cars, above_mean, numeric(1))     # error: lengths differ
+```
+
+Rule of thumb: `sapply()` at the console, `vapply()` (or `map_dbl()` & co., below) inside functions.
+
+## 5. Applying a function by group: `tapply()`
+
+`tapply(X, INDEX, FUN)` splits the vector `X` into groups defined by the factor `INDEX` and applies `FUN` to each group:
+
+```{r}
+#| label: tapply
+tapply(iris$Sepal.Width, iris$Species, median)
+tapply(penguins$body_mass, penguins$species, mean, na.rm = TRUE)
+```
+
+With a **list** of two factors you get a two-way table:
+
+```{r}
+#| label: tapply-two
+tapply(penguins$body_mass, list(penguins$species, penguins$sex), mean,
+       na.rm = TRUE)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+Rows are species, columns are sexes, and each cell is the mean body mass of that combination. Males are heavier than females in every species. For data frames, `dplyr::summarise(.by = c(species, sex))` produces the same numbers in a tidy table: see [Grouped summaries](../02-data/10-grouped-summaries.qmd).
+:::
+
+## 6. Two inputs at once: `mapply()` and `Map()`
+
+`lapply()` iterates over **one** vector. To iterate over two vectors in parallel (first with first, second with second…), use `mapply()` (simplifies like `sapply()`) or `Map()` (returns a list like `lapply()`):
+
+```{r}
+#| label: mapply
+means <- c(0, 10, 100)
+sds   <- c(1, 2, 10)
+set.seed(1)
+Map(\(m, s) round(rnorm(3, mean = m, sd = s), 1), means, sds)
+```
+
+## 7. The modern way: `purrr`
+
+The `purrr` package (part of the tidyverse) offers the same ideas with a **consistent and type-stable** interface. The function name tells you exactly what you get back:
+
+| Base R | purrr | Returns |
+|---|---|---|
+| `lapply(x, f)` | `map(x, f)` | a list |
+| `vapply(x, f, numeric(1))` | `map_dbl(x, f)` | a numeric (double) vector |
+| `vapply(x, f, character(1))` | `map_chr(x, f)` | a character vector |
+| `vapply(x, f, logical(1))` | `map_lgl(x, f)` | a logical vector |
+| `vapply(x, f, integer(1))` | `map_int(x, f)` | an integer vector |
+| `Map(f, x, y)` / `mapply()` | `map2(x, y, f)` | a list (also `map2_dbl()`, …) |
+| — | `imap(x, f)` | like `map()`, but `f` also receives the name |
+
+```{r}
+#| label: purrr-basics
+map_dbl(cars, median)
+map_chr(penguins, \(col) class(col)[1])
+map_lgl(penguins, anyNA)
+```
+
+`map_dbl()` *guarantees* a numeric vector of the same length as the input, or an error. There is no "sometimes a list" surprise.
+
+Extra arguments: write an **anonymous function** `\(x) ...` rather than passing them after the function. It makes clear which argument is which:
+
+```{r}
+#| label: purrr-anon
+map_dbl(num_cols, \(x) sd(x, na.rm = TRUE))
+```
+
+### `map2()` and `imap()`
+
+`map2()` iterates over two inputs in parallel; `imap()` gives the function both the element and its **name** (or position):
+
+```{r}
+#| label: map2-imap
+map2_dbl(c(2, 3, 4), c(3, 2, 1), \(base, exp) base^exp)
+
+imap_chr(num_cols, \(x, name) paste0(name, ": ", sum(is.na(x)), " missing"))
+```
+
+### Combining data frames: `list_rbind()`
+
+A very common pattern: compute a small data frame for each element, then stack them into one. `map()` gives a list of data frames and `list_rbind()` binds them by row:
+
+```{r}
+#| label: list-rbind
+num_cols |>
+  imap(\(x, name) tibble(
+    variable = name,
+    mean     = mean(x, na.rm = TRUE),
+    sd       = sd(x, na.rm = TRUE)
+  )) |>
+  list_rbind()
+```
+
+This replaces the slow "grow a data frame with `rbind()` inside a loop" pattern (see [Loops](16-loops.qmd#loops-or-vectorisation)).
+
+## 8. Applying a function by group: `split()` + `map()`
+
+`split(df, df$group)` cuts a data frame into a **named list** of smaller data frames, one per group. Then any iteration function can process each piece:
+
+```{r}
+#| label: split
+by_species <- split(penguins, penguins$species)
+names(by_species)
+map_int(by_species, nrow)
+```
+
+```{r}
+#| label: split-map
+map_dbl(by_species, \(d) cor(d$bill_len, d$bill_dep, use = "complete.obs"))
+```
+
+All three correlations between bill length and bill depth are positive *within* species. (Across all penguins pooled together the correlation is *negative*, `r round(cor(penguins$bill_len, penguins$bill_dep, use = "complete.obs"), 2)`, an example of Simpson's paradox that you will meet again in [Correlation](../06-visualization/27-correlation.qmd).)
+
+## 9. Mini-project: many models
+
+Does body mass increase with flipper length at the **same rate** in every species? We fit one simple [linear regression](../09-regression/38-simple-regression.qmd) per species and compare the slopes. The slope of `lm(body_mass ~ flipper_len)` is the average increase in body mass (g) per extra millimetre of flipper.
+
+```{r}
+#| label: many-models
+fits <- by_species |>
+  map(\(d) lm(body_mass ~ flipper_len, data = d))
+
+slopes <- map_dbl(fits, \(m) coef(m)[["flipper_len"]])
+slopes
+```
+
+Now collect several results per model in one table:
+
+```{r}
+#| label: many-models-table
+model_table <- fits |>
+  imap(\(m, sp) tibble(
+    species   = sp,
+    n         = nobs(m),
+    intercept = coef(m)[[1]],
+    slope     = coef(m)[[2]],
+    r_squared = summary(m)$r.squared
+  )) |>
+  list_rbind()
+
+model_table
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+Each row is one model. In Gentoo penguins, body mass increases by about `r round(slopes[["Gentoo"]], 0)` g per mm of flipper; in Adelie by about `r round(slopes[["Adelie"]], 0)` g, and in Chinstrap by about `r round(slopes[["Chinstrap"]], 0)` g. `n` is the number of birds actually used (`lm()` drops rows with missing values), and `r_squared` is the share of the variation in body mass explained by flipper length within that species. Whether the slopes differ *more than chance would explain* is a question for [multiple regression](../09-regression/39-multiple-regression.qmd) with an interaction term.
+:::
+
+The same three-step recipe — **split, map, combine** — works for any per-group analysis: a t-test per country, a plot per year, a summary per file.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: other ways to do the same
+- `dplyr`: `penguins |> group_by(species) |> group_map(\(d, key) ...)` or `nest_by()`; `reframe()` for summaries returning several rows per group.
+- `broom::tidy(m)` and `broom::glance(m)` turn a model into a one-row (or one-row-per-coefficient) data frame, so that `map(fits, broom::tidy) |> list_rbind(names_to = "species")` builds a complete coefficient table.
+- `purrr::safely()` and `possibly()` wrap a function so that one failing group does not stop the whole iteration.
+- `furrr` / `mirai` run `map()`-style iterations in parallel on several cores.
+:::
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **`sapply()` returning a list when you expected a vector.** Use `vapply()` or `map_dbl()`/`map_chr()` so that surprises become errors.
+2. **`apply()` on a data frame with text columns** turns everything into text. Select numeric columns first, or use `map_dbl()`/`across()`.
+3. **Iterating when a vectorised function exists.** `sapply(x, sqrt)` is just `sqrt(x)`; `lapply(movies, tolower)` is just `tolower(movies)`.
+4. **Forgetting that `apply(m, 2, range)` puts results in columns** (2 × ncol), not rows.
+5. **`split()` with missing group values.** Rows whose group is `NA` are dropped silently from the list.
+6. **Passing extra arguments in the wrong place.** `map_dbl(x, mean, na.rm = TRUE)` still works, but `\(x) mean(x, na.rm = TRUE)` is clearer and is the style recommended by purrr.
+:::
+
+## 10. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. What type of object does `lapply()` return? And `map_chr()`?
+
+`lapply()` always returns a **list**. `map_chr()` always returns a **character vector** of the same length as the input (or an error).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. What is the result of `apply(matrix(1:6, nrow = 2), 1, sum)`?
+
+The matrix has rows `1 3 5` and `2 4 6`, so the row sums are `9` and `12`.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. You have a list of 50 data frames (one per country) and want one table with a row per country. Which two `purrr` functions?
+
+`map()` (or `imap()`, to keep the country name) to compute a one-row data frame per country, then `list_rbind()` to stack them.
+:::
+
+## 11. Exercises
+
+### Interactive (run in your browser)
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — `apply()` on a matrix.** The built-in matrix `VADeaths` contains death rates per 1000 in Virginia (1940) by age group (rows) and population group (columns). Compute the **maximum of each column** and the **mean of each row**.
+
+```{webr}
+#| exercise: ex_17_1
+VADeaths
+apply(VADeaths, ______, max)
+apply(VADeaths, ______, mean)
+```
+
+::: {.hint exercise="ex_17_1"}
+`MARGIN = 2` means columns, `MARGIN = 1` means rows.
+:::
+
+::: {.solution exercise="ex_17_1"}
+```r
+apply(VADeaths, 2, max)
+apply(VADeaths, 1, mean)   # same as rowMeans(VADeaths)
+```
+Death rates increase steadily with age: the row means grow from the youngest to the oldest group.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — `map_*()` on columns.** For every column of `airquality`, compute (a) the number of missing values with `map_int()`, and (b) the median, ignoring missing values, with `map_dbl()`.
+
+```{webr}
+#| exercise: ex_17_2
+library(purrr)
+map_int(airquality, \(x) sum(______))
+map_dbl(airquality, \(x) median(x, ______))
+```
+
+::: {.hint exercise="ex_17_2"}
+`is.na(x)` gives `TRUE` for each missing value; `sum()` counts them. For the median use `na.rm = TRUE`.
+:::
+
+::: {.solution exercise="ex_17_2"}
+```r
+map_int(airquality, \(x) sum(is.na(x)))
+map_dbl(airquality, \(x) median(x, na.rm = TRUE))
+```
+`Ozone` has 37 missing values and `Solar.R` has 7; the other columns are complete. You will meet these missing values again in [Missing data](../04-io/20-missing-data.qmd).
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — debug type instability.** This function is supposed to return, for each column of a data frame, its first value as text. It works on `mtcars` but returns an empty *list* on a data frame with no columns. Rewrite it with `vapply()` (or `map_chr()`) so that it always returns a character vector.
+
+```{webr}
+#| exercise: ex_17_3
+first_values <- function(df) {
+  sapply(df, \(x) as.character(x[1]))
+}
+str(first_values(mtcars[1:3]))
+str(first_values(mtcars[0]))        # a data frame with zero columns
+```
+
+::: {.hint exercise="ex_17_3"}
+`vapply(df, \(x) as.character(x[1]), character(1))` declares that each result is one string.
+:::
+
+::: {.solution exercise="ex_17_3"}
+```r
+first_values <- function(df) {
+  vapply(df, \(x) as.character(x[1]), character(1))
+}
+str(first_values(mtcars[1:3]))   # named chr vector
+str(first_values(mtcars[0]))     # Named chr(0): still a character vector
+```
+With zero columns `sapply()` has nothing to simplify and returns `list()`. `vapply()` knows the expected type even when there is nothing to compute.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 4 — many models.** Using `mtcars`, fit `lm(mpg ~ wt)` separately for cars with 4, 6 and 8 cylinders, and extract the slope of `wt` for each group. In which group does an extra 1000 lbs of weight cost the most miles per gallon?
+
+```{webr}
+#| exercise: ex_17_4
+library(purrr)
+by_cyl <- split(mtcars, ______)
+fits <- map(by_cyl, \(d) lm(______, data = d))
+map_dbl(fits, \(m) coef(m)[["wt"]])
+```
+
+::: {.hint exercise="ex_17_4"}
+Split by `mtcars$cyl`; the model formula is `mpg ~ wt`.
+:::
+
+::: {.solution exercise="ex_17_4"}
+```r
+by_cyl <- split(mtcars, mtcars$cyl)
+fits <- map(by_cyl, \(d) lm(mpg ~ wt, data = d))
+map_dbl(fits, \(m) coef(m)[["wt"]])
+```
+All slopes are negative (heavier cars use more fuel). The steepest slope is for 4-cylinder cars, about −5.6 mpg per 1000 lbs. With only 7–14 cars per group these slopes are very uncertain: look at `confint(fits[["4"]])` before drawing conclusions.
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★]{.stars} **Exercise 5 — a summary table for every column.** Write a function `describe_col(x)` that returns a one-row tibble with `n_missing`, `mean`, `sd`, `min` and `max` of a numeric vector. Use `imap()` + `list_rbind()` to build a table with one row per numeric column of `penguins` and a column `variable` with the column name.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+library(purrr)
+library(tibble)
+
+describe_col <- function(x) {
+  tibble(
+    n_missing = sum(is.na(x)),
+    mean = mean(x, na.rm = TRUE),
+    sd   = sd(x, na.rm = TRUE),
+    min  = min(x, na.rm = TRUE),
+    max  = max(x, na.rm = TRUE)
+  )
+}
+
+penguins |>
+  keep(is.numeric) |>                       # keep only numeric columns
+  imap(\(x, name) tibble(variable = name, describe_col(x))) |>
+  list_rbind()
+```
+`keep()` from purrr keeps the elements (here, columns) for which the predicate is `TRUE`; `penguins[sapply(penguins, is.numeric)]` is the base-R equivalent. `year` is numeric too, so it appears in the table — decide whether that makes sense.
+:::
+:::
+
+## Summary
+
+| Task | Base R | purrr |
+|---|---|---|
+| Rows/columns of a matrix | `apply(m, 1 or 2, f)`, `rowSums()`, `colMeans()` | — |
+| Each element → list | `lapply(x, f)` | `map(x, f)` |
+| Each element → vector of known type | `vapply(x, f, numeric(1))` | `map_dbl()`, `map_chr()`, `map_lgl()`, `map_int()` |
+| Simplify if possible | `sapply(x, f)` | — |
+| By group | `tapply(x, g, f)`, `split()` + `lapply()` | `split()` + `map()` |
+| Two inputs in parallel | `Map()`, `mapply()` | `map2()` |
+| Element and its name | — | `imap()` |
+| Stack data frames | `do.call(rbind, lst)` | `list_rbind()` |
+
+- Iteration functions express **what** to do to each element; the bookkeeping is done for you.
+- Prefer **type-stable** functions (`vapply()`, `map_dbl()`, …) in scripts and functions.
+- **Split → map → combine** handles any per-group analysis, including fitting many models.
+- If a vectorised function exists, you do not need to iterate at all.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2e), chapter "Iteration", <https://r4ds.hadley.nz/iteration.html>
+- Wickham, *Advanced R* (2e), chapter "Functionals", <https://adv-r.hadley.nz/functionals.html>
+- purrr documentation, <https://purrr.tidyverse.org>
+:::

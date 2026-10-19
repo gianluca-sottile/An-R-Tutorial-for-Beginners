@@ -1,0 +1,605 @@
+---
+title: "Missing data"
+subtitle: "Find NAs, understand why they are missing, and handle them without fooling yourself"
+description: "Locate missing values, learn the three missingness mechanisms (MCAR, MAR, MNAR) through a simulation, see when complete-case analysis is biased, and understand why mean imputation shrinks variability and distorts correlations; pointers to multiple imputation with mice."
+aliases:
+  - ../../R-course_lesson-15.html
+format:
+  live-html:
+    webr:
+      packages: ["dplyr", "tidyr"]
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+library(tidyr)
+```
+
+::: {.lesson-meta}
+[Level 1 · Foundations]{.level-1} [⏱ ~75 min]{} [Prerequisites: [Importing data](18-import.qmd), [dplyr verbs](../02-data/09-dplyr-verbs.qmd), [Iteration](../03-programming/17-iteration.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- find and count missing values in vectors and data frames;
+- explain the three **missingness mechanisms** (MCAR, MAR, MNAR) with everyday examples;
+- show by simulation when **complete-case analysis** gives biased results;
+- remove or replace missing values with `na.rm`, `drop_na()`, `na.omit()` and `replace_na()`, knowing what each choice costs;
+- explain why **mean imputation** shrinks the variance and weakens correlations, and know that **multiple imputation** exists for serious work.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+```
+
+## 1. Why missing data matter
+
+Almost every real dataset has holes: a survey question left blank, a sensor that stopped recording, a patient who left a study. R marks a missing value with `NA` ("not available").
+
+Missing values cause two kinds of trouble:
+
+1. **Technical**: many functions return `NA`, or fail, as soon as one value is missing.
+2. **Statistical**: if the values are missing *for a reason*, the observed data are no longer a fair picture of the population, and simply ignoring the holes can give **biased** answers.
+
+The first problem takes one argument to fix. The second needs thinking, and is the heart of this lesson.
+
+## 2. `NA` in R
+
+`NA` is contagious: any computation involving an unknown value gives an unknown result.
+
+```{r}
+#| label: na-basics
+x <- c(12, NA, 7, 3)
+mean(x)
+mean(x, na.rm = TRUE)     # remove NAs before computing
+sum(is.na(x))             # how many are missing?
+```
+
+You cannot test for `NA` with `==`, because "is this unknown value equal to NA?" is itself unknown:
+
+```{r}
+#| label: na-equal
+x == NA                   # all NA: not what you want
+is.na(x)                  # the right way
+```
+
+Do not confuse `NA` with `NaN` ("not a number", the result of e.g. `0 / 0`) or with `NULL` (an *absent* object, of length 0). `is.na()` is `TRUE` for both `NA` and `NaN`.
+
+## 3. Finding missing values in a data frame
+
+We use two datasets: the built-in `airquality` (daily air measurements in New York, May–September 1973) and a Titanic passenger list.
+
+```{r}
+#| label: aq-count
+colSums(is.na(airquality))              # missing values per column
+round(colMeans(is.na(airquality)), 3)   # proportion missing per column
+```
+
+`is.na(df)` gives a `TRUE`/`FALSE` matrix of the same shape as the data; `colSums()` counts the `TRUE`s in each column and `colMeans()` gives the proportion. `Ozone` is missing on `r sum(is.na(airquality$Ozone))` of `r nrow(airquality)` days.
+
+```{r}
+#| label: aq-complete
+sum(complete.cases(airquality))         # rows with no missing value at all
+```
+
+Only `r sum(complete.cases(airquality))` of the `r nrow(airquality)` rows are complete. Missingness can also vary across groups:
+
+```{r}
+#| label: aq-month
+airquality |>
+  summarise(prop_ozone_missing = mean(is.na(Ozone)), .by = Month)
+```
+
+Ozone is missing far more often in **June** (month 6) than in the other months. That pattern is a first clue about *why* the values are missing.
+
+Now the Titanic data:
+
+```{r}
+#| label: titanic
+titanic <- read_csv(data_path("test.csv"), show_col_types = FALSE)
+na_counts <- colSums(is.na(titanic))
+sort(na_counts[na_counts > 0], decreasing = TRUE)
+```
+
+`Cabin` is missing for most passengers, `Age` for `r sum(is.na(titanic$Age))` and `Fare` for `r sum(is.na(titanic$Fare))`.
+
+::: {.callout-tip}
+## Visual summaries
+The `naniar` package provides plots and tables made for missing data, for example `naniar::vis_miss(airquality)` (a map of the missing cells) and `naniar::miss_var_summary(airquality)`. They are optional but handy for larger datasets.
+:::
+
+## 4. Why are data missing? MCAR, MAR, MNAR
+
+Statisticians distinguish three **mechanisms** — three kinds of reason for missingness. Imagine an online survey that asks for age and monthly income.
+
+| Mechanism | Meaning | Example |
+|---|---|---|
+| **MCAR** — *Missing Completely At Random* | Missingness has nothing to do with any variable, observed or not. | A server error randomly lost 30% of the income answers. |
+| **MAR** — *Missing At Random* | Missingness depends only on **observed** variables. | Older respondents skip the income question more often; we know everyone's age. |
+| **MNAR** — *Missing Not At Random* | Missingness depends on the **missing value itself** (or on something unobserved). | People with high incomes are less willing to report their income. |
+
+The names are confusing: "Missing *At Random*" does **not** mean "random" in the everyday sense. It means "random *once we take the observed variables into account*": among people of the same age, whether income is missing is like a coin toss.
+
+Why does the mechanism matter? Because it decides whether the observed values still represent everyone:
+
+- under **MCAR** the observed rows are a random subsample, so analysing only them (*complete-case analysis*) is **unbiased**, just less precise;
+- under **MAR** the observed rows over-represent some groups (here, the young), so complete-case results can be **biased** — but the observed variables contain the information needed to correct the bias;
+- under **MNAR** the bias cannot be fully corrected from the data alone.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: formal definitions
+Let $Y$ be the data, split into an observed part $Y_\text{obs}$ and a missing part $Y_\text{mis}$, and let $R$ be the indicator of which values are missing. The mechanisms are defined by the distribution of $R$:
+
+- MCAR: $P(R \mid Y_\text{obs}, Y_\text{mis}) = P(R)$;
+- MAR: $P(R \mid Y_\text{obs}, Y_\text{mis}) = P(R \mid Y_\text{obs})$;
+- MNAR: $P(R \mid Y_\text{obs}, Y_\text{mis})$ depends on $Y_\text{mis}$.
+
+From the observed data alone you **cannot test** MAR against MNAR, because the test would need the values you do not have. You can sometimes reject MCAR (e.g. if missingness clearly depends on an observed variable, as Ozone on Month), but the choice between MAR and MNAR rests on knowledge of how the data were collected. Reference: Little & Rubin, *Statistical Analysis with Missing Data* (3rd ed., 2019); van Buuren, *Flexible Imputation of Missing Data* (2nd ed.).
+:::
+
+## 5. A simulation: when is complete-case analysis biased?
+
+We can see the three mechanisms at work by **simulating** the survey: we create a full dataset (so we know the truth), delete values in three different ways, and compare the mean income of the remaining respondents with the true mean.
+
+```{r}
+#| label: sim-data
+set.seed(2024)
+n <- 10000
+age    <- rnorm(n, mean = 45, sd = 12)
+income <- 1000 + 30 * age + rnorm(n, mean = 0, sd = 400)   # older -> richer
+true_mean <- mean(income)
+
+# probability that income is missing, under each mechanism
+p_miss <- list(
+  MCAR = rep(0.3, n),                       # same for everyone
+  MAR  = plogis(-4 + 0.07 * age),           # depends on (observed) age
+  MNAR = plogis(-4 + 0.0012 * income)       # depends on income itself
+)
+missing <- lapply(p_miss, \(p) runif(n) < p)
+sapply(missing, mean)                       # share of missing values
+```
+
+`plogis()` turns any number into a probability between 0 and 1 (it is the *logistic* function you will meet in [logistic regression](../09-regression/41-logistic-regression.qmd)); larger age, or larger income, means a higher chance of being missing. The three mechanisms delete a similar share of values, but **different** values:
+
+```{r}
+#| label: sim-cc
+cc_mean <- sapply(missing, \(m) mean(income[!m]))   # complete-case means
+round(cc_mean - true_mean, 1)                      # bias
+```
+
+```{r}
+#| label: fig-sim
+#| fig-cap: "Income distribution of all simulated people (grey) and of those who answered (colour). Under MCAR the observed values look like the full data; under MAR and MNAR high incomes are under-represented."
+sim_long <- bind_rows(lapply(names(missing), \(mech) tibble(
+  mechanism = mech,
+  income    = income,
+  observed  = !missing[[mech]]
+)))
+
+ggplot(sim_long, aes(income)) +
+  geom_density(colour = "grey50", linewidth = 0.8) +
+  geom_density(data = filter(sim_long, observed), aes(colour = mechanism),
+               linewidth = 0.8) +
+  geom_vline(xintercept = true_mean, linetype = "dashed") +
+  facet_wrap(~ mechanism, ncol = 1) +
+  labs(x = "Monthly income", y = "Density") +
+  theme(legend.position = "none")
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+- **MCAR**: the bias is about `r round(cc_mean[["MCAR"]] - true_mean, 0)`, essentially zero (the remaining difference is random noise). Losing 30% of the data made the estimate less precise, but not systematically wrong.
+- **MAR**: the respondents are younger, hence poorer, on average. The complete-case mean underestimates the truth by about `r abs(round(cc_mean[["MAR"]] - true_mean, 0))`.
+- **MNAR**: high earners hide their income, and the mean is too low by about `r abs(round(cc_mean[["MNAR"]] - true_mean, 0))`.
+:::
+
+### Using the observed information
+
+Under MAR the bias comes from *age*, which we observe. If we use age to predict the missing incomes (here with a simple linear regression fitted on the complete cases), most of the bias disappears. Under MNAR the same trick helps only partly, because the reason for missingness — income itself — is exactly what we do not see:
+
+```{r}
+#| label: sim-reg
+reg_mean <- sapply(missing, \(m) {
+  fit <- lm(income ~ age, subset = !m)          # fit on observed rows
+  filled <- income
+  filled[m] <- predict(fit, newdata = data.frame(age = age[m]))
+  mean(filled)
+})
+round(rbind(complete_case = cc_mean - true_mean,
+            regression_fill = reg_mean - true_mean), 1)
+```
+
+This is the key idea behind modern methods such as **multiple imputation** (Section 9): use everything you observe to make the missing-at-random assumption as plausible as possible. (Filling in single predicted values, as we just did, fixes the mean but still understates uncertainty — more on that next.)
+
+## 6. Removing missing values
+
+### Inside a computation: `na.rm = TRUE`
+
+Most summary functions have an `na.rm` argument: `mean()`, `median()`, `sd()`, `var()`, `sum()`, `min()`, `max()`, `quantile()`. For correlations, use `use = "complete.obs"`:
+
+```{r}
+#| label: na-rm
+mean(airquality$Ozone, na.rm = TRUE)
+cor(airquality$Ozone, airquality$Temp, use = "complete.obs")
+```
+
+### Dropping rows: `drop_na()` and `na.omit()`
+
+`tidyr::drop_na()` removes rows with missing values — in **any** column, or only in the columns you name. Base R's `na.omit()` always looks at all columns.
+
+```{r}
+#| label: drop-na
+nrow(titanic)
+nrow(na.omit(titanic))          # any column missing -> row dropped
+nrow(drop_na(titanic))          # same
+nrow(drop_na(titanic, Age))     # only rows with missing Age dropped
+```
+
+Dropping every incomplete row keeps only `r nrow(na.omit(titanic))` of `r nrow(titanic)` passengers, almost entirely because of `Cabin`, a column we may not even need. **Drop rows only for the variables your analysis uses**, and report how many rows you lost. Remember from Section 5: complete-case analysis is safe under MCAR but may be biased otherwise.
+
+## 7. Replacing missing values with a constant: `replace_na()`
+
+Sometimes a missing value has a known meaning. For the Titanic, a missing `Cabin` usually means that no cabin number was recorded, so an explicit category is more honest than dropping the passenger:
+
+```{r}
+#| label: replace-na
+titanic |>
+  mutate(Cabin = replace_na(Cabin, "Unknown")) |>
+  count(cabin_known = Cabin != "Unknown")
+```
+
+For numeric data, replace `NA` by `0` only when "missing" really means "zero" (e.g. no purchases recorded = 0 purchases). For a measurement such as age or ozone, `0` is a wrong value, not a missing one.
+
+## 8. Mean and median imputation — and their hidden cost
+
+**Imputation** means filling in missing values with plausible numbers. The simplest version replaces every `NA` in a column with the column's mean (or median). It is common because it is easy:
+
+```{r}
+#| label: titanic-impute
+titanic_imp <- titanic |>
+  mutate(
+    age_mean   = replace_na(Age, mean(Age, na.rm = TRUE)),
+    age_median = replace_na(Age, median(Age, na.rm = TRUE))
+  )
+
+titanic_imp |>
+  summarise(across(
+    c(Age, age_mean, age_median),
+    list(n_missing = \(v) sum(is.na(v)), sd = \(v) sd(v, na.rm = TRUE))
+  ))
+```
+
+The missing values are gone. But look at the standard deviations: the imputed columns are **less variable** than the observed ages. Let us look at the effect more closely with `airquality`.
+
+### Variance shrinks
+
+```{r}
+#| label: aq-impute
+aq <- airquality |>
+  mutate(
+    Ozone     = as.numeric(Ozone),   # integer -> double, see note below
+    imputed   = is.na(Ozone),
+    ozone_imp = replace_na(Ozone, mean(Ozone, na.rm = TRUE))
+  )
+
+c(sd_observed = sd(aq$Ozone, na.rm = TRUE),
+  sd_imputed  = sd(aq$ozone_imp))
+```
+
+`Ozone` is stored as an **integer**, while its mean is a decimal number. `replace_na()` refuses to put a decimal into an integer column (it would silently lose precision), so we convert the column with `as.numeric()` first.
+
+All `r sum(aq$imputed)` imputed days get exactly the same value, the mean. Values that sit exactly at the centre add nothing to the spread, while the sample size grows: the standard deviation drops from `r round(sd(aq$Ozone, na.rm = TRUE), 1)` to `r round(sd(aq$ozone_imp), 1)`. Any standard error, confidence interval or p-value computed afterwards will be **too optimistic**, because R believes it has `r nrow(aq)` real measurements instead of `r sum(!aq$imputed)`.
+
+### Correlations are distorted
+
+```{r}
+#| label: fig-aq-impute
+#| fig-cap: "Ozone against temperature. Mean-imputed days (orange) lie on a horizontal line at the mean ozone, regardless of temperature, which weakens the visible relationship."
+ggplot(aq, aes(Temp, ozone_imp, colour = imputed)) +
+  geom_point(alpha = 0.8) +
+  scale_colour_manual(values = c(`FALSE` = "grey40", `TRUE` = "#E69F00"),
+                      labels = c("observed", "mean-imputed")) +
+  labs(x = "Temperature (°F)", y = "Ozone (ppb)", colour = NULL)
+```
+
+```{r}
+#| label: aq-cor
+c(complete_case = cor(aq$Ozone, aq$Temp, use = "complete.obs"),
+  mean_imputed  = cor(aq$ozone_imp, aq$Temp))
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+On hot days ozone is high, yet the imputed hot days are given an average ozone value. The imputed points pull the relationship towards zero: the correlation drops from `r round(cor(aq$Ozone, aq$Temp, use = "complete.obs"), 2)` to `r round(cor(aq$ozone_imp, aq$Temp), 2)`. Mean imputation **shrinks variances and weakens correlations** (and regression slopes) — even when the data are MCAR.
+:::
+
+### Group-wise imputation
+
+A slightly better version imputes the mean **within groups** that are related to the missing variable. Ozone depends on the season, so we can use the monthly mean:
+
+```{r}
+#| label: aq-group
+aq <- aq |>
+  mutate(ozone_month = replace_na(Ozone, mean(Ozone, na.rm = TRUE)),
+         .by = Month)
+
+c(sd_observed = sd(aq$Ozone, na.rm = TRUE),
+  sd_overall  = sd(aq$ozone_imp),
+  sd_by_month = sd(aq$ozone_month))
+```
+
+The group means preserve the differences *between* months, so less variability is lost. The same idea for the Titanic would impute `Age` by passenger class and sex (Exercise 5). Group-wise imputation is still a single fixed value per group: it still understates variability within groups.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: how much does the variance shrink?
+Suppose $n_o$ values are observed with sample variance $s^2$ and $n_m$ values are replaced by the observed mean $\bar y$. The imputed values contribute nothing to the sum of squared deviations, so the variance computed on all $n = n_o + n_m$ values is
+
+$$
+s^2_\text{imp} = \frac{(n_o - 1)\, s^2}{n - 1} \approx \frac{n_o}{n}\, s^2 .
+$$
+
+With `r round(mean(is.na(airquality$Ozone)) * 100)`% missing ozone values, the variance is reduced by about that proportion. Covariances with other variables shrink by the same factor, while the other variable's variance does not, so the correlation shrinks towards zero.
+:::
+
+## 9. Doing it properly: multiple imputation
+
+**Multiple imputation** (MI) addresses both problems of single imputation:
+
+1. it predicts each missing value from the **other variables** (as in Section 5), which removes bias under MAR;
+2. it adds **random noise** to those predictions and repeats the whole process several times (say 5–20), creating several completed datasets. The analysis is run on each, and the results are combined (with "Rubin's rules") so that standard errors include the extra uncertainty due to the missing values.
+
+In R the standard package is `mice` (*Multivariate Imputation by Chained Equations*). A minimal workflow looks like this:
+
+```{r}
+#| label: mice
+#| eval: false
+imp  <- mice::mice(airquality, m = 20, seed = 1, printFlag = FALSE)  # 20 datasets
+fits <- with(imp, lm(Ozone ~ Temp + Wind))       # fit the model on each
+summary(mice::pool(fits))                        # combine the results
+```
+
+MI is not magic: it relies on the MAR assumption and on a sensible imputation model. But it is the recommended default when missingness is more than trivial. The free online book by van Buuren (below) is the reference.
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Testing `x == NA`.** Always `NA`. Use `is.na(x)`.
+2. **Forgetting `na.rm = TRUE`** and getting `NA` — or, worse, silently using a function that drops `NA`s without telling you how many.
+3. **`na.omit()` on the whole data frame**, losing most rows because of a column you do not need. Drop on the variables you analyse, and report the loss.
+4. **Assuming complete-case analysis is harmless.** It is unbiased only if data are MCAR (or, for regression, if missingness depends only on the predictors).
+5. **Mean imputation followed by tests and confidence intervals.** The variance is underestimated and the p-values are too small. Use multiple imputation, or at least report the analysis with and without imputation.
+6. **Missing-value codes left as numbers** (`-99`, `999`). Convert them to `NA` at import (see [Importing data](18-import.qmd)).
+:::
+
+## 10. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. In a clinical trial, patients who feel the drug is not working drop out before the final visit. Which mechanism is this, most likely?
+
+**MNAR**: the probability that the final outcome is missing depends on the outcome itself (how well the patient is doing). If dropout could be fully explained by *earlier* recorded measurements, it would be MAR.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. True or false: if data are MCAR, complete-case analysis gives unbiased estimates.
+
+**True** — the complete cases are a random subsample. The cost is lower precision (wider confidence intervals), because fewer observations are used.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. After replacing 30% of a variable's values with its mean, will its standard deviation be larger, smaller or the same?
+
+**Smaller.** The imputed values sit exactly at the mean, so they add no spread, while the sample size used to compute the standard deviation grows.
+:::
+
+## 11. Exercises
+
+### Interactive (run in your browser)
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — how much is missing?** For the built-in `airquality`, compute (a) the **proportion** of missing values in each column and (b) the proportion of rows that are complete.
+
+```{webr}
+#| exercise: ex_20_1
+colMeans(______(airquality))
+mean(______(airquality))
+```
+
+::: {.hint exercise="ex_20_1"}
+`is.na(df)` gives a logical matrix; `colMeans()` of it gives proportions. `complete.cases(df)` gives one `TRUE`/`FALSE` per row.
+:::
+
+::: {.solution exercise="ex_20_1"}
+```r
+colMeans(is.na(airquality))
+mean(complete.cases(airquality))   # about 0.73
+```
+About 24% of `Ozone` and 5% of `Solar.R` values are missing; roughly 73% of the days are complete.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — predict the output.** Write down what each line returns *before* running the code.
+
+```{webr}
+#| exercise: ex_20_2
+v <- c(4, NA, 10, NA)
+sum(v)
+sum(v, na.rm = TRUE)
+mean(is.na(v))
+v[!is.na(v)]
+NA > 3
+NA & FALSE
+```
+
+::: {.hint exercise="ex_20_2"}
+`NA` propagates unless the answer is the same whatever the unknown value is. Is `NA & FALSE` the same whether `NA` is `TRUE` or `FALSE`?
+:::
+
+::: {.solution exercise="ex_20_2"}
+`NA`, `14`, `0.5`, `4 10`, `NA`, `FALSE`. The last one is `FALSE` because "anything AND FALSE" is `FALSE` regardless of the unknown value — R only returns `NA` when the answer really is unknown.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — the cost of mean imputation.** Impute the missing `Solar.R` values of `airquality` with the mean, then compare (a) the standard deviation and (b) the correlation with `Ozone` (using complete cases) before and after imputation.
+
+```{webr}
+#| exercise: ex_20_3
+library(dplyr)
+library(tidyr)
+aq <- airquality |>
+  mutate(Solar.R   = as.numeric(Solar.R),   # integer -> double
+         solar_imp = replace_na(Solar.R, ______))
+
+c(before = sd(aq$Solar.R, na.rm = TRUE), after = sd(______))
+c(before = cor(aq$Solar.R, aq$Ozone, use = "complete.obs"),
+  after  = cor(aq$solar_imp, aq$Ozone, use = "complete.obs"))
+```
+
+::: {.hint exercise="ex_20_3"}
+The replacement value is `mean(Solar.R, na.rm = TRUE)`; the second standard deviation is of `aq$solar_imp`.
+:::
+
+::: {.solution exercise="ex_20_3"}
+```r
+aq <- airquality |>
+  mutate(Solar.R   = as.numeric(Solar.R),
+         solar_imp = replace_na(Solar.R, mean(Solar.R, na.rm = TRUE)))
+c(before = sd(aq$Solar.R, na.rm = TRUE), after = sd(aq$solar_imp))
+c(before = cor(aq$Solar.R, aq$Ozone, use = "complete.obs"),
+  after  = cor(aq$solar_imp, aq$Ozone, use = "complete.obs"))
+```
+Both the standard deviation and the correlation decrease slightly. The effect is small here because only 7 of 153 values (about 5%) were imputed; with 30–50% missing it becomes large.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 4 — simulate MCAR vs MNAR.** The code creates exam scores for 5,000 students. Make the score missing (a) completely at random with probability 0.4, and (b) with a probability that is **higher for low scores** (students with low scores do not report them). Compare the mean of the observed scores with the true mean in both cases.
+
+```{webr}
+#| exercise: ex_20_4
+set.seed(1)
+score <- rnorm(5000, mean = 24, sd = 4)
+true_mean <- mean(score)
+
+miss_mcar <- runif(5000) < ______
+miss_mnar <- runif(5000) < plogis(6 - 0.3 * ______)
+
+c(mcar = mean(score[!miss_mcar]) - true_mean,
+  mnar = mean(score[!miss_mnar]) - true_mean)
+```
+
+::: {.hint exercise="ex_20_4"}
+For MCAR the probability is the constant `0.4`. For MNAR the probability must depend on `score`: `plogis(6 - 0.3 * score)` is larger for small scores.
+:::
+
+::: {.solution exercise="ex_20_4"}
+```r
+miss_mcar <- runif(5000) < 0.4
+miss_mnar <- runif(5000) < plogis(6 - 0.3 * score)
+c(mcar = mean(score[!miss_mcar]) - true_mean,
+  mnar = mean(score[!miss_mnar]) - true_mean)
+```
+The MCAR difference is close to 0. Under MNAR the observed mean is too **high** (by roughly 1 point): the students who did not report were mostly the weaker ones. Nothing in the observed scores alone reveals this.
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★]{.stars} **Exercise 5 — group-wise imputation on the Titanic.** Read `data/test.csv`. Impute the missing `Age` values (a) with the overall median and (b) with the median of each `Pclass` × `Sex` group. Compare the mean imputed age of third-class passengers under the two methods, and the standard deviation of `Age` before and after each imputation.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+library(dplyr)
+library(tidyr)
+library(readr)
+
+titanic <- read_csv(here::here("data", "test.csv"), show_col_types = FALSE)
+
+titanic_imp <- titanic |>
+  mutate(age_overall = replace_na(Age, median(Age, na.rm = TRUE))) |>
+  mutate(age_group = replace_na(Age, median(Age, na.rm = TRUE)),
+         .by = c(Pclass, Sex))
+
+titanic_imp |>
+  filter(is.na(Age)) |>
+  summarise(overall = mean(age_overall), by_group = mean(age_group),
+            .by = Pclass)
+
+titanic_imp |>
+  summarise(across(c(Age, age_overall, age_group), \(v) sd(v, na.rm = TRUE)))
+```
+First-class passengers are older on average than third-class ones; the group-wise median gives third-class passengers younger imputed ages, which is more plausible. Both imputations reduce the standard deviation compared with the observed `Age`, the group-wise one less so.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 6 — compare three analyses.** Using `airquality`, estimate the slope of `Temp` in `lm(Ozone ~ Temp)` with (a) complete cases, (b) mean-imputed `Ozone`, and (c) multiple imputation with `mice` (`m = 20`, `seed = 1`). Compare the slopes and their standard errors.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+library(dplyr)
+library(tidyr)
+
+cc  <- lm(Ozone ~ Temp, data = airquality)
+aq_mean <- airquality |>
+  mutate(Ozone = replace_na(as.numeric(Ozone), mean(Ozone, na.rm = TRUE)))
+mean_fit <- lm(Ozone ~ Temp, data = aq_mean)
+
+imp  <- mice::mice(airquality, m = 20, seed = 1, printFlag = FALSE)
+mi   <- summary(mice::pool(with(imp, lm(Ozone ~ Temp))))
+
+summary(cc)$coefficients["Temp", 1:2]
+summary(mean_fit)$coefficients["Temp", 1:2]
+mi[mi$term == "Temp", c("estimate", "std.error")]
+```
+Mean imputation gives a **flatter** slope (the imputed points lie on a horizontal line) and a **smaller** standard error (it pretends to have 153 real observations). Complete-case and multiple-imputation slopes are similar here, with MI using the information in the other variables.
+:::
+:::
+
+## Summary
+
+| Task | Code |
+|---|---|
+| Is it missing? | `is.na(x)`, `anyNA(x)` |
+| Count / proportion per column | `colSums(is.na(df))`, `colMeans(is.na(df))` |
+| Complete rows | `complete.cases(df)` |
+| Ignore NAs in a summary | `mean(x, na.rm = TRUE)`, `cor(x, y, use = "complete.obs")` |
+| Drop rows | `tidyr::drop_na(df, col)`, `na.omit(df)` |
+| Replace with a constant | `tidyr::replace_na(x, value)` |
+| Mean / group-mean imputation | `mutate(x = replace_na(x, mean(x, na.rm = TRUE)), .by = g)` |
+| Multiple imputation | `mice::mice()`, `with()`, `mice::pool()` |
+
+- The **reason** values are missing (MCAR, MAR, MNAR) decides whether simple fixes are safe.
+- Complete-case analysis is **unbiased only under MCAR**; under MAR, use the observed variables; MNAR needs assumptions beyond the data.
+- Mean imputation **shrinks variances, weakens correlations** and makes p-values too small.
+- Drop rows only for the variables you use, and **report** how many were lost.
+- For serious analyses with non-trivial missingness, use **multiple imputation**.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- van Buuren, S., *Flexible Imputation of Missing Data* (2nd ed.), free online, <https://stefvanbuuren.name/fimd/>
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2e), chapter "Missing values", <https://r4ds.hadley.nz/missing-values.html>
+- naniar documentation, <https://naniar.njtierney.com>
+:::

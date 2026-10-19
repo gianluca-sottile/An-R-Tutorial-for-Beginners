@@ -1,0 +1,510 @@
+---
+title: "Data manipulation with dplyr"
+subtitle: "Pick rows, choose columns, create variables and sort — one verb at a time"
+description: "Learn the pipe |> and the core dplyr verbs filter(), select(), mutate(), arrange(), rename(), relocate(), distinct(), slice_*() and count(), with a comparison to base R order()."
+aliases:
+  - ../../R-course_lesson-7.html
+format:
+  live-html:
+    webr:
+      packages: ["dplyr", "tibble"]
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+library(tibble)
+```
+
+::: {.lesson-meta}
+[Level 1 · Foundations]{.level-1} [⏱ ~75 min]{} [Prerequisites: [Data frames](08-data-frames.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- chain operations with the native pipe `|>` and read a pipeline aloud;
+- keep rows with `filter()` and choose columns with `select()` and its helpers;
+- create and recode variables with `mutate()`, `if_else()` and `case_when()`;
+- sort rows with `arrange()` and `desc()`, and relate them to base R `order()`;
+- tidy up a table with `rename()`, `relocate()`, `distinct()`, `slice_*()` and `count()`.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(tibble)
+```
+
+## 1. Why a "grammar" of data manipulation?
+
+Most of the time spent on a real analysis is not spent on statistics: it is spent getting the data into shape. *Keep only the adult patients. Convert grams to kilograms. Sort by date. Count how many observations per group.*
+
+Base R can do all of this with brackets, but the code quickly becomes hard to read. The **dplyr** package gives each of these tasks a **verb** — a function with a clear name — and all verbs work the same way:
+
+1. the first argument is a data frame;
+2. the other arguments describe what to do, using column names **without quotes**;
+3. the result is a new data frame (the original is never modified).
+
+We will use `penguins` throughout. Converting it to a tibble once keeps the printed output short:
+
+```{r}
+#| label: data
+penguins <- as_tibble(penguins)
+penguins
+```
+
+## 2. The pipe `|>`: "and then"
+
+Suppose we want the Gentoo penguins, then only three columns, then sorted by mass. Without a pipe, we either nest the calls (read from the inside out) or create intermediate objects:
+
+```{r}
+#| label: nested
+arrange(select(filter(penguins, species == "Gentoo"),
+               species, sex, body_mass), body_mass)
+```
+
+The **pipe** `|>` takes what is on its left and passes it as the **first argument** of the function on its right. `x |> f(y)` is the same as `f(x, y)`. Read it aloud as **"and then"**:
+
+```{r}
+#| label: piped
+penguins |>                              # take penguins, and then
+  filter(species == "Gentoo") |>         # keep the Gentoo, and then
+  select(species, sex, body_mass) |>     # keep three columns, and then
+  arrange(body_mass)                     # sort by body mass
+```
+
+The two chunks produce the same result, but the second one reads in the order in which things happen. Put one verb per line, with `|>` at the end of each line.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: `|>` vs `%>%`
+
+The native pipe `|>` has been part of R since version 4.1. Older code (and many web pages) use `%>%` from the magrittr package, which behaves almost identically for everyday use. In this course we always use `|>`. The keyboard shortcut in RStudio and Positron is Ctrl/Cmd + Shift + M (tick "Use native pipe operator" in the options).
+:::
+
+## 3. `filter()`: keep rows
+
+`filter()` keeps the rows for which a condition is `TRUE`.
+
+```{r}
+#| label: filter-basic
+penguins |>
+  filter(species == "Adelie", island == "Dream", flipper_len > 190)
+```
+
+Conditions separated by commas must **all** be true (logical "and"). For "or" use `|`. The comparison operators are the ones you met with [vectors](../01-foundations/04-vectors.qmd): `==`, `!=`, `<`, `<=`, `>`, `>=`.
+
+Three helpers make conditions shorter and clearer:
+
+```{r}
+#| label: filter-helpers
+# Value in a set: %in%
+penguins |> filter(species %in% c("Adelie", "Chinstrap")) |> nrow()
+
+# Value in a range (both ends included): between()
+penguins |> filter(between(body_mass, 3500, 4000)) |> nrow()
+
+# Missing values: is.na()
+penguins |> filter(is.na(sex))
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- `%in%` is cleaner than `species == "Adelie" | species == "Chinstrap"`.
+- `between(x, 3500, 4000)` means `x >= 3500 & x <= 4000`.
+- The last table shows the `r sum(is.na(penguins$sex))` penguins whose sex was not recorded. `filter(!is.na(sex))` keeps the others.
+- `filter()` **drops rows where the condition is `NA`**, so penguins with missing `body_mass` are silently excluded from the `between()` count.
+:::
+
+## 4. `select()`: choose columns
+
+```{r}
+#| label: select-basic
+penguins |> select(species, island, body_mass)
+penguins |> select(-year, -island)        # everything except
+penguins |> select(species:bill_dep)      # a range of columns
+```
+
+**Selection helpers** pick columns by their name or type:
+
+```{r}
+#| label: select-helpers
+penguins |> select(species, starts_with("bill"))
+penguins |> select(where(is.numeric))
+```
+
+Other helpers: `ends_with()`, `contains()`, `everything()`, `all_of(vec)` (names stored in a character vector). `where()` takes a function that returns `TRUE`/`FALSE` for each column: `where(is.factor)`, `where(is.numeric)`.
+
+## 5. `mutate()`: create or modify columns
+
+`mutate()` adds new columns computed from existing ones (or overwrites them, if you reuse a name).
+
+```{r}
+#| label: mutate-basic
+penguins |>
+  mutate(
+    body_mass_kg = body_mass / 1000,
+    bill_ratio   = bill_len / bill_dep
+  ) |>
+  select(species, body_mass_kg, bill_ratio)
+```
+
+Columns created earlier in the same `mutate()` can be used immediately afterwards.
+
+### Two-way recoding: `if_else()`
+
+```{r}
+#| label: if-else
+penguins |>
+  mutate(heavy = if_else(body_mass > 4500, "heavy", "light")) |>
+  count(heavy)
+```
+
+`if_else(condition, value_if_true, value_if_false)`. Where the condition is `NA`, the result is `NA` — which is honest: we do not know whether a penguin with unknown mass is heavy.
+
+### Many categories: `case_when()`
+
+```{r}
+#| label: case-when
+penguins |>
+  mutate(
+    size = case_when(
+      body_mass < 3500 ~ "small",
+      body_mass < 4500 ~ "medium",
+      body_mass >= 4500 ~ "large",
+      .default = NA
+    )
+  ) |>
+  count(size)
+```
+
+Each line is `condition ~ value`. Conditions are checked **in order**, and the first one that is true wins: a penguin of 3000 g matches the first line and never reaches the second. `.default` gives the value when no condition is true.
+
+Turning a numeric variable into classes like this is called **discretisation**. It is handy for tables, but it throws information away: for statistical models, keep the original number whenever you can.
+
+## 6. `arrange()`: sort rows
+
+### Base R first: `sort()` and `order()`
+
+```{r}
+#| label: order-vs-sort
+x <- c(5, 1, 10)
+sort(x)        # the sorted values
+order(x)       # the positions that would sort x
+x[order(x)]    # using those positions
+```
+
+To sort a data frame in base R we put `order()` in the row position:
+
+```{r}
+#| label: order-df
+head(penguins[order(penguins$body_mass), c("species", "body_mass")], 3)
+
+# descending: put a minus in front (numeric columns only)
+head(penguins[order(-penguins$body_mass), c("species", "body_mass")], 3)
+
+# by species, then by decreasing bill length
+head(penguins[order(penguins$species, -penguins$bill_len),
+              c("species", "bill_len")], 3)
+```
+
+### The dplyr way
+
+```{r}
+#| label: arrange
+penguins |> arrange(body_mass)
+penguins |> arrange(desc(body_mass))
+penguins |> arrange(species, desc(bill_len))
+```
+
+`desc()` works for any type (numbers, text, factors), while the minus trick only works for numbers. With several columns, ties in the first are broken by the second. In both approaches, **missing values go last**.
+
+## 7. Small but useful verbs
+
+```{r}
+#| label: rename-relocate
+penguins |>
+  rename(mass_g = body_mass, flipper_mm = flipper_len) |>   # new = old
+  relocate(year, .before = species)                         # move a column
+```
+
+`distinct()` keeps unique rows (or unique combinations of the columns you name):
+
+```{r}
+#| label: distinct
+penguins |> distinct(species, island)
+```
+
+The `slice_*()` family selects rows by **position**:
+
+```{r}
+#| label: slice
+penguins |> slice_head(n = 3)                    # first 3 rows
+penguins |> slice_max(body_mass, n = 3)          # 3 heaviest
+penguins |> slice_min(bill_len, n = 1, by = species)   # shortest bill per species
+```
+
+`slice_max()` keeps **ties**: if several penguins share the third-highest mass, they are all returned (use `with_ties = FALSE` to get exactly `n` rows). The argument `by =` repeats the operation within each group — more on groups in the [next lesson](10-grouped-summaries.qmd). For random rows, use `slice_sample(n = 5)` (after `set.seed()`).
+
+`count()` counts the rows for each combination of values:
+
+```{r}
+#| label: count
+penguins |> count(species)
+penguins |> count(species, sex, sort = TRUE)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+Each row of a `count()` result is one combination of the grouping variables, and `n` is the number of units with that combination. These are **absolute frequencies**; you will turn them into proportions and contingency tables in [Frequency tables](../05-descriptive/21-frequency-tables.qmd). Note the `NA` rows for sex: `count()` does not hide missing values, which is exactly what you want when checking data.
+:::
+
+## 8. Putting it together
+
+A typical pipeline answers a question from start to finish. *Among penguins with known sex, which five have the largest bill-to-depth ratio, and on which island do they live?*
+
+```{r}
+#| label: pipeline
+penguins |>
+  filter(!is.na(sex)) |>
+  mutate(bill_ratio = bill_len / bill_dep) |>
+  select(species, island, sex, bill_ratio) |>
+  arrange(desc(bill_ratio)) |>
+  slice_head(n = 5)
+```
+
+Notice that nothing has been saved: `penguins` is unchanged. To keep a result, assign it: `result <- penguins |> ...`.
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **`=` instead of `==` in `filter()`.** `filter(species = "Adelie")` gives an error; comparison needs `==`.
+2. **`species == "Adelie" | "Gentoo"`** does not mean what it seems. Write `species %in% c("Adelie", "Gentoo")`.
+3. **Forgetting to assign.** A pipeline only prints its result; `penguins` is not modified unless you write `penguins <- penguins |> ...`.
+4. **Quoting column names** in dplyr verbs (`select("species")` works, but `filter("body_mass" > 4000)` compares two constants!). Use bare names.
+5. **Expecting exactly `n` rows from `slice_max()`.** Ties are kept by default.
+6. **Order matters in `case_when()`.** Put the most specific conditions first.
+:::
+
+## 9. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. Read this pipeline aloud: `penguins |> filter(year == 2009) |> count(island)`.
+
+"Take penguins, **and then** keep the rows from 2009, **and then** count the rows for each island." The result has one row per island with the number of penguins measured in 2009.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. What is the difference between `select()` and `filter()`?
+
+`filter()` works on **rows** (units), keeping those that satisfy a condition. `select()` works on **columns** (variables), keeping the ones you name. The number of rows changes with `filter()`; the number of columns changes with `select()`.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. A penguin has `body_mass = NA`. What does `if_else(body_mass > 4500, "heavy", "light")` return for it?
+
+`NA`. The condition `NA > 4500` is unknown, so the result is unknown. If you want a separate label, use `case_when(is.na(body_mass) ~ "unknown", body_mass > 4500 ~ "heavy", .default = "light")`.
+:::
+
+## 10. Exercises
+
+### Interactive (run in your browser)
+
+```{webr}
+#| setup: true
+#| exercise: ex_09_1
+penguins <- tibble::as_tibble(penguins)
+```
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — filter and count.** How many Adelie penguins from the island of Dream have a flipper longer than 190 mm?
+
+```{webr}
+#| exercise: ex_09_1
+penguins |>
+  filter(species == ______, island == ______, ______) |>
+  nrow()
+```
+
+::: {.hint exercise="ex_09_1"}
+Text values need quotes: `"Adelie"`, `"Dream"`. The third condition is `flipper_len > 190`.
+:::
+
+::: {.solution exercise="ex_09_1"}
+```r
+penguins |>
+  filter(species == "Adelie", island == "Dream", flipper_len > 190) |>
+  nrow()
+```
+22 penguins.
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_09_2
+penguins <- tibble::as_tibble(penguins)
+```
+
+::: {.exercise}
+[★★]{.stars} **Exercise 2 — mutate and recode.** Create `body_mass_kg` (mass in kilograms) and a variable `size` that is `"small"` below 3.5 kg, `"medium"` from 3.5 up to 4.5 kg (excluded), and `"large"` from 4.5 kg. Then count the penguins in each size class.
+
+```{webr}
+#| exercise: ex_09_2
+penguins |>
+  mutate(
+    body_mass_kg = ______,
+    size = case_when(
+      body_mass_kg < 3.5 ~ "small",
+      ______ ~ "medium",
+      ______ ~ "large"
+    )
+  ) |>
+  count(______)
+```
+
+::: {.hint exercise="ex_09_2"}
+Divide `body_mass` by 1000. Conditions are checked in order, so the second one can simply be `body_mass_kg < 4.5`.
+:::
+
+::: {.solution exercise="ex_09_2"}
+```r
+penguins |>
+  mutate(
+    body_mass_kg = body_mass / 1000,
+    size = case_when(
+      body_mass_kg < 3.5 ~ "small",
+      body_mass_kg < 4.5 ~ "medium",
+      body_mass_kg >= 4.5 ~ "large"
+    )
+  ) |>
+  count(size)
+```
+About 71 small, 153 medium and 118 large penguins, plus 2 with unknown mass (`NA`), which match no condition.
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_09_3
+penguins <- tibble::as_tibble(penguins)
+```
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — debug.** The code below should list species, sex and body mass of Adelie and Chinstrap penguins, from heaviest to lightest. It contains three mistakes. Fix them.
+
+```{webr}
+#| exercise: ex_09_3
+penguins |>
+  filter(species = "Adelie" | "Chinstrap") |>
+  select(species, sex, body_mass)
+  arrange(body_mass)
+```
+
+::: {.hint exercise="ex_09_3"}
+Look at (1) the comparison operator and the "or" condition, (2) the end of the `select()` line, (3) the sort direction.
+:::
+
+::: {.solution exercise="ex_09_3"}
+```r
+penguins |>
+  filter(species %in% c("Adelie", "Chinstrap")) |>
+  select(species, sex, body_mass) |>
+  arrange(desc(body_mass))
+```
+The missing `|>` after `select()` is the most common bug in pipelines: R runs the first part, prints it, then tries to run `arrange(body_mass)` alone and fails.
+:::
+:::
+
+```{webr}
+#| setup: true
+#| exercise: ex_09_4
+penguins <- tibble::as_tibble(penguins)
+```
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 4 — predict the output.** Before running, predict how many rows this returns. Then run it and explain any surprise.
+
+```{webr}
+#| exercise: ex_09_4
+penguins |>
+  slice_max(body_mass, n = 3, by = species) |>
+  select(species, body_mass)
+```
+
+::: {.hint exercise="ex_09_4"}
+Three species × 3 rows = 9 rows… unless there are ties. Look at the Gentoo rows.
+:::
+
+::: {.solution exercise="ex_09_4"}
+```r
+penguins |>
+  slice_max(body_mass, n = 3, by = species, with_ties = FALSE) |>
+  select(species, body_mass)
+```
+The original returns 10 rows: two Gentoo penguins share the third-highest mass (6000 g) and `slice_max()` keeps both. Adding `with_ties = FALSE` returns exactly 9.
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★]{.stars} **Exercise 5 — base R vs dplyr.** With `mtcars`, list the three cars with the highest `mpg` among those with 4 cylinders, showing only `mpg`, `cyl` and `hp`. Do it twice: once with `order()` and brackets, once with dplyr (keep the car names with `rownames_to_column()`).
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+# base R
+cars4 <- mtcars[mtcars$cyl == 4, c("mpg", "cyl", "hp")]
+head(cars4[order(-cars4$mpg), ], 3)
+
+# dplyr
+mtcars |>
+  rownames_to_column("model") |>
+  filter(cyl == 4) |>
+  select(model, mpg, cyl, hp) |>
+  arrange(desc(mpg)) |>
+  slice_head(n = 3)
+```
+Both give the Toyota Corolla, Fiat 128 and Honda Civic. The dplyr version is longer but each line does one thing.
+:::
+:::
+
+## Summary
+
+| Verb | What it does | Example |
+|---|---|---|
+| `filter()` | keep rows | `filter(x > 0, g %in% c("a", "b"))` |
+| `select()` | choose columns | `select(a, starts_with("b"), where(is.numeric))` |
+| `mutate()` | create / modify columns | `mutate(z = x / y)` |
+| `if_else()`, `case_when()` | recode | `case_when(x < 0 ~ "neg", .default = "pos")` |
+| `arrange()`, `desc()` | sort rows | `arrange(g, desc(x))` |
+| `order()` (base) | sorting positions | `df[order(-df$x), ]` |
+| `rename()`, `relocate()` | rename / move columns | `rename(new = old)` |
+| `distinct()` | unique rows | `distinct(g1, g2)` |
+| `slice_head()`, `slice_max()`, `slice_sample()` | rows by position | `slice_max(x, n = 3)` |
+| `count()` | frequencies | `count(g, sort = TRUE)` |
+
+- Every verb takes a data frame and returns a new one; nothing is modified in place.
+- The pipe `|>` passes the result on its left as the first argument of the function on its right: read it as "and then", and write one verb per line.
+- `filter()` drops rows whose condition is `NA`; check missing values with `filter(is.na(x))` or `count()`.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2e), chapter "Data transformation", <https://r4ds.hadley.nz>
+- dplyr documentation and cheat sheet, <https://dplyr.tidyverse.org>
+:::

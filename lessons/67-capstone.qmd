@@ -1,0 +1,413 @@
+---
+title: "Capstone project"
+subtitle: "From a question to a reproducible report: one complete data analysis, done by you"
+description: "A guided end-to-end project: formulate a question, import, clean and explore a real dataset, run one inference step, fit and validate a model, interpret it honestly and write a Quarto report. Four project briefs, a milestone checklist, a grading rubric and a report template."
+---
+
+{{< include ../_extensions/r-wasm/live/_knitr.qmd >}}
+
+::: {.lesson-meta}
+[Level 4 · Models & learning]{.level-4} [⏱ ~15–20 hours over 3–5 weeks]{} [Prerequisites: [Import](04-io/18-import.qmd), [Missing data](04-io/20-missing-data.qmd), [ggplot2](06-visualization/24-ggplot-grammar.qmd), [Hypothesis testing](08-inference/33-hypothesis-testing.qmd), [Multiple regression](09-regression/39-multiple-regression.qmd), [The ML workflow](10-ml/44-ml-workflow.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this project you will be able to:
+
+- turn a vague interest into a **precise, answerable question**, and say whether it is descriptive, inferential or predictive;
+- carry a real dataset through **import → cleaning → exploration** and document every decision;
+- choose and run **one appropriate inference step** and report it with an effect size and a confidence interval;
+- fit a model with an **honest validation** protocol and compare it with a simple baseline;
+- write a **reproducible Quarto report** that a reader can re-run, including the limitations of your analysis.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(dplyr)
+library(readr)
+library(lubridate)
+
+# tidymodels attaches modeldata, whose own `penguins` (with different column
+# names) would mask the base-R one: make sure we use R's built-in version.
+penguins <- datasets::penguins
+```
+
+## 1. Why a capstone?
+
+Each lesson of this course practised one skill on data that had been chosen to make that skill shine. Real projects are different. Nobody tells you which test to use; the data arrive with odd codes, mixed formats and missing values; the first question you ask often turns out to be the wrong one. The only way to learn how the pieces fit together is to do a whole analysis yourself, from the first question to the final report.
+
+This page gives you a **workflow**, **four project briefs** with real data, a **milestone checklist**, the **rubric** used to grade the project and a **report template**. You can also bring your own data (Section 9).
+
+## 2. The workflow at a glance
+
+Every project follows the same eight stages. You will go back and forth between them — exploring often changes the question — but the report presents them in this order.
+
+| # | Stage | Key question | Lessons to revisit | Deliverable in the report |
+|---|---|---|---|---|
+| 1 | **Question** | What exactly do I want to know, and for whom? | — | One sentence, plus the type of question |
+| 2 | **Import** | Did every column arrive with the right type? | [18](04-io/18-import.qmd) | Code + `glimpse()` |
+| 3 | **Clean** | Which values are wrong, missing or coded? | [09](02-data/09-dplyr-verbs.qmd), [13](02-data/13-strings-dates.qmd), [20](04-io/20-missing-data.qmd) | A list of cleaning decisions and how many rows each affected |
+| 4 | **Explore** | What do the distributions and relationships look like? | [22](05-descriptive/22-summary-statistics.qmd), [24](06-visualization/24-ggplot-grammar.qmd)–[27](06-visualization/27-correlation.qmd) | 3–5 well-labelled figures, each with one sentence of interpretation |
+| 5 | **Infer** | Is a pattern larger than chance? How large is it? | [32](08-inference/32-confidence-intervals.qmd)–[37](08-inference/37-anova.qmd), [38](09-regression/38-simple-regression.qmd)–[41](09-regression/41-logistic-regression.qmd) | One test or interval, assumptions checked, effect size |
+| 6 | **Model** | How well can I predict new cases? | [44](10-ml/44-ml-workflow.qmd)–[49](10-ml/49-model-comparison.qmd) | A baseline and 1–2 models, validated on data not used for fitting |
+| 7 | **Interpret** | What does it mean, and what does it *not* mean? | [40](09-regression/40-model-selection.qmd), [49](10-ml/49-model-comparison.qmd) | Plain-language conclusions and limitations |
+| 8 | **Report** | Can someone else re-run it and reach the same numbers? | [19](04-io/19-export.qmd), [02](01-foundations/02-first-steps.qmd) | A rendered Quarto HTML file |
+
+Two distinctions organise the whole project:
+
+- **Inference versus prediction.** An *inferential* question asks about a population quantity ("do commutes on the toll road take less time on average, and by how much?") and needs an estimate with its uncertainty. A *predictive* question asks how well we can guess an outcome for new cases ("how long will tomorrow's commute take?") and needs honest out-of-sample validation. Your project contains one of each.
+- **Association versus causation.** Unless the data come from a randomised experiment, a difference between groups may be explained by something else. Say so explicitly in the interpretation.
+
+## 3. Warm-up: the whole cycle in twelve lines
+
+Before starting on a large dataset, see all the stages in miniature on the `penguins` data. The question: *how much heavier are male Gentoo penguins than females, and can flipper length and sex predict body mass better than the average?* Fill in the blanks and run.
+
+::: {.exercise}
+[★]{.stars} **Warm-up — a miniature project.** Keep the Gentoo penguins and the three columns, drop incomplete rows, compare the means, compute a 95% confidence interval for the difference, then fit a regression on 70% of the birds and compare its test RMSE with a baseline that always predicts the training mean.
+
+```{webr}
+#| exercise: ex_67_1
+gentoo <- na.omit(penguins[penguins$species == ______,
+                           c("body_mass", "flipper_len", "sex")])
+tapply(gentoo$body_mass, gentoo$sex, mean)              # explore
+t.test(body_mass ~ sex, data = gentoo)$conf.int         # infer
+set.seed(1)
+train <- sample(nrow(gentoo), round(______ * nrow(gentoo)))
+fit <- lm(body_mass ~ flipper_len + sex, data = gentoo[train, ])
+pred <- predict(fit, newdata = gentoo[-train, ])        # model
+y_test <- gentoo$body_mass[-train]
+c(model    = sqrt(mean((y_test - pred)^2)),
+  baseline = sqrt(mean((y_test - mean(gentoo$body_mass[______]))^2)))
+```
+
+::: {.hint exercise="ex_67_1"}
+The species name is a string. The training share is a proportion. The baseline uses only information from the training birds.
+:::
+
+::: {.solution exercise="ex_67_1"}
+```r
+gentoo <- na.omit(penguins[penguins$species == "Gentoo",
+                           c("body_mass", "flipper_len", "sex")])
+tapply(gentoo$body_mass, gentoo$sex, mean)
+t.test(body_mass ~ sex, data = gentoo)$conf.int
+set.seed(1)
+train <- sample(nrow(gentoo), round(0.7 * nrow(gentoo)))
+fit <- lm(body_mass ~ flipper_len + sex, data = gentoo[train, ])
+pred <- predict(fit, newdata = gentoo[-train, ])
+y_test <- gentoo$body_mass[-train]
+c(model    = sqrt(mean((y_test - pred)^2)),
+  baseline = sqrt(mean((y_test - mean(gentoo$body_mass[train]))^2)))
+```
+Males are about 800 g heavier on average (the interval for female − male runs from about −910 to −700 g). The regression's test RMSE is roughly half the baseline's (about 250 g against 460 g). Every stage is here — but in a real project each line becomes a section, with decisions to justify.
+:::
+:::
+
+## 4. Step by step: what each stage should contain
+
+**1. Question.** Write one sentence a non-specialist understands, then the precise version: outcome variable, comparison or predictors, population. "Does the toll road help?" becomes "On this driver's 2011–2012 commutes, how much shorter is the mean total travel time when the 407 toll road is used for the whole trip, and does the difference depend on the direction of travel?"
+
+**2. Import.** Read the raw file with `read_csv()` / `read_delim()` and **never edit the raw file by hand**. Check `glimpse()`: numbers read as text, dates read as text, and columns read as logical because their first rows are empty are the usual surprises. Fix them with `col_types =` or `na =` at import.
+
+**3. Clean.** Keep a numbered list of decisions, each with the number of rows affected: recoding, removing impossible values, handling missing values (lesson 20), creating new variables. Cleaning steps that use only one row at a time (recoding a value, computing a ratio) can be done before splitting; anything that *learns from the data* (imputation by the mean, scaling, choosing categories to merge) belongs inside a **recipe** fitted on the training set (lesson 44).
+
+**4. Explore.** Look at each important variable alone (histograms, bar charts) and then against the outcome. Every figure needs a title or caption, axis labels with units, and one sentence saying what you see. Note anything that will influence the analysis: skewness, outliers, very unequal group sizes, strong correlations between predictors.
+
+**5. Infer.** Choose **one** inferential question and the tool that fits it: a t-test or Wilcoxon test for two means, a chi-squared test or a difference in proportions for two rates, ANOVA for several groups, a regression coefficient with its confidence interval when other variables must be held fixed. Report the estimate, its 95% CI and the p-value; check the assumptions that matter; say what the result means in the units of the problem.
+
+**6. Model.** Define the outcome and the metric *before* fitting (RMSE/MAE for numbers; ROC AUC, log-loss and a confusion matrix at a justified threshold for classes). Split the data first (`initial_split(strata = )`, or by time when the data are ordered in time), fit a **baseline** (the mean, the majority class, or a simple regression), then one or two more flexible models tuned with cross-validation on the training set. Use the test set **once**.
+
+**7. Interpret.** Which variables matter, in which direction, by how much (coefficients, odds ratios, partial dependence or variable importance)? Is the improvement over the baseline large enough to be useful? Then the limitations: who is the population, what is missing, what could be confounded, how stable the result is.
+
+**8. Report.** Use the template of Section 7. The report must render from the raw data in a fresh R session.
+
+## 5. Four project briefs
+
+Each brief uses a file in the course `data/` folder that is not central in any lesson. The questions are suggestions: you may change them, but keep **one inferential and one predictive** question. The starter code below runs as it is; it only imports the data and fixes the most dangerous import problem.
+
+### Brief A — Is the toll road worth it? (`travel_times.csv`, 205 trips)
+
+**Context.** A commuter in Ontario logged about 200 trips between home and work (`GoingTo`: `Home` or `GSK`, the workplace) in 2011–2012: date, start time, distance, speeds, fuel economy, total and moving time, and whether the 407 toll road was used for the whole trip (`Take407All`), plus free-text comments ("Heavy rain", "Accident…").
+
+```{r}
+#| label: brief-a
+travel <- read_csv(data_path("travel_times.csv"), na = c("", "NA", "-"),
+                   col_types = cols(Date = col_character(),
+                                    StartTime = col_character())) |>
+  select(-x) |>
+  mutate(date = mdy(Date),                  # the file mixes 01-06-2012 and 12/23/2011
+         start_hour = as.numeric(substr(StartTime, 1, 2)) +
+           as.numeric(substr(StartTime, 4, 5)) / 60)
+glimpse(travel)
+```
+
+- **Inference.** How much shorter is `TotalTime` with `Take407All == "Yes"`? Compare a Welch t-test with a regression that also adjusts for `GoingTo` and `start_hour`. Does the difference change?
+- **Prediction.** Predict `TotalTime` from information available *before* leaving (day of week, direction, start time, route). With about 200 rows, use repeated cross-validation (`vfold_cv(repeats = )`) instead of a single small test set, and compare a linear model with a random forest and with the mean.
+- **Traps.** The dates use two different formats (fixed above with `mdy()`; check that `weekdays(date)` matches `DayOfWeek`). `FuelEconomy` uses `-` for missing. `MovingTime`, `AvgSpeed` and the comments are measured *during* the trip — they cannot be predictors of total time. The driver chose when to take the toll road (perhaps on days with expected traffic): the comparison is observational.
+- **Stretch.** Use the comments to create a "disruption" indicator and see whether it explains the largest residuals.
+
+### Brief B — Do batting averages regress to the mean? (`lahman-batting.csv`, 104,324 player-stints)
+
+**Context.** Season batting statistics of every Major League Baseball player 1871–2017 from the Lahman database: games, at-bats (`AB`), hits (`H`), doubles (`2B`), triples (`3B`), home runs (`HR`), walks (`BB`), strikeouts (`SO`), … One row per player, season and **stint** (a player traded during a season has one row per team).
+
+```{r}
+#| label: brief-b
+batting <- read_csv(
+  data_path("lahman-batting.csv"),
+  na = "",                                   # keep the league code "NA"!
+  col_types = cols(.default = col_double(), playerID = col_character(),
+                   teamID = col_character(), lgID = col_character())
+)
+count(batting, lgID)
+```
+
+- **Inference.** Has the home-run rate per at-bat changed between two eras of your choice (say 1980–1989 and 2008–2017)? Compare proportions (lesson 35) and think about what the unit of analysis should be (at-bats, players or seasons).
+- **Prediction.** For players with at least 300 at-bats in two consecutive seasons, predict next season's batting average (`H / AB`) from this season's statistics. Use a **time-based split** (train on seasons up to 2007, test on 2008–2017). Compare with two baselines: "same as this season" and "the league average". Plot this season's average against next season's: is the slope of the regression line below 1? That is *regression to the mean*.
+- **Traps.** By default `read_csv()` reads the league code `"NA"` (National Association, 1871–1875) as a missing value, and guesses `IBB`, `HBP`, `SH`, `SF` as logical because their first 1,000 rows are empty — the starter code avoids both. Add up the stints of a player within a season (`summarise(..., .by = c(playerID, yearID))`) before computing rates. Several statistics were not recorded in early years; restrict your period. Rates computed from a handful of at-bats are extremely noisy.
+- **Stretch.** Compare the regression slope across eras, or shrink each player's average towards the league mean with a simple empirical-Bayes formula and check whether that predicts better.
+
+### Brief C — Who survived the Titanic, and why? (`train.csv`, 891 passengers)
+
+**Context.** The Kaggle training split of the Titanic passenger list: survival (`Survived`, 0/1), ticket class (`Pclass`), name, sex, age, number of siblings/spouses (`SibSp`) and parents/children (`Parch`) aboard, ticket, fare, cabin and port of embarkation. (The companion file `test.csv` has no survival column, so you cannot evaluate on it; make your own test split.)
+
+```{r}
+#| label: brief-c
+titanic <- read_csv(data_path("train.csv"), show_col_types = FALSE) |>
+  mutate(survived = factor(Survived, levels = c(0, 1), labels = c("no", "yes")),
+         title = sub(".*, *([^.]+)\\..*", "\\1", Name))   # "Mr", "Mrs", "Miss", ...
+count(titanic, title, sort = TRUE)
+```
+
+- **Inference.** Was "women and children first" applied equally in all classes? Fit a logistic regression of survival on sex, class and their interaction (lesson 41) and report odds ratios with confidence intervals; complement it with a table of survival rates.
+- **Prediction.** Predict survival with a recipe that imputes `Age` *inside* the recipe (e.g. `step_impute_median()` or `step_impute_bag()`), creates family size and groups rare titles, and compare a logistic regression, a random forest and the majority-class baseline with 10-fold CV and a final test set. Report ROC AUC and a confusion matrix.
+- **Traps.** 177 ages and 687 cabins are missing — not at random (missing ages are more common in third class). `PassengerId`, `Name` and `Ticket` are identifiers, not predictors (but `Name` contains the title). Lessons 44–45 already use a version of this dataset: your report must go beyond them (feature engineering, interaction, calibration).
+- **Stretch.** Check calibration: group passengers by predicted probability and compare with observed survival rates.
+
+### Brief D — What predicts a high income, and is the model fair? (`adult_data.csv`, 48,842 adults)
+
+**Context.** The 1994 US Census "Adult" extract: age, work class, education, marital status, occupation, relationship, race, gender, capital gains and losses, hours per week, native country and whether income exceeds 50,000 USD (`income`). Missing values are coded as `"?"`. (Lesson 41 uses a reduced version, `adult.csv`; this file has all the columns.)
+
+```{r}
+#| label: brief-d
+adult <- read_csv(data_path("adult_data.csv"), na = c("", "?"),
+                  show_col_types = FALSE) |>
+  select(-x) |>
+  rename_with(\(nm) gsub("-", "_", nm)) |>                # marital-status -> marital_status
+  mutate(high_income = factor(income == ">50K", labels = c("no", "yes")))
+colSums(is.na(adult))[colSums(is.na(adult)) > 0]
+```
+
+- **Inference.** Estimate the gender gap in the proportion earning more than 50K, first raw (difference in proportions with a CI) and then adjusted for age, education, hours and occupation (logistic regression). How do the two compare, and why can neither be read as "the effect of gender"?
+- **Prediction.** Predict `high_income` with a penalised logistic regression and gradient boosting (lessons 43 and 47), tuned with cross-validation; report ROC AUC and choose a threshold. Then compute recall and false-positive rate **separately for women and men**: is the model equally accurate for both groups?
+- **Traps.** `fnlwgt` is a survey weight, not a characteristic of the person; leave it out of the predictors (or learn how to use survey weights). `education` and `educational_num` encode the same thing. Most `capital_gain` values are 0, a few are huge. Rare categories of `native_country` need grouping (`step_other()`), inside the recipe.
+- **Stretch.** Remove `gender` and `relationship` from the predictors: does the gap in error rates between groups disappear? Why or why not?
+
+## 6. Milestones
+
+Work in five steps and get feedback at each. Tick the boxes in your own copy.
+
+**Milestone 1 — Proposal (week 1, one page)**
+
+- [ ] Dataset chosen and imported without errors; source and licence noted
+- [ ] One inferential and one predictive question, written precisely
+- [ ] Outcome variable(s) and the metric for the predictive question named
+- [ ] A Quarto project (or a folder with an `.Rproj`) with `data/raw/` untouched
+
+**Milestone 2 — Clean data (week 2)**
+
+- [ ] Every column has the right type; `glimpse()` included
+- [ ] Numbered list of cleaning decisions with rows affected
+- [ ] Missing values counted and a plan for each variable
+- [ ] Variables unavailable at prediction time identified and excluded from the model
+
+**Milestone 3 — Exploration and inference (week 3)**
+
+- [ ] 3–5 labelled figures, each with one interpretive sentence
+- [ ] One inference step: estimate, 95% CI, p-value, assumptions checked
+- [ ] The result stated in the units of the problem
+
+**Milestone 4 — Model (week 4)**
+
+- [ ] Split (stratified, or by time) made *before* any learned preprocessing
+- [ ] A baseline and 1–2 models, tuned with cross-validation on the training set only
+- [ ] Test set used once; metrics reported with the baseline next to them
+- [ ] Interpretation of the model (coefficients, importance or partial dependence)
+
+**Milestone 5 — Final report (week 5)**
+
+- [ ] Renders from raw data in a fresh session (`quarto render report.qmd`)
+- [ ] Executive summary of at most 150 words at the top
+- [ ] Limitations section: population, confounding, missing data, stability
+- [ ] `sessionInfo()` at the end; seeds set where randomness is used
+
+## 7. The report template
+
+Copy this skeleton into a file `report.qmd` in your project folder and replace the comments. The `embed-resources: true` option produces a single HTML file you can e-mail or upload.
+
+````markdown
+---
+title: "Is the toll road worth it? Commute times on Ontario highways"
+author: "Your Name"
+date: today
+format:
+  html:
+    toc: true
+    code-fold: true
+    embed-resources: true
+execute:
+  warning: false
+---
+
+```{{r}}
+#| label: setup
+#| include: false
+library(tidyverse)
+library(tidymodels)
+set.seed(2024)
+```
+
+## Summary
+
+<!-- At most 150 words: the question, the data, the main answer with a number
+     and its uncertainty, and the most important limitation. Write it last. -->
+
+## 1. Question
+
+<!-- Plain-language question, then the precise version.
+     Which part is inferential and which is predictive? -->
+
+## 2. Data
+
+```{{r}}
+#| label: import
+raw <- read_csv("data/raw/travel_times.csv", show_col_types = FALSE)
+glimpse(raw)
+```
+
+<!-- Source, unit of observation, period, number of rows, key variables. -->
+
+## 3. Cleaning
+
+<!-- Numbered list of decisions, each with the number of rows affected. -->
+
+```{{r}}
+#| label: clean
+clean <- raw |>
+  mutate()   # your cleaning steps
+```
+
+## 4. Exploration
+
+```{{r}}
+#| label: fig-outcome
+#| fig-cap: "Distribution of the outcome."
+ggplot(clean, aes(x = TotalTime)) +
+  geom_histogram(bins = 30) +
+  labs(x = "Total travel time (minutes)", y = "Number of trips")
+```
+
+<!-- One sentence per figure: what do we see? -->
+
+## 5. Inference
+
+<!-- Hypotheses, method and why it fits, assumptions checked,
+     estimate + 95% CI + p-value, meaning in the units of the problem. -->
+
+## 6. Predictive model
+
+<!-- Outcome, metric, split, baseline, models, tuning, test results in a table. -->
+
+## 7. Interpretation and limitations
+
+<!-- What the results mean for the reader. What they do NOT show:
+     population, confounding, missing data, measurement, stability. -->
+
+## Reproducibility
+
+```{{r}}
+#| label: session
+sessionInfo()
+```
+````
+
+## 8. Grading rubric
+
+The project is graded out of 100 points. Each criterion is scored at one of three levels; intermediate scores are possible.
+
+| Criterion (points) | Excellent | Adequate | Needs work |
+|---|---|---|---|
+| **Question** (10) | Precise, answerable; inferential and predictive parts clearly distinguished and motivated | Clear but broad, or one part weakly motivated | Vague, or does not match the analysis |
+| **Import & cleaning** (15) | Correct types; every decision listed, justified and counted; no leakage | Most decisions documented; minor gaps | Silent changes to data, wrong types, raw file edited by hand |
+| **Exploration** (15) | Few, well-chosen, labelled figures, each interpreted; findings feed the analysis | Figures adequate but little interpretation | Many unlabelled or uninterpreted plots |
+| **Inference** (15) | Method fits the design; assumptions checked; estimate with CI and effect size, interpreted in context | Correct method, partial checks or interpretation | Wrong method, p-value only, or causal language without justification |
+| **Model & validation** (20) | Honest split, baseline, tuning by CV on training data only, single use of the test set, appropriate metrics | Validation present but with a minor flaw (e.g. no baseline) | Evaluated on training data, leakage, or no validation |
+| **Interpretation & limitations** (15) | Clear, quantitative conclusions; limitations specific to these data | Generic conclusions or limitations | Over-claims; limitations missing |
+| **Reproducibility & communication** (10) | Renders from raw data; clean code; summary readable by a non-specialist | Renders with minor manual steps; some unclear writing | Does not render, or numbers in the text differ from the code |
+
+## 9. Bringing your own data
+
+You may use another dataset if it has at least a few hundred rows, a clear outcome variable, a mix of numeric and categorical variables and a licence that allows use for teaching. Good free sources are national statistics offices, the [UCI Machine Learning Repository](https://archive.ics.uci.edu), [Our World in Data](https://ourworldindata.org) and the [TidyTuesday](https://github.com/rfordatascience/tidytuesday) collection. Avoid data with personal information about identifiable people. Check with your instructor at Milestone 1.
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Starting with the model.** Without a question and an exploration, you cannot tell whether a model's result makes sense.
+2. **Editing the raw data by hand** (in a spreadsheet). The analysis is then no longer reproducible; do every change in code.
+3. **Leakage.** Using variables measured after the outcome (trip moving time, call duration) or preprocessing learned on all rows.
+4. **Many tests, one reported.** Decide the inferential question before looking at p-values; if you ran several, say so.
+5. **Causal claims from observational data.** "Is associated with" unless the design supports more.
+6. **A report that does not render** from a fresh session, or numbers typed by hand that no longer match the code. Use inline R code for numbers in the text.
+:::
+
+## 10. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. Classify each question as descriptive, inferential or predictive: (a) What was the median commute time in 2012? (b) Is the mean commute shorter with the toll road? (c) How long will Monday's commute take?
+
+(a) Descriptive — a summary of the observed data. (b) Inferential — a statement about the population of commutes, with uncertainty. (c) Predictive — a guess for a new case, judged by out-of-sample error.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. Your random forest has a cross-validated RMSE of 4.1 minutes. Why is that number not enough on its own?
+
+Without a baseline (e.g. always predicting the training mean) we cannot tell whether 4.1 is good. Report the baseline's RMSE next to it, and say whether the improvement matters in practice.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. Which of these may be done before splitting the data: (a) converting text dates to dates, (b) replacing missing ages with the mean age, (c) removing an identifier column?
+
+(a) and (c): they use one row at a time and learn nothing from the other rows. (b) uses the data to compute the mean and must be done inside a recipe fitted on the training set.
+:::
+
+## Summary
+
+| Stage | Main tools | The question to ask yourself |
+|---|---|---|
+| Question | — | Inferential or predictive? For whom? |
+| Import | `read_csv(na = , col_types = )`, `glimpse()` | Did every column arrive with the right type? |
+| Clean | `mutate()`, `case_when()`, `lubridate`, `stringr` | Is every decision written down and counted? |
+| Explore | `ggplot2`, `count()`, `summarise()` | What does each figure tell me? |
+| Infer | `t.test()`, `prop.test()`, `lm()`, `glm()` | Estimate, CI, assumptions? |
+| Model | `initial_split()`, `recipe()`, `vfold_cv()`, `tune_grid()` | Better than the baseline, on unseen data? |
+| Interpret | coefficients, permutation importance, partial dependence | What does it *not* show? |
+| Report | Quarto, inline R, `sessionInfo()` | Can someone else re-run it? |
+
+- A good project starts with a precise question and keeps inference and prediction distinct.
+- Every cleaning decision is made in code, documented and counted; nothing learned from the data is computed before the split.
+- Every result is reported with its uncertainty and next to a baseline.
+- The limitations section is part of the answer, not an apology.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2e), especially "Whole game" and "Communicate", <https://r4ds.hadley.nz>
+- Çetinkaya-Rundel & Hardin, *Introduction to Modern Statistics* (2e), <https://openintro-ims.netlify.app>
+- Kuhn & Silge, *Tidy Modeling with R*, <https://www.tmwr.org>
+- Quarto, "Authoring" guide, <https://quarto.org/docs/authoring/markdown-basics.html>
+:::

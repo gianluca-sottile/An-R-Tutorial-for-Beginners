@@ -1,0 +1,129 @@
+---
+title: "Glossary"
+subtitle: "Key statistical and R terms in plain words"
+description: "Short, plain-language definitions of the main terms used in the course, each linked to the lesson where it is explained."
+---
+
+Use your browser's search (Ctrl/Cmd + F) or the site search to find a term. Each definition links to the lesson where the idea is developed.
+
+## A–C
+
+**Alternative hypothesis ($H_1$)** — The claim we would accept if the data provide enough evidence against the null hypothesis. → [Lesson 33](lessons/08-inference/33-hypothesis-testing.qmd)
+
+**ANOVA (analysis of variance)** — A method to compare the means of several groups by comparing variability *between* groups with variability *within* groups. → [Lesson 37](lessons/08-inference/37-anova.qmd)
+
+**Bias (of an estimator)** — The difference between the average value an estimator takes over many samples and the true value it targets. → [Lesson 30](lessons/07-probability/30-sampling-distributions.qmd)
+
+**Bias–variance trade-off** — Simple models tend to be systematically wrong (bias); flexible models tend to change a lot from sample to sample (variance). Good prediction balances the two. → [Lesson 44](lessons/10-ml/44-ml-workflow.qmd)
+
+**Bootstrap** — Estimating the variability of a statistic by repeatedly resampling the observed data with replacement. → [Lesson 31](lessons/07-probability/31-bootstrap.qmd)
+
+**Categorical variable** — A variable whose values are categories (nominal: no order, e.g. species; ordinal: ordered, e.g. low/medium/high). In R, usually a factor. → [Lesson 6](lessons/01-foundations/06-factors.qmd)
+
+**Central Limit Theorem (CLT)** — For large samples, the sampling distribution of a mean is approximately normal, whatever the shape of the population. → [Lesson 30](lessons/07-probability/30-sampling-distributions.qmd)
+
+**Chi-square test** — A test comparing observed counts in a table with the counts expected under a hypothesis (e.g. independence of two categorical variables). → [Lesson 35](lessons/08-inference/35-proportions-chisq.qmd)
+
+**Cluster analysis** — Grouping observations so that those in the same group are similar, without a known outcome to predict. → [Lesson 55](lessons/12-clustering/55-clustering-intro.qmd)
+
+**Confidence interval (CI)** — A range of plausible values for a parameter, produced by a procedure that captures the true value in a stated proportion (e.g. 95%) of repeated samples. → [Lesson 32](lessons/08-inference/32-confidence-intervals.qmd)
+
+**Confounder** — A third variable that influences both variables of interest and can create (or hide) an association between them. → [Lesson 27](lessons/06-visualization/27-correlation.qmd)
+
+**Correlation** — A number between −1 and 1 measuring the strength of a linear (Pearson) or monotonic (Spearman) relationship between two numeric variables. → [Lesson 27](lessons/06-visualization/27-correlation.qmd)
+
+**Cross-validation** — Estimating how well a model predicts new data by repeatedly fitting it on part of the data and testing it on the rest. → [Lesson 40](lessons/09-regression/40-model-selection.qmd)
+
+## D–L
+
+**Data frame / tibble** — R's table: each column is a variable, each row an observation. → [Lesson 8](lessons/02-data/08-data-frames.qmd)
+
+**Degrees of freedom** — Roughly, the number of independent pieces of information left to estimate variability; they determine the exact shape of t, χ² and F distributions. → [Lesson 34](lessons/08-inference/34-t-tests.qmd)
+
+**Dummy (indicator) variable** — A 0/1 column representing one level of a categorical variable in a model. → [Lesson 39](lessons/09-regression/39-multiple-regression.qmd)
+
+**Effect size** — A measure of *how large* a difference or association is (e.g. Cohen's d, odds ratio), as opposed to whether it is statistically detectable. → [Lesson 33](lessons/08-inference/33-hypothesis-testing.qmd)
+
+**Estimate / estimator** — A number computed from a sample (estimate) by a rule (estimator) to approximate an unknown population quantity. → [Lesson 30](lessons/07-probability/30-sampling-distributions.qmd)
+
+**Factor** — R's data type for categorical variables, with a fixed set of levels. → [Lesson 6](lessons/01-foundations/06-factors.qmd)
+
+**Generalised linear model (GLM)** — A model that links the mean of the outcome to a linear combination of predictors through a link function, allowing binary (logistic) or count (Poisson) outcomes. → [Lesson 41](lessons/09-regression/41-logistic-regression.qmd)
+
+**Interaction** — When the effect of one predictor depends on the value of another. → [Lesson 39](lessons/09-regression/39-multiple-regression.qmd)
+
+**Interquartile range (IQR)** — The distance between the first and third quartiles; the spread of the middle 50% of the data. → [Lesson 22](lessons/05-descriptive/22-summary-statistics.qmd)
+
+**Law of Large Numbers** — As the number of repetitions grows, the average of the results gets closer to the expected value. → [Lesson 28](lessons/07-probability/28-randomness-simulation.qmd)
+
+**Leakage (data leakage)** — Using information from the test data while building a model (e.g. scaling before splitting), which makes performance look better than it really is. → [Lesson 44](lessons/10-ml/44-ml-workflow.qmd)
+
+**Loadings** — In PCA and factor analysis, the weights linking original variables to components or factors. → [Lesson 50](lessons/11-dimred/50-pca.qmd)
+
+**Logistic regression** — A GLM for a binary outcome that models the log-odds of the event as a linear function of the predictors. → [Lesson 41](lessons/09-regression/41-logistic-regression.qmd)
+
+## M–P
+
+**Mean / median** — The arithmetic average / the middle value of the sorted data. The median is robust to outliers; the mean is not. → [Lesson 22](lessons/05-descriptive/22-summary-statistics.qmd)
+
+**Missing data mechanisms (MCAR, MAR, MNAR)** — Whether missingness is completely random, depends on observed variables, or depends on the missing value itself; this determines which methods give unbiased results. → [Lesson 20](lessons/04-io/20-missing-data.qmd)
+
+**Multiple testing** — Running many tests increases the chance of at least one false positive; adjustments (Bonferroni, Holm, BH) control this. → [Lesson 33](lessons/08-inference/33-hypothesis-testing.qmd)
+
+**Normal distribution** — The symmetric bell-shaped distribution described by its mean and standard deviation. → [Lesson 29](lessons/07-probability/29-distributions.qmd)
+
+**Null hypothesis ($H_0$)** — The default claim (e.g. "no difference") that a test tries to find evidence against. → [Lesson 33](lessons/08-inference/33-hypothesis-testing.qmd)
+
+**Odds ratio** — The ratio of the odds of an event in two groups; the natural effect measure of logistic regression. → [Lesson 41](lessons/09-regression/41-logistic-regression.qmd)
+
+**Overfitting** — When a model learns the noise of the training data and predicts new data poorly. → [Lesson 40](lessons/09-regression/40-model-selection.qmd)
+
+**p-value** — Assuming the null hypothesis is true, the probability of obtaining a result at least as extreme as the one observed. It is *not* the probability that the null hypothesis is true. → [Lesson 33](lessons/08-inference/33-hypothesis-testing.qmd)
+
+**Parameter** — A fixed but unknown number describing a population (e.g. the population mean). → [Lesson 30](lessons/07-probability/30-sampling-distributions.qmd)
+
+**Pipe (`|>`)** — Passes the result on its left as the first argument of the function on its right; read it as "and then". → [Lesson 9](lessons/02-data/09-dplyr-verbs.qmd)
+
+**Power** — The probability that a test detects an effect of a given size when it really exists. → [Lesson 33](lessons/08-inference/33-hypothesis-testing.qmd)
+
+**Principal component analysis (PCA)** — Rewrites correlated variables as uncorrelated components ordered by the variance they explain. → [Lesson 50](lessons/11-dimred/50-pca.qmd)
+
+**Probability distribution** — A description of the possible values of a random variable and how likely they are. → [Lesson 29](lessons/07-probability/29-distributions.qmd)
+
+## R–Z
+
+**Random variable** — A numerical outcome of a random process. → [Lesson 28](lessons/07-probability/28-randomness-simulation.qmd)
+
+**Recipe** — In tidymodels, a set of preprocessing steps (e.g. imputation, dummy coding, normalisation) estimated on training data only. → [Lesson 44](lessons/10-ml/44-ml-workflow.qmd)
+
+**Regularisation (penalisation)** — Shrinking model coefficients towards zero (ridge, lasso) to reduce variance and overfitting. → [Lesson 43](lessons/09-regression/43-penalized-regression.qmd)
+
+**Residual** — Observed value minus the value predicted by the model. → [Lesson 38](lessons/09-regression/38-simple-regression.qmd)
+
+**ROC curve / AUC** — Sensitivity versus 1 − specificity across all classification thresholds; the area under it summarises how well a model ranks positives above negatives. → [Lesson 41](lessons/09-regression/41-logistic-regression.qmd)
+
+**Sampling distribution** — The distribution of a statistic over all possible samples of the same size. → [Lesson 30](lessons/07-probability/30-sampling-distributions.qmd)
+
+**Sensitivity / specificity** — The proportion of actual positives correctly identified / of actual negatives correctly identified. → [Lesson 28](lessons/07-probability/28-randomness-simulation.qmd)
+
+**Silhouette** — For each observation, how much closer it is to its own cluster than to the nearest other cluster (from −1 to 1). → [Lesson 55](lessons/12-clustering/55-clustering-intro.qmd)
+
+**Standard deviation (SD)** — The typical distance of observations from their mean. → [Lesson 22](lessons/05-descriptive/22-summary-statistics.qmd)
+
+**Standard error (SE)** — The standard deviation of an estimate across repeated samples; it measures the precision of the estimate and shrinks with $\sqrt{n}$. → [Lesson 30](lessons/07-probability/30-sampling-distributions.qmd)
+
+**Statistical significance** — A result is "significant at level α" when its p-value is below α. It says nothing by itself about the size or importance of an effect. → [Lesson 33](lessons/08-inference/33-hypothesis-testing.qmd)
+
+**t-test** — A test about one mean, two means or a mean difference, based on the ratio between an observed difference and its standard error. → [Lesson 34](lessons/08-inference/34-t-tests.qmd)
+
+**Tidy data** — A table where each variable is a column, each observation a row and each value a cell. → [Lesson 12](lessons/02-data/12-tidy-reshape.qmd)
+
+**Training / validation / test set** — Data used to fit a model / to tune choices / to estimate final performance once. → [Lesson 44](lessons/10-ml/44-ml-workflow.qmd)
+
+**Type I / type II error** — Rejecting a true null hypothesis (false positive) / failing to reject a false one (false negative). → [Lesson 33](lessons/08-inference/33-hypothesis-testing.qmd)
+
+**Variance** — The average squared distance from the mean (with divisor $n-1$ in a sample). → [Lesson 22](lessons/05-descriptive/22-summary-statistics.qmd)
+
+**Vectorisation** — Applying an operation to a whole vector at once rather than element by element in a loop. → [Lesson 4](lessons/01-foundations/04-vectors.qmd)
+
+**z-score** — How many standard deviations an observation lies above or below the mean. → [Lesson 22](lessons/05-descriptive/22-summary-statistics.qmd)

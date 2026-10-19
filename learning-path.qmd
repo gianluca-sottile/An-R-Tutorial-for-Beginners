@@ -1,0 +1,185 @@
+---
+title: "Learning path"
+subtitle: "How the course is organised, and what to study before what"
+description: "The four levels of the course, the dependencies between modules and the full list of lessons with estimated study times."
+---
+
+The course grows in **four levels**. Each level uses the tools of the previous ones, and each lesson lists its own prerequisites at the top. The total self-study time is roughly **85 hours** (excluding the capstone), which matches a university module of up to 9 ECTS.
+
+## The map
+
+```{mermaid}
+%%| fig-cap: "Modules and their main dependencies. Solid arrows: required; dashed arrows: helpful."
+flowchart LR
+  subgraph L1["Level 1 · R foundations"]
+    M1["1 · Getting started"] --> M2["2 · Working with data"]
+    M1 --> M3["3 · Programming"]
+    M2 --> M4["4 · Data in and out"]
+  end
+  subgraph L2["Level 2 · Describe & explore"]
+    M5["5 · Descriptive statistics"] --> M6["6 · Visualisation"]
+  end
+  subgraph L3["Level 3 · Uncertainty & inference"]
+    M7["7 · Probability & simulation"] --> M8["8 · Statistical inference"]
+  end
+  subgraph L4["Level 4 · Models & learning"]
+    M9["9 · Regression models"] --> M10["10 · Supervised learning"]
+    M11["11 · Dimensionality reduction"] --> M12["12 · Clustering"]
+    M10 -.-> M13["13 · Deep learning (optional)"]
+  end
+  M4 --> M5
+  M6 --> M7
+  M8 --> M9
+  M6 --> M11
+  M3 -.-> M7
+  M10 --> CAP(["Capstone project"])
+  M12 --> CAP
+```
+
+## What each level gives you
+
+| Level | You will be able to… | Key statistical ideas |
+|---|---|---|
+| **1 · R foundations** | write R code, organise a project, import, clean, reshape and summarise data | types of variables, units and observations, tidy data, missing-data mechanisms |
+| **2 · Describe & explore** | describe a dataset with tables, numbers and graphics, and spot patterns | distributions, location and spread, robustness, association vs causation |
+| **3 · Uncertainty & inference** | quantify uncertainty and test hypotheses, and explain results correctly | probability, sampling variability, standard error, CLT, bootstrap, CIs, p-values, power, effect sizes |
+| **4 · Models & learning** | fit, check, compare and interpret statistical and machine-learning models | conditional means, GLMs, overfitting, cross-validation, regularisation, latent structure, clustering |
+
+## All lessons
+
+### 1. Getting started <small>(Level 1)</small>
+
+| # | Lesson | Time |
+|---|---|---|
+| 01 | [What is R?](lessons/01-foundations/01-what-is-r.qmd) | ~40 min |
+| 02 | [First steps in R](lessons/01-foundations/02-first-steps.qmd) | ~50 min |
+| 03 | [Data types and operators](lessons/01-foundations/03-data-types.qmd) | ~60 min |
+| 04 | [Vectors](lessons/01-foundations/04-vectors.qmd) | ~60 min |
+| 05 | [Matrices](lessons/01-foundations/05-matrices.qmd) | ~50 min |
+| 06 | [Factors and types of variables](lessons/01-foundations/06-factors.qmd) | ~60 min |
+| 07 | [Lists](lessons/01-foundations/07-lists.qmd) | ~50 min |
+
+### 2. Working with data <small>(Level 1)</small>
+
+| # | Lesson | Time |
+|---|---|---|
+| 08 | [Data frames and tibbles](lessons/02-data/08-data-frames.qmd) | ~60 min |
+| 09 | [Data manipulation with dplyr](lessons/02-data/09-dplyr-verbs.qmd) | ~75 min |
+| 10 | [Grouped summaries](lessons/02-data/10-grouped-summaries.qmd) | ~60 min |
+| 11 | [Joining tables](lessons/02-data/11-joins.qmd) | ~60 min |
+| 12 | [Tidy data and reshaping](lessons/02-data/12-tidy-reshape.qmd) | ~60 min |
+| 13 | [Strings, factors and dates](lessons/02-data/13-strings-dates.qmd) | ~75 min |
+
+### 3. Programming <small>(Level 1)</small>
+
+| # | Lesson | Time |
+|---|---|---|
+| 14 | [Writing functions](lessons/03-programming/14-functions.qmd) | ~60 min |
+| 15 | [Conditionals: if, else and friends](lessons/03-programming/15-conditionals.qmd) | ~45 min |
+| 16 | [Loops: for, while and repeat](lessons/03-programming/16-loops.qmd) | ~60 min |
+| 17 | [Iteration with apply and purrr](lessons/03-programming/17-iteration.qmd) | ~60 min |
+
+### 4. Data in and out <small>(Level 1)</small>
+
+| # | Lesson | Time |
+|---|---|---|
+| 18 | [Importing data](lessons/04-io/18-import.qmd) | ~60 min |
+| 19 | [Exporting data and results](lessons/04-io/19-export.qmd) | ~40 min |
+| 20 | [Missing data](lessons/04-io/20-missing-data.qmd) | ~75 min |
+
+### 5. Descriptive statistics <small>(Level 2)</small>
+
+| # | Lesson | Time |
+|---|---|---|
+| 21 | [Frequency tables](lessons/05-descriptive/21-frequency-tables.qmd) | ~60 min |
+| 22 | [Summary statistics](lessons/05-descriptive/22-summary-statistics.qmd) | ~75 min |
+| 23 | [Describing two variables](lessons/05-descriptive/23-two-variables.qmd) | ~75 min |
+
+### 6. Visualisation <small>(Level 2)</small>
+
+| # | Lesson | Time |
+|---|---|---|
+| 24 | [The grammar of graphics](lessons/06-visualization/24-ggplot-grammar.qmd) | ~75 min |
+| 25 | [Plotting distributions](lessons/06-visualization/25-distribution-plots.qmd) | ~75 min |
+| 26 | [Plotting categorical data](lessons/06-visualization/26-categorical-plots.qmd) | ~60 min |
+| 27 | [Correlation](lessons/06-visualization/27-correlation.qmd) | ~75 min |
+
+### 7. Probability & simulation <small>(Level 3)</small>
+
+| # | Lesson | Time |
+|---|---|---|
+| 28 | [Randomness and simulation](lessons/07-probability/28-randomness-simulation.qmd) | ~75 min |
+| 29 | [Probability distributions](lessons/07-probability/29-distributions.qmd) | ~80 min |
+| 30 | [Sampling distributions](lessons/07-probability/30-sampling-distributions.qmd) | ~80 min |
+| 31 | [The bootstrap](lessons/07-probability/31-bootstrap.qmd) | ~75 min |
+
+### 8. Statistical inference <small>(Level 3)</small>
+
+| # | Lesson | Time |
+|---|---|---|
+| 32 | [Confidence intervals](lessons/08-inference/32-confidence-intervals.qmd) | ~70 min |
+| 33 | [The logic of hypothesis testing](lessons/08-inference/33-hypothesis-testing.qmd) | ~90 min |
+| 34 | [t-tests: comparing means](lessons/08-inference/34-t-tests.qmd) | ~75 min |
+| 35 | [Proportions and chi-square tests](lessons/08-inference/35-proportions-chisq.qmd) | ~80 min |
+| 36 | [Non-parametric tests](lessons/08-inference/36-nonparametric-tests.qmd) | ~70 min |
+| 37 | [Analysis of variance (ANOVA)](lessons/08-inference/37-anova.qmd) | ~90 min |
+
+### 9. Regression models <small>(Level 4)</small>
+
+| # | Lesson | Time |
+|---|---|---|
+| 38 | [Simple linear regression](lessons/09-regression/38-simple-regression.qmd) | ~90 min |
+| 39 | [Multiple regression](lessons/09-regression/39-multiple-regression.qmd) | ~100 min |
+| 40 | [Model selection and validation](lessons/09-regression/40-model-selection.qmd) | ~90 min |
+| 41 | [Logistic regression](lessons/09-regression/41-logistic-regression.qmd) | ~120 min |
+| 42 | [Poisson regression](lessons/09-regression/42-poisson-regression.qmd) | ~100 min |
+| 43 | [Penalized regression: ridge, lasso and elastic net](lessons/09-regression/43-penalized-regression.qmd) | ~120 min |
+
+### 10. Supervised learning <small>(Level 4)</small>
+
+| # | Lesson | Time |
+|---|---|---|
+| 44 | [The machine-learning workflow](lessons/10-ml/44-ml-workflow.qmd) | ~120 min |
+| 45 | [Decision trees](lessons/10-ml/45-decision-trees.qmd) | ~90 min |
+| 46 | [Random forests](lessons/10-ml/46-random-forests.qmd) | ~90 min |
+| 47 | [Gradient boosting](lessons/10-ml/47-gradient-boosting.qmd) | ~100 min |
+| 48 | [Support vector machines](lessons/10-ml/48-svm.qmd) | ~100 min |
+| 49 | [Comparing and choosing models](lessons/10-ml/49-model-comparison.qmd) | ~90 min |
+
+### 11. Dimensionality reduction <small>(Level 4)</small>
+
+| # | Lesson | Time |
+|---|---|---|
+| 50 | [Principal component analysis](lessons/11-dimred/50-pca.qmd) | ~90 min |
+| 51 | [Factor analysis](lessons/11-dimred/51-factor-analysis.qmd) | ~100 min |
+| 52 | [Correspondence analysis](lessons/11-dimred/52-correspondence-analysis.qmd) | ~80 min |
+| 53 | [Multidimensional scaling](lessons/11-dimred/53-mds.qmd) | ~75 min |
+| 54 | [t-SNE and UMAP](lessons/11-dimred/54-tsne-umap.qmd) | ~90 min |
+
+### 12. Clustering <small>(Level 4)</small>
+
+| # | Lesson | Time |
+|---|---|---|
+| 55 | [Clustering: the big picture](lessons/12-clustering/55-clustering-intro.qmd) | ~70 min |
+| 56 | [k-means clustering](lessons/12-clustering/56-kmeans.qmd) | ~90 min |
+| 57 | [Hierarchical clustering](lessons/12-clustering/57-hierarchical.qmd) | ~80 min |
+| 58 | [DBSCAN: density-based clustering](lessons/12-clustering/58-dbscan.qmd) | ~80 min |
+| 59 | [Model-based clustering: Gaussian mixtures](lessons/12-clustering/59-model-based.qmd) | ~90 min |
+| 60 | [Spectral clustering](lessons/12-clustering/60-spectral.qmd) | ~90 min |
+
+### 13. Deep learning <small>(Optional)</small>
+
+| # | Lesson | Time |
+|---|---|---|
+| 61 | [Deep learning: ideas and set-up](lessons/13-deep-learning/61-dl-setup.qmd) | ~60 min |
+| 62 | [Deep neural networks for tabular data](lessons/13-deep-learning/62-dnn-tabular.qmd) | ~90 min |
+| 63 | [Autoencoders](lessons/13-deep-learning/63-autoencoders.qmd) | ~75 min |
+| 64 | [Recurrent networks and LSTM for time series](lessons/13-deep-learning/64-lstm.qmd) | ~90 min |
+| 65 | [GRU networks for text classification](lessons/13-deep-learning/65-gru.qmd) | ~90 min |
+| 66 | [Convolutional neural networks for images](lessons/13-deep-learning/66-cnn.qmd) | ~90 min |
+
+### Capstone
+
+| # | Lesson | Time |
+|---|---|---|
+| 67 | [Capstone project](lessons/67-capstone.qmd) | project |

@@ -1,0 +1,485 @@
+---
+title: "Data frames and tibbles"
+subtitle: "The table that every statistical analysis starts from"
+description: "Understand tidy data (units in rows, variables in columns), create data frames and tibbles, inspect them, index them with [rows, cols], $ and [[, add columns and subset rows."
+aliases:
+  - ../../R-course_lesson-5.html
+format:
+  live-html:
+    webr:
+      packages: ["dplyr", "tibble"]
+---
+
+{{< include ../../_extensions/r-wasm/live/_knitr.qmd >}}
+
+```{webr}
+#| include: false
+#| autorun: true
+library(dplyr)
+library(tibble)
+```
+
+::: {.lesson-meta}
+[Level 1 · Foundations]{.level-1} [⏱ ~60 min]{} [Prerequisites: [Vectors](../01-foundations/04-vectors.qmd), [Factors](../01-foundations/06-factors.qmd), [Lists](../01-foundations/07-lists.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- identify the **statistical unit**, the **variables** and the **observations** in a dataset, and recognise **tidy data**;
+- create a data frame with `data.frame()` and a tibble with `tibble()`, and explain how they differ;
+- inspect an unknown dataset with `str()`, `glimpse()`, `head()`, `summary()`, `nrow()`, `ncol()` and `names()`;
+- extract cells, rows and columns with `[rows, cols]`, `$` and `[[`;
+- add a column and keep only the rows that satisfy a condition.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+library(tibble)
+library(dplyr)
+```
+
+## 1. Why do we need data frames?
+
+Imagine a field biologist who weighs a penguin, measures its bill and flipper, and writes down the species, the island and the sex. She repeats this for 344 birds. What she ends up with is a **table**: one line per bird, one column per measurement.
+
+Some columns contain numbers (body mass), others contain labels (species). A [matrix](../01-foundations/05-matrices.qmd) cannot hold this, because all its cells must have the same type. A **data frame** can: it is R's object for a table in which every column is a vector of its own type, and all columns have the same length.
+
+Almost every statistical method in this course — from a mean to a random forest — takes a data frame as input. Getting comfortable with them is the first real step of data analysis.
+
+## 2. Units, variables, observations: tidy data
+
+Before touching R, let us fix the vocabulary that statistics uses for a table.
+
+- The **statistical unit** is the "thing" we collect information about: a penguin, a patient, a country in a given year, a car.
+- A **variable** is a characteristic measured on each unit: body mass, species, blood pressure. Its values *vary* from unit to unit.
+- An **observation** is the set of values measured on one unit.
+
+A dataset is **tidy** when it follows three simple rules:
+
+1. each **variable** is a **column**;
+2. each **observation** (unit) is a **row**;
+3. each **value** is a **cell**.
+
+::: {.callout-tip}
+## Why statistics cares about tidy data
+
+When you compute "the mean body mass", you average a *column*. When you count "how many penguins", you count *rows*. When you fit a model `body_mass ~ species`, R looks for two *columns*. Statistical software assumes the tidy layout; if your table is not tidy, the first job is to reshape it (see [Tidy data and reshaping](12-tidy-reshape.qmd)).
+:::
+
+Here is a table that is **not** tidy. It stores the same kind of measurement (mass) in two columns, one per year:
+
+```{r}
+#| label: untidy
+untidy <- tibble(
+  penguin   = c("A1", "A2", "A3"),
+  mass_2008 = c(3750, 3800, 3250),
+  mass_2009 = c(3900, 3850, 3400)
+)
+untidy
+```
+
+Is the unit "a penguin" or "a penguin in a year"? If the question is *how does mass change over time*, the unit is the penguin-year, and the tidy version has three columns: `penguin`, `year`, `mass`. Deciding what the unit is comes **before** any code.
+
+## 3. Creating a data frame
+
+### Base R: `data.frame()`
+
+```{r}
+#| label: create-df
+df <- data.frame(
+  id    = c(10, 20, 30, 40),
+  item  = c("book", "pen", "textbook", "pencil_case"),
+  store = c(TRUE, FALSE, TRUE, FALSE),
+  price = c(2.5, 8, 10, 7)
+)
+df
+```
+
+Each argument becomes a column: `id` and `price` are numeric, `item` is character, `store` is logical. Since R 4.0, text columns stay character (the old default `stringsAsFactors = TRUE` is gone); you convert to a [factor](../01-foundations/06-factors.qmd) only when you want one.
+
+### Tidyverse: `tibble()`
+
+A **tibble** is a modern data frame from the tibble package. It *is* a data frame (every function that accepts a data frame accepts a tibble), with friendlier behaviour.
+
+```{r}
+#| label: create-tbl
+df_tbl <- tibble(
+  id    = c(10, 20, 30, 40),
+  item  = c("book", "pen", "textbook", "pencil_case"),
+  store = c(TRUE, FALSE, TRUE, FALSE),
+  price = c(2.5, 8, 10, 7)
+)
+df_tbl
+```
+
+| | `data.frame()` | `tibble()` |
+|---|---|---|
+| Printing | prints **all** rows | prints the first 10 rows and the column types (`<dbl>`, `<chr>`, …) |
+| `df[, 1]` (one column) | returns a **vector** | returns a **tibble** (one column) |
+| Row names | allowed (e.g. `mtcars`) | not used; move them into a column |
+| Partial matching of `$` | `df$pri` returns the column `price` (with a warning) | warning and `NULL` |
+
+You can convert in both directions with `as_tibble()` and `as.data.frame()`.
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: a data frame is a list
+
+Under the hood a data frame is a [list](../01-foundations/07-lists.qmd) of vectors of equal length, with the class `"data.frame"`. This is why `length(df)` returns the number of **columns** (`r length(df)`), and why `df[["price"]]` works exactly like for a list.
+
+```{r}
+#| label: df-is-list
+is.list(df)
+length(df)
+```
+:::
+
+## 4. Inspecting a dataset
+
+Base R (≥ 4.5) ships the `penguins` dataset: measurements of `r nrow(penguins)` penguins from three islands in Antarctica. When you meet a new dataset, run these functions first.
+
+```{r}
+#| label: inspect-size
+nrow(penguins)
+ncol(penguins)
+names(penguins)
+```
+
+```{r}
+#| label: inspect-str
+str(penguins)
+```
+
+`str()` ("structure") shows, for each column, its **type** and its first values. `glimpse()` from dplyr shows the same information in a tidier layout:
+
+```{r}
+#| label: inspect-glimpse
+glimpse(penguins)
+```
+
+```{r}
+#| label: inspect-head
+head(penguins, n = 3)
+```
+
+```{r}
+#| label: inspect-summary
+summary(penguins)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- For **numeric** columns, `summary()` gives minimum, quartiles, mean and maximum — the first look at a [distribution](../05-descriptive/22-summary-statistics.qmd).
+- For **factor** columns (`species`, `island`, `sex`) it gives the count of each level.
+- **`NA's`** counts the missing values: `r sum(is.na(penguins$sex))` penguins have no recorded `sex`, and `r sum(is.na(penguins$body_mass))` have no body mass. Remember this: missing values will come back in almost every lesson.
+- `year` is stored as an integer, so it gets a mean (`r round(mean(penguins$year), 1)`), which is not very meaningful. Knowing the *type* of variable you are dealing with matters more than what R computes.
+:::
+
+Tibbles print nicely, so it is common to convert a base data frame once at the start:
+
+```{r}
+#| label: as-tibble
+as_tibble(penguins)
+```
+
+Other built-in datasets are listed by `data()`; each has a help page (`?mtcars`, `?airquality`). Some, like `mtcars`, store the unit name in **row names**. Tibbles prefer it as a proper variable:
+
+```{r}
+#| label: rownames
+mtcars |>
+  rownames_to_column(var = "model") |>
+  as_tibble()
+```
+
+## 5. Indexing: `[rows, cols]`
+
+A data frame has two dimensions, so square brackets take two indices separated by a comma: `df[rows, cols]`. Leaving one side empty means "all".
+
+```{r}
+#| label: index-cell
+# One cell: row 1, column 2
+df[1, 2]
+```
+
+```{r}
+#| label: index-rows
+# Rows 1 to 2, all columns
+df[1:2, ]
+```
+
+```{r}
+#| label: index-cols
+# Column 1, all rows
+df[, 1]
+
+# Columns chosen by name
+df[, c("id", "store")]
+
+# One cell by row number and column name
+df[2, "price"]
+```
+
+You can index with **numbers** (positions), **names** or **logical** vectors, exactly as with [vectors](../01-foundations/04-vectors.qmd). Names are safer: if a column is added or moved, `df[, "price"]` still works, `df[, 4]` may not.
+
+### Extracting one column as a vector: `$` and `[[`
+
+```{r}
+#| label: dollar
+df$id         # convenient when typing interactively
+df[["id"]]    # works with a name stored in a variable
+col <- "price"
+df[[col]]
+```
+
+Single brackets with one index, `df["id"]`, return a **data frame** with one column; double brackets `df[["id"]]` return the **vector** inside. This is the same "train carriage vs its content" difference you met with lists.
+
+## 6. Adding columns
+
+A new column must have **one value per row**.
+
+```{r}
+#| label: add-col
+df$quantity <- c(10, 35, 40, 5)
+df
+```
+
+If the length does not match, base R stops with an error:
+
+```{r}
+#| label: add-col-error
+#| error: true
+df$quantity <- c(10, 35, 40)
+```
+
+New columns are often computed from existing ones. In base R:
+
+```{r}
+#| label: add-col-computed
+df$revenue <- df$price * df$quantity
+df
+```
+
+The tidyverse way is `mutate()`, which you will use constantly from the [next lesson](09-dplyr-verbs.qmd):
+
+```{r}
+#| label: mutate-preview
+df_tbl |>
+  mutate(quantity = c(10, 35, 40, 5),
+         revenue  = price * quantity)
+```
+
+The symbol `|>` is the **pipe**: read it as "and then". It passes the table on its left as the first argument of the function on its right.
+
+## 7. Keeping some rows: subsetting
+
+Put a **logical condition** in the row position: rows where it is `TRUE` are kept.
+
+```{r}
+#| label: subset-base
+df[df$price > 5, ]
+df[df$price > 5 & df$store, ]
+```
+
+`subset()` saves some typing, and also lets you choose columns:
+
+```{r}
+#| label: subset-fun
+subset(df, price > 5, select = c(item, price))
+```
+
+The dplyr verb `filter()` does the same job and fits into pipelines:
+
+```{r}
+#| label: filter-preview
+df |>
+  filter(price > 5)
+```
+
+### Missing values in conditions
+
+Watch what happens on real data with missing values:
+
+```{r}
+#| label: na-trap
+penguins[penguins$body_mass > 6000, ]
+```
+
+The rows full of `NA` come from the two penguins whose mass is missing: `NA > 6000` is `NA`, and indexing with `NA` returns a row of `NA`s. Two ways out:
+
+```{r}
+#| label: na-fix
+penguins[which(penguins$body_mass > 6000), ]
+penguins |> filter(body_mass > 6000)
+```
+
+`which()` turns the logical vector into the positions of the `TRUE`s, and `filter()` drops rows where the condition is `NA`. This is one reason why `filter()` is the recommended tool for real data.
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Forgetting the comma.** `df[1:2]` selects *columns* 1–2 (list-style), `df[1:2, ]` selects *rows* 1–2.
+2. **Expecting a vector from a tibble.** `tbl[, 1]` returns a one-column tibble; use `tbl[[1]]` or `tbl$name` to get the vector.
+3. **Conditions with `NA`.** `df[df$x > 5, ]` returns rows of `NA` when `x` is missing; use `which()` or `filter()`.
+4. **Using row positions as identifiers.** After sorting or filtering, row 3 is a different unit. Keep an `id` column.
+5. **Columns of the wrong type.** Numbers read as text (`"3,5"`) or codes stored as numbers (`sex = 1/2`) — always check `str()` or `glimpse()` first.
+:::
+
+## 8. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. In a hospital dataset each row is one visit, and the same patient can appear several times. What is the statistical unit?
+
+The **visit**, not the patient. If your question is about patients (e.g. "proportion of patients with diabetes") you first need one row per patient — for example by summarising visits per patient (see [Grouped summaries](10-grouped-summaries.qmd)).
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. What do `df[2, ]`, `df[, 2]` and `df[[2]]` return for a base data frame?
+
+`df[2, ]` is the second **row** (a one-row data frame); `df[, 2]` is the second **column** as a vector; `df[[2]]` is also the second column as a vector. For a tibble, `df[, 2]` would be a one-column tibble.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. Why does `length(penguins)` return 8 and not 344?
+
+Because a data frame is a list of columns: `length()` counts the elements of the list, i.e. the **columns**. Use `nrow()` for the number of units.
+:::
+
+## 9. Exercises
+
+### Interactive (run in your browser)
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — first look.** How many penguins and how many variables are in `penguins`? Which columns are factors? Fill in the blanks.
+
+```{webr}
+#| exercise: ex_08_1
+______(penguins)    # number of rows
+______(penguins)    # number of columns
+str(______)
+```
+
+::: {.hint exercise="ex_08_1"}
+`nrow()` counts rows, `ncol()` counts columns, `str()` shows the type of each column.
+:::
+
+::: {.solution exercise="ex_08_1"}
+```r
+nrow(penguins)
+ncol(penguins)
+str(penguins)
+```
+There are 344 penguins (rows) and 8 variables (columns); `species`, `island` and `sex` are factors.
+:::
+:::
+
+::: {.exercise}
+[★]{.stars} **Exercise 2 — indexing.** Using `[rows, cols]`, extract (a) the body mass of the 10th penguin; (b) the columns `species` and `bill_len` for the first 5 penguins.
+
+```{webr}
+#| exercise: ex_08_2
+penguins[______, "body_mass"]
+penguins[______, c(______, ______)]
+```
+
+::: {.hint exercise="ex_08_2"}
+Rows go before the comma, columns after. `1:5` gives the first five rows.
+:::
+
+::: {.solution exercise="ex_08_2"}
+```r
+penguins[10, "body_mass"]
+penguins[1:5, c("species", "bill_len")]
+```
+The 10th penguin weighs 4250 g.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — predict, then debug.** A classmate wants all Gentoo penguins heavier than 5500 g, but gets rows full of `NA`. Fix the code in two different ways (base R and `filter()`), and count how many penguins satisfy the condition.
+
+```{webr}
+#| exercise: ex_08_3
+heavy <- penguins[penguins$species == "Gentoo" & penguins$body_mass > 5500, ]
+heavy
+```
+
+::: {.hint exercise="ex_08_3"}
+One Gentoo has a missing body mass. Wrap the condition in `which()`, or use `penguins |> filter(species == "Gentoo", body_mass > 5500)`. Then use `nrow()`.
+:::
+
+::: {.solution exercise="ex_08_3"}
+```r
+heavy <- penguins[which(penguins$species == "Gentoo" &
+                          penguins$body_mass > 5500), ]
+nrow(heavy)
+
+heavy2 <- penguins |> filter(species == "Gentoo", body_mass > 5500)
+nrow(heavy2)
+```
+Both give the same rows. In `filter()`, conditions separated by commas are combined with "and".
+:::
+:::
+
+### Practice on your own computer
+
+::: {.exercise}
+[★★]{.stars} **Exercise 4 — build a tidy table.** Five students took a quiz. Create a tibble with columns `student` (names of your choice), `score` (out of 30) and `passed` (`TRUE` if `score >= 18`, computed from `score`, not typed by hand). Then add a column `grade` equal to `score / 30 * 100` and print only the students who passed.
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+quiz <- tibble(
+  student = c("Ada", "Ben", "Chiara", "Dev", "Eli"),
+  score   = c(25, 14, 18, 29, 11)
+)
+quiz$passed <- quiz$score >= 18
+quiz$grade  <- quiz$score / 30 * 100
+quiz[quiz$passed, ]
+```
+The unit is the student; `score`, `passed` and `grade` are variables.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 5 — what is the unit?** For each dataset, name the statistical unit and two variables: (a) `airquality`; (b) `ToothGrowth`; (c) `mtcars`. Use `?name` and `head()` to find out.
+
+::: {.callout-tip collapse="true"}
+## Solution
+(a) `airquality`: one **day** (May–September 1973 in New York); variables `Ozone`, `Temp`, … (b) `ToothGrowth`: one **guinea pig**; variables `len`, `supp`, `dose`. (c) `mtcars`: one **car model** (stored in the row names); variables `mpg`, `hp`, … Notice that only (c) needs `rownames_to_column()` to make the unit identifier a proper variable.
+:::
+:::
+
+## Summary
+
+| Task | Base R | Tidyverse |
+|---|---|---|
+| Create | `data.frame(a = ..., b = ...)` | `tibble(a = ..., b = ...)` |
+| Size and names | `nrow()`, `ncol()`, `dim()`, `names()` | — |
+| Structure | `str()`, `head()`, `summary()` | `glimpse()` |
+| One cell | `df[1, 2]`, `df[1, "b"]` | — |
+| One column (vector) | `df$b`, `df[["b"]]` | `pull(df, b)` |
+| Some columns | `df[, c("a", "b")]` | `select(df, a, b)` |
+| Add a column | `df$c <- ...` | `mutate(df, c = ...)` |
+| Keep rows | `df[which(cond), ]`, `subset()` | `filter(df, cond)` |
+
+- A dataset is **tidy** when units are rows, variables are columns, values are cells.
+- Decide what the **statistical unit** is before writing code.
+- A data frame is a list of equal-length columns; a tibble is a data frame with safer defaults.
+- Missing values make logical conditions return `NA`: prefer `filter()` or `which()`.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- Wickham, Çetinkaya-Rundel & Grolemund, *R for Data Science* (2e), chapter "Data tidying", <https://r4ds.hadley.nz>
+- Wickham, H. (2014), "Tidy Data", *Journal of Statistical Software* 59(10), <https://doi.org/10.18637/jss.v059.i10>
+- tibble package documentation, <https://tibble.tidyverse.org>
+:::

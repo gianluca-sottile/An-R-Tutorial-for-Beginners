@@ -1,0 +1,95 @@
+---
+title: "Start here"
+subtitle: "Everything you need before Lesson 1 — in about 10 minutes"
+description: "Install R and an editor, install the course packages, and learn how lessons and interactive exercises work."
+---
+
+## 1. Two ways to use this course
+
+::: {.grid}
+::: {.g-col-12 .g-col-md-6}
+### In the browser — nothing to install
+Most lessons in Levels 1–3 contain **interactive exercises**: code boxes you can edit and run directly on the page (powered by [webR](https://docs.r-wasm.org/webr/latest/), R compiled for the browser). Click **Run Code**, use **Hint** when you are stuck and **Show Solution** to compare.
+
+The first exercise on a page can take a few seconds while R starts in your browser.
+:::
+
+::: {.g-col-12 .g-col-md-6}
+### On your computer — recommended
+To follow every lesson, work on your own data and complete the [capstone project](lessons/67-capstone.qmd), install R and an editor (below). It is free and takes a few minutes.
+:::
+:::
+
+## 2. Install R (version 4.5 or newer)
+
+Download R from **CRAN**, the official repository: <https://cran.r-project.org>. Choose your operating system and follow the installer.
+
+::: {.callout-note}
+## Why R ≥ 4.5?
+The course uses the `penguins` dataset that ships with R since version 4.5.0. Check your version by typing `R.version.string` in the R console.
+:::
+
+## 3. Install an editor (IDE)
+
+You can use either:
+
+- **RStudio Desktop** — the classic, very popular IDE: <https://posit.co/download/rstudio-desktop/>
+- **Positron** — Posit's newer data-science IDE (R and Python): <https://positron.posit.co>
+
+Both are free. Lesson [1](lessons/01-foundations/01-what-is-r.qmd) gives a short tour of the RStudio panes; Positron is organised in a similar way.
+
+## 4. Install the course packages
+
+Open R (or your IDE) and run this single line. It installs every package used in the course (it may take 10–20 minutes the first time):
+
+```r
+source("https://raw.githubusercontent.com/gianluca-sottile/An-R-Tutorial-for-Beginners/master/scripts/install-packages.R")
+```
+
+The optional deep-learning track needs additional software; [Lesson 61](lessons/13-deep-learning/61-dl-setup.qmd) explains how to install it.
+
+## 5. How a lesson is organised
+
+```{=html}
+<div class="lesson-meta"><span class="level-2">Level 2 · Describe &amp; explore</span><span>⏱ ~60 min</span><span>Prerequisites: …</span></div>
+```
+
+Every lesson starts with its **level**, an **estimated time** and its **prerequisites**, then:
+
+| Block | What it is for |
+|---|---|
+| 🎯 **Learning objectives** | What you will be able to do at the end |
+| 💡 **Why…?** | The real problem the method solves |
+| ▶️ **Code + explanation** | Short chunks, each explained |
+| 🔎 **How to read this output** | Line-by-line guide to R's results |
+| 🔬 **Going deeper** (collapsed) | Formulas and theory for those who want them |
+| ⚠️ **Common pitfalls** | Frequent mistakes and misconceptions |
+| ✅ **Check your understanding** | Quick questions with hidden answers |
+| ✍️ **Exercises** ★ / ★★ / ★★★ | Increasing difficulty, solutions included |
+| 📋 **Summary** | Key functions and ideas at a glance |
+
+Code you can copy has a copy button in its top-right corner. Output lines start with `#>`.
+
+## 6. Suggested routes
+
+| You are… | Suggested route |
+|---|---|
+| Completely new to R and statistics | All lessons in order, Level 1 → 4 |
+| Comfortable with R, rusty on statistics | Skim Level 1, then Levels 2–3 carefully |
+| Know statistics, new to R | Level 1, then lessons 24–27 (graphics), then Level 4 |
+| Need machine learning quickly | 08–10, 18, 24, 38–41, then 44–49 |
+
+See the full [learning path](learning-path.qmd) for the map of prerequisites.
+
+## 7. For instructors and contributors: working with the source
+
+The website is a [Quarto](https://quarto.org) project. To build it locally:
+
+1. Install [Quarto](https://quarto.org/docs/get-started/) (≥ 1.6) and the course packages (step 4).
+2. Clone the repository and open `An-R-Tutorial-for-Beginners.Rproj`.
+3. In the terminal, once: `quarto add r-wasm/quarto-live` (installs the interactive-exercise extension; commit the `_extensions/` folder).
+4. Preview with `quarto preview`; build everything with `quarto render`.
+
+All R results are stored in `_freeze/` (Quarto's **freeze** feature), which is committed to git. GitHub Actions then publishes the site **without running R**, so heavy computations (including deep learning) only ever run on your own computer.
+
+Found an error? Use the **"Report an issue"** link at the bottom of the table of contents on any page.

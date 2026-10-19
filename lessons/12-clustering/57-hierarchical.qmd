@@ -1,0 +1,480 @@
+---
+title: "Hierarchical clustering"
+subtitle: "Build a tree of nested groups, read the dendrogram, and cut it where it makes sense"
+description: "Agglomerative clustering by hand and in R: linkage rules and their behaviour, reading dendrograms, cutting with cutree(), cophenetic correlation, silhouette, comparison with k-means and cluster profiles."
+aliases:
+  - ../../R-course_lesson-37.html
+---
+
+::: {.lesson-meta}
+[Level 4 · Models & learning]{.level-4} [⏱ ~80 min]{} [Prerequisites: [Clustering: the big picture](55-clustering-intro.qmd), [k-means](56-kmeans.qmd)]{}
+:::
+
+::: {.callout-note .objectives}
+## Learning objectives
+
+By the end of this lesson you will be able to:
+
+- carry out **agglomerative** clustering by hand on a few points;
+- explain how **single**, **complete**, **average** and **Ward** linkage differ, and recognise **chaining**;
+- read a **dendrogram** (what the height means, what does *not* matter) and cut it with `cutree()`;
+- assess a tree with the **cophenetic correlation** and a partition with the **silhouette**;
+- compare a hierarchical partition with k-means and **profile** the clusters.
+:::
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("_common.R"))
+```
+
+```{r}
+#| label: packages
+#| message: false
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+library(cluster)   # silhouette()
+library(mclust)    # adjustedRandIndex()
+```
+
+## 1. Why a hierarchy?
+
+k-means asks you for $k$ *before* it starts. Often we would rather see the structure at **all** levels of detail: which observations are almost identical, which small groups join into larger ones, and where the big divisions are. Biologists have done this for centuries with family trees of species; marketers do it with customers (premium customers → premium restaurants vs premium shops → …).
+
+**Hierarchical clustering** produces exactly such a tree, called a **dendrogram**. You choose the number of clusters *afterwards*, by cutting the tree.
+
+We focus on the most common version, **agglomerative** (bottom-up) clustering:
+
+1. start with every observation in its own cluster;
+2. merge the two **closest** clusters;
+3. repeat until everything is in one cluster.
+
+The only question is what "closest" means for *groups* of points — that is the **linkage**.
+
+## 2. The algorithm by hand on five points
+
+```{r}
+#| label: toy-points
+pts <- data.frame(
+  x = c(1, 2, 6, 7, 4),
+  y = c(1, 1.5, 5, 5.5, 3),
+  row.names = c("A", "B", "C", "D", "E")
+)
+d5 <- dist(pts)
+round(d5, 2)
+```
+
+```{r}
+#| label: fig-toy-points
+#| fig-cap: "Five points: two tight pairs (A–B and C–D) and a point E in between."
+#| fig-width: 4
+#| fig-height: 4
+ggplot(pts, aes(x, y, label = rownames(pts))) +
+  geom_point(size = 3) +
+  geom_text(nudge_x = 0.3, nudge_y = 0.3) +
+  coord_equal() +
+  labs(x = "x", y = "y")
+```
+
+We use **complete linkage**: the distance between two clusters is the distance between their **farthest** members.
+
+**Step 1.** The smallest distance in the matrix is `r round(min(d5), 2)` — a tie between A–B and C–D. Merge A and B.
+
+**Step 2.** Merge C and D, also at height `r round(min(d5), 2)`.
+
+**Step 3.** Now we have three clusters: {A, B}, {C, D} and {E}. Their complete-linkage distances are:
+
+```{r}
+#| label: complete-by-hand
+D <- as.matrix(d5)
+c(
+  E_AB  = max(D["E", c("A", "B")]),
+  E_CD  = max(D["E", c("C", "D")]),
+  AB_CD = max(D[c("A", "B"), c("C", "D")])
+)
+```
+
+The smallest is E–{A, B}, so E joins A and B at height `r round(max(D["E", c("A", "B")]), 2)`.
+
+**Step 4.** The last merge joins {A, B, E} and {C, D} at height `r round(max(D[c("A", "B", "E"), c("C", "D")]), 2)`.
+
+`hclust()` records exactly these steps:
+
+```{r}
+#| label: toy-hclust
+hc_toy <- hclust(d5, method = "complete")
+hc_toy$merge
+round(hc_toy$height, 2)
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- Each row of `merge` is one step. **Negative** numbers are single observations (−1 = A, −2 = B, …); **positive** numbers refer to the cluster created in that earlier row. Row 3, `-5 1`, means "observation E joins the cluster made in step 1".
+- `height` is the linkage distance at which each merge happened — the numbers we computed by hand.
+:::
+
+```{r}
+#| label: fig-toy-dendrogram
+#| fig-cap: "Dendrogram of the five points (complete linkage). The height of each horizontal bar is the distance at which two clusters were merged."
+#| fig-width: 5
+#| fig-height: 4
+plot(hc_toy, hang = -1, main = "Complete linkage", xlab = "", sub = "",
+     ylab = "Merge height")
+```
+
+### Reading a dendrogram
+
+- **Height = merge distance.** Two observations that join low down are similar; groups that join only near the top are very different.
+- The **left-to-right order** of the leaves carries little information. Each merge can be flipped like a mobile without changing the tree: A is not "closer" to C just because they are drawn side by side.
+- Long vertical branches before a merge mean a **well-separated** group.
+
+## 3. Cutting the tree
+
+`cutree()` turns the tree into a partition, either with a number of clusters `k` or at a height `h`:
+
+```{r}
+#| label: cutree-toy
+cutree(hc_toy, k = 2)
+cutree(hc_toy, h = 3)
+```
+
+Cutting at height 3 crosses three vertical branches, so we get three clusters: {A, B}, {C, D} and {E}. With `k = 2`, E goes with A and B.
+
+## 4. Linkage rules and their personality
+
+| Linkage | Distance between clusters $G$ and $H$ | Typical behaviour |
+|---|---|---|
+| **Single** | closest pair: $\min_{i \in G, j \in H} d_{ij}$ | finds long, snake-like groups; prone to **chaining** (clusters grow by adding one nearby point at a time); isolates outliers as tiny clusters |
+| **Complete** | farthest pair: $\max_{i \in G, j \in H} d_{ij}$ | compact clusters of similar diameter; sensitive to outliers |
+| **Average** (UPGMA) | mean of all pairwise distances | a compromise between single and complete |
+| **Ward** (`"ward.D2"`) | merge the pair that increases the total within-cluster sum of squares the least | compact, balanced clusters, similar in spirit to k-means |
+
+On our five points all four linkages merge in the same order, but at different heights:
+
+```{r}
+#| label: toy-linkages
+linkages <- c("single", "complete", "average", "ward.D2")
+sapply(linkages, \(m) round(hclust(d5, method = m)$height, 2))
+```
+
+Single linkage gives the lowest heights (it uses the *closest* pair), complete the highest among the three "distance" linkages. Ward heights are on a different scale (see "Going deeper").
+
+::: {.callout-note .deeper collapse="true"}
+## Going deeper: Ward's criterion and the two Ward methods in R
+
+Merging clusters $G$ and $H$, with sizes $n_G, n_H$ and centroids $\bar x_G, \bar x_H$, increases the within-cluster sum of squares by
+
+$$
+\Delta(G, H) = \frac{n_G\, n_H}{n_G + n_H}\, \lVert \bar x_G - \bar x_H \rVert^2 .
+$$
+
+Ward's method merges the pair with the smallest $\Delta$. In R, `method = "ward.D2"` implements this criterion when you give it ordinary (unsquared) Euclidean distances, and reports the merge height $\sqrt{2\Delta}$. The older `method = "ward.D"` only implements Ward's criterion if you pass **squared** distances; with ordinary `dist()` output it is a different method. Use `"ward.D2"`.
+
+Because the heights are $\sqrt{2\Delta}$, the squared heights add up to twice the total sum of squares:
+
+```{r}
+#| label: ward-check
+hw_toy <- hclust(d5, method = "ward.D2")
+sum(hw_toy$height^2) / 2
+sum(scale(pts, scale = FALSE)^2)   # total sum of squares
+```
+:::
+
+## 5. A real data set: wholesale customers
+
+The wholesale data (UCI repository) record the annual spending, in monetary units, of 440 clients of a Portuguese distributor on six product categories. As in [the introduction](55-clustering-intro.qmd), spending is right-skewed, so we apply `log1p()` and then standardise.
+
+```{r}
+#| label: wholesale-prep
+wholesale <- read_csv(data_path("wholesale_customers.csv"),
+                      show_col_types = FALSE)
+spend_vars <- c("Fresh", "Milk", "Grocery", "Frozen",
+                "Detergents_Paper", "Delicassen")
+
+X <- wholesale |>
+  select(all_of(spend_vars)) |>
+  mutate(across(everything(), log1p)) |>
+  scale()
+
+d <- dist(X)
+hcs <- lapply(linkages, \(m) hclust(d, method = m))
+names(hcs) <- linkages
+```
+
+```{r}
+#| label: fig-dendrograms
+#| fig-cap: "Dendrograms of the 440 wholesale clients with four linkages. Single and average linkage show long chains with one or two outliers joining at the top; Ward shows two large, clearly separated groups."
+#| fig-height: 7
+par(mfrow = c(2, 2), mar = c(1, 4, 3, 1))
+for (m in linkages) {
+  plot(hcs[[m]], labels = FALSE, hang = -1, main = m, xlab = "", sub = "",
+       ylab = "Height")
+}
+par(mfrow = c(1, 1))
+```
+
+Cutting each tree into 2 to 5 clusters shows their personalities in numbers:
+
+```{r}
+#| label: cluster-sizes
+sapply(hcs, \(h) {
+  sapply(2:5, \(k) paste(sort(table(cutree(h, k)), decreasing = TRUE),
+                         collapse = "/"))
+}) |>
+  `rownames<-`(paste("k =", 2:5))
+```
+
+::: {.callout-tip .read-output}
+## How to read this output
+
+- Each cell lists the cluster sizes, largest first.
+- **Single linkage** peels off one client at a time: almost everyone stays in one giant cluster. This is **chaining** — the giant cluster grew by adding nearest neighbours one by one, and the last clients to join are the outliers.
+- **Average** linkage behaves similarly on these data; **complete** linkage creates one large and a few smaller groups.
+- **Ward** produces balanced groups of comparable size.
+:::
+
+## 6. How faithful is the tree? The cophenetic correlation
+
+The **cophenetic distance** between two observations is the height at which they first end up in the same cluster. If the tree represents the data well, cophenetic distances should be close to the original distances. Their correlation is the **cophenetic correlation**:
+
+```{r}
+#| label: cophenetic
+coph <- sapply(hcs, \(h) cor(cophenetic(h), d))
+round(coph, 3)
+```
+
+Average linkage has the highest cophenetic correlation (`r round(coph["average"], 2)`): its tree preserves the original distances best. Ward has the lowest (`r round(coph["ward.D2"], 2)`). This is a typical — and instructive — result. A tree can **summarise distances** faithfully and still give **useless partitions** (average linkage cut at $k = 2$ gives a group of 2 clients). The cophenetic correlation answers "is the tree a good map of the distances?", not "are the clusters useful?".
+
+## 7. Choosing where to cut: silhouette by k
+
+```{r}
+#| label: silhouette-k
+k_grid <- 2:8
+sil_tab <- sapply(hcs, \(h) {
+  sapply(k_grid, \(k) mean(silhouette(cutree(h, k), d)[, "sil_width"]))
+})
+rownames(sil_tab) <- k_grid
+round(sil_tab, 3)
+```
+
+```{r}
+#| label: fig-silhouette-k
+#| fig-cap: "Average silhouette by number of clusters for each linkage."
+as_tibble(sil_tab) |>
+  mutate(k = k_grid) |>
+  pivot_longer(-k, names_to = "linkage", values_to = "silhouette") |>
+  ggplot(aes(k, silhouette, colour = linkage)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(x = "Number of clusters (k)", y = "Average silhouette",
+       colour = "Linkage")
+```
+
+At first sight single and average linkage "win": their average silhouette is the highest. But look back at the cluster sizes: they win by putting almost all clients in one cluster (with single linkage and $k = 2$, `r max(table(cutree(hcs$single, 2)))` of `r nrow(X)`) and one or two outliers in the others. Those outliers are far from everybody, so their silhouettes — and the giant cluster's — look fine. **A high silhouette does not guarantee a useful partition.** Always look at cluster sizes too.
+
+We therefore keep **Ward** linkage and choose $k$ where *its* silhouette is highest:
+
+```{r}
+#| label: k-final
+k_final <- k_grid[which.max(sil_tab[, "ward.D2"])]
+cl_hc <- cutree(hcs$ward.D2, k = k_final)
+table(cl_hc)
+```
+
+Ward's silhouette is highest at $k =$ `r k_final` (`r round(max(sil_tab[, "ward.D2"]), 2)`), but the values for $k = 2$ and $k = 3$ are very close (`r round(sil_tab["2", "ward.D2"], 3)` and `r round(sil_tab["3", "ward.D2"], 3)`). Both are defensible; the dendrogram shows one big split followed by a smaller one. We continue with $k =$ `r k_final`.
+
+```{r}
+#| label: fig-ward-cut
+#| fig-cap: "Ward dendrogram with the chosen clusters boxed."
+plot(hcs$ward.D2, labels = FALSE, hang = -1, main = "Ward linkage",
+     xlab = "", sub = "", ylab = "Height")
+rect.hclust(hcs$ward.D2, k = k_final, border = c("#E69F00", "#0072B2"))
+```
+
+## 8. Comparison with k-means
+
+```{r}
+#| label: compare-kmeans
+set.seed(123)
+km <- kmeans(X, centers = k_final, nstart = 50)
+table(hierarchical = cl_hc, kmeans = km$cluster)
+ari_hc_km <- adjustedRandIndex(cl_hc, km$cluster)
+ari_hc_km
+```
+
+The ARI is `r round(ari_hc_km, 2)`: the two methods find broadly the same split, and disagree on about `r sum(table(cl_hc, km$cluster)) - sum(apply(table(cl_hc, km$cluster), 1, max))` clients (the off-diagonal cells). That is expected: Ward and k-means optimise the same kind of criterion (within-cluster sum of squares), but Ward does it greedily — once merged, two points can never be separated — while k-means can move points back and forth.
+
+The data also contain a variable we did **not** use: `Channel` (1 = Horeca — hotels, restaurants, cafés; 2 = Retail). It is a natural external check:
+
+```{r}
+#| label: channel
+table(cluster = cl_hc, channel = wholesale$Channel)
+adjustedRandIndex(cl_hc, wholesale$Channel)
+```
+
+The clusters are clearly related to the channel (ARI `r round(adjustedRandIndex(cl_hc, wholesale$Channel), 2)`), but not identical to it: spending patterns and business type overlap.
+
+## 9. Profiles
+
+```{r}
+#| label: profile-original
+wholesale |>
+  mutate(cluster = factor(cl_hc)) |>
+  summarise(n = n(), across(all_of(spend_vars), median), .by = cluster) |>
+  arrange(cluster)
+```
+
+```{r}
+#| label: fig-profile-z
+#| fig-cap: "Mean z-score (of log spending) of each Ward cluster on the six categories."
+as_tibble(X) |>
+  mutate(cluster = factor(cl_hc)) |>
+  summarise(across(everything(), mean), .by = cluster) |>
+  pivot_longer(-cluster, names_to = "category", values_to = "z") |>
+  ggplot(aes(category, cluster, fill = z)) +
+  geom_tile(colour = "white") +
+  geom_text(aes(label = round(z, 1))) +
+  scale_fill_gradient2(low = "#0072B2", mid = "white", high = "#D55E00") +
+  labs(x = NULL, y = "Cluster", fill = "Mean z") +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+```
+
+::: {.callout-tip .read-output}
+## How to read these profiles
+
+The table gives **medians in the original monetary units** — what a typical client in each cluster spends per year. The heat map gives the same comparison on the standardised log scale, where "+1" means about one standard deviation above the average client. Read them together: one cluster spends much more on Milk, Grocery and Detergents_Paper (typical of shops), the other relatively more on Fresh and Frozen products (typical of restaurants and hotels), which is consistent with the cross-table with `Channel`.
+:::
+
+::: {.callout-warning .pitfall}
+## Common pitfalls
+
+1. **Passing the data instead of the distances.** `hclust()` needs a `dist` object: `hclust(dist(X))`, not `hclust(X)`.
+2. **Using `"ward.D"` with ordinary distances.** It is not Ward's criterion; use `"ward.D2"`.
+3. **Reading the horizontal order of leaves.** Only the merge heights matter; branches can be flipped.
+4. **Trusting the silhouette (or cophenetic correlation) without looking at cluster sizes.** Single and average linkage can score well by isolating a couple of outliers.
+5. **Forgetting the cost.** Hierarchical clustering stores all $n(n-1)/2$ distances; for tens of thousands of observations use k-means or a subsample.
+6. **Assuming merges can be undone.** The algorithm is greedy: an early bad merge stays in the tree forever.
+:::
+
+## 10. Check your understanding
+
+::: {.callout-note collapse="true" icon="false"}
+## Q1. In a dendrogram, observations 7 and 12 are drawn next to each other but join only at the very top. Are they similar?
+
+No. Similarity is read from the **height** at which they join, not from the horizontal position. Joining at the top means they are in very different groups.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q2. Which linkage would you expect to produce one giant cluster plus a few singletons on noisy data, and why?
+
+Single linkage. It merges clusters through their closest pair, so a big cluster can keep absorbing nearby points (chaining), while isolated outliers join only at the end.
+:::
+
+::: {.callout-note collapse="true" icon="false"}
+## Q3. What is the difference between `cutree(hc, k = 3)` and `cutree(hc, h = 3)`?
+
+`k = 3` asks for exactly three clusters, wherever the cut has to be. `h = 3` cuts the tree at height 3; the number of clusters is however many branches cross that height.
+:::
+
+## 11. Exercises
+
+::: {.exercise}
+[★]{.stars} **Exercise 1 — single linkage by hand.** For the five points A–E, repeat the steps of section 2 with **single** linkage. At which heights do the last two merges happen? Check with `hclust(d5, method = "single")$height`.
+
+::: {.callout-tip collapse="true"}
+## Solution
+Steps 1–2 are the same (A–B and C–D at 1.12). Then single linkage uses the closest pair: $d(E, \{A,B\}) = \min(3.61, 2.50) = 2.50$, $d(E, \{C,D\}) = \min(2.83, 3.91) = 2.83$, $d(\{A,B\},\{C,D\}) = 5.32$. E joins {A, B} at 2.50. Finally $d(\{A,B,E\}, \{C,D\}) = \min(5.32, 2.83, \dots) = 2.83$.
+```r
+round(hclust(d5, method = "single")$height, 2)   # 1.12 1.12 2.50 2.83
+```
+:::
+:::
+
+::: {.exercise}
+[★]{.stars} **Exercise 2 — predict the output.** With `hc_toy` (complete linkage, heights 1.12, 1.12, 3.61, 7.50), what do `cutree(hc_toy, h = 1)`, `cutree(hc_toy, h = 5)` and `cutree(hc_toy, h = 8)` return?
+
+::: {.callout-tip collapse="true"}
+## Solution
+- `h = 1`: below every merge, so five singleton clusters: `1 2 3 4 5`.
+- `h = 5`: above 3.61 but below 7.50, so two clusters: {A, B, E} and {C, D}.
+- `h = 8`: above the last merge, so one cluster: all `1`.
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 3 — debug.** This code stops with the cryptic error *"missing value where TRUE/FALSE needed"*. Why, and how do you fix it?
+
+```r
+hc <- hclust(X, method = "ward.D2")
+```
+
+::: {.callout-tip collapse="true"}
+## Solution
+`hclust()` expects a dissimilarity object (class `dist`), which carries a `"Size"` attribute; a plain matrix has none, and the internal check fails. Compute the distances first:
+```r
+hc <- hclust(dist(X), method = "ward.D2")
+```
+:::
+:::
+
+::: {.exercise}
+[★★]{.stars} **Exercise 4 — interpret.** A colleague reports: *"Average linkage is best: it has the highest cophenetic correlation, and at k = 2 its silhouette is more than twice Ward's."* Using the wholesale results of this lesson, write two or three sentences in reply.
+
+::: {.callout-tip collapse="true"}
+## Solution
+Both statements are numerically true, but the two-cluster average-linkage solution puts 438 clients in one cluster and 2 in the other: it separates outliers, not customer segments. The cophenetic correlation measures how well the tree reproduces distances, and the silhouette rewards isolating far-away points; neither checks that the partition is useful. Ward's solution has lower scores but gives two sizeable groups that relate clearly to the sales channel.
+:::
+:::
+
+::: {.exercise}
+[★★★]{.stars} **Exercise 5 — mini-analysis on penguins.** Standardise the four numeric `penguins` measurements (complete cases). Build Ward and average-linkage trees, cut each at $k = 3$, and compare with `species` and with k-means ($k = 3$, `nstart = 25`) using the ARI. Which method recovers the species best?
+
+::: {.callout-tip collapse="true"}
+## Solution
+```r
+peng <- penguins |>
+  select(species, bill_len, bill_dep, flipper_len, body_mass) |>
+  na.omit()
+Xp <- scale(select(peng, -species))
+dp <- dist(Xp)
+cl_ward <- cutree(hclust(dp, method = "ward.D2"), k = 3)
+cl_avg  <- cutree(hclust(dp, method = "average"), k = 3)
+set.seed(1)
+cl_km <- kmeans(Xp, centers = 3, nstart = 25)$cluster
+
+table(cl_ward, peng$species)
+table(cl_avg,  peng$species)
+sapply(list(ward = cl_ward, average = cl_avg, kmeans = cl_km),
+       \(cl) adjustedRandIndex(cl, peng$species))
+```
+Ward recovers the species best (ARI about 0.92, only a few Chinstraps grouped with Adelies), better than k-means (about 0.79). Average linkage merges Adelie and Chinstrap and splits off a handful of Gentoos — another example of a linkage isolating a small group.
+:::
+:::
+
+## Summary
+
+| Task | Code | Remember |
+|---|---|---|
+| Distances | `d <- dist(X)` | scale (and transform) first |
+| Build the tree | `hclust(d, method = "ward.D2")` | also `"single"`, `"complete"`, `"average"` |
+| Plot | `plot(hc, labels = FALSE, hang = -1)`; `rect.hclust(hc, k)` | height = merge distance |
+| Cut | `cutree(hc, k = 3)` or `cutree(hc, h = 2)` | one tree, many partitions |
+| Tree fidelity | `cor(cophenetic(hc), d)` | good map ≠ good clusters |
+| Partition quality | `cluster::silhouette(cutree(hc, k), d)` | check cluster sizes too |
+| Compare partitions | `mclust::adjustedRandIndex(a, b)` | ignores label names |
+
+- Agglomerative clustering repeatedly **merges the two closest clusters**; the **linkage** defines "closest".
+- Single linkage chains and isolates outliers; complete and Ward give compact groups; average is in between.
+- Read dendrograms by **height**, never by left-right order; cut with `cutree()`.
+- Choose the linkage and $k$ with indices **and** cluster sizes **and** interpretability; compare with k-means for robustness.
+
+::: {.callout-note collapse="true" icon="false"}
+## Further reading
+
+- James, Witten, Hastie & Tibshirani, *An Introduction to Statistical Learning* (2e), section 12.4.2, <https://www.statlearning.com>
+- Murtagh, F. & Legendre, P. (2014). Ward's hierarchical agglomerative clustering method: which algorithms implement Ward's criterion? *Journal of Classification*, 31, 274–295.
+- `?hclust` and `?cutree` in R.
+:::

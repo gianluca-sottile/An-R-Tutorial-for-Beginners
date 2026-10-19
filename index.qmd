@@ -1,0 +1,98 @@
+---
+title: "From Data to Models with R"
+pagetitle: "From Data to Models with R — A beginner's course in statistics and machine learning"
+description: "A free, open course that takes you from your first line of R to statistical modelling and machine learning — with 340+ exercises, many of which run directly in your browser."
+toc: false
+sidebar: false
+page-layout: article
+title-block-banner: false
+---
+
+```{=html}
+<style>
+  /* the home page draws its own title inside the hero */
+  #title-block-header { display: none; }
+</style>
+
+<section class="hero">
+  <div class="eyebrow">From Data to Models with R · Free · Open · Interactive</div>
+  <h1>Learn R and statistics,<br>one step at a time.</h1>
+  <p class="lead">
+    A complete university course that takes you from your first line of R code to
+    regression, machine learning and clustering — written for students who do
+    <strong>not</strong> have a strong background in statistics.
+  </p>
+  <div class="cta">
+    <a class="primary" href="setup.html">Start here →</a>
+    <a class="ghost" href="learning-path.html">See the learning path</a>
+    <a class="ghost" href="lessons/01-foundations/01-what-is-r.html">Jump to lesson 1</a>
+  </div>
+  <div class="code-deco" aria-hidden="true">x |&gt; mean()</div>
+</section>
+
+<div class="stats">
+  <div><strong>67</strong><span>lessons</span></div>
+  <div><strong>340+</strong><span>exercises with solutions</span></div>
+  <div><strong>130+</strong><span>run in your browser</span></div>
+  <div><strong>4</strong><span>levels, beginner → advanced</span></div>
+</div>
+```
+
+## Four levels, one path
+
+Each lesson tells you its level, how long it takes and what you should know before starting. Follow the levels in order, or jump to what you need.
+
+```{=html}
+<div class="level-grid">
+  <div class="level-card l1">
+    <span class="num">Level 1</span>
+    <h3>R foundations</h3>
+    <p>Install R, learn the language, manipulate data with the tidyverse, write functions, import and clean data.</p>
+    <a class="stretched" href="lessons/01-foundations/01-what-is-r.html" aria-label="Start Level 1"></a>
+  </div>
+  <div class="level-card l2">
+    <span class="num">Level 2</span>
+    <h3>Describe &amp; explore</h3>
+    <p>Frequency tables, means and spreads, graphics with ggplot2, correlation — the language of data.</p>
+    <a class="stretched" href="lessons/05-descriptive/21-frequency-tables.html" aria-label="Start Level 2"></a>
+  </div>
+  <div class="level-card l3">
+    <span class="num">Level 3</span>
+    <h3>Uncertainty &amp; inference</h3>
+    <p>Probability by simulation, sampling distributions, bootstrap, confidence intervals and tests explained without magic.</p>
+    <a class="stretched" href="lessons/07-probability/28-randomness-simulation.html" aria-label="Start Level 3"></a>
+  </div>
+  <div class="level-card l4">
+    <span class="num">Level 4</span>
+    <h3>Models &amp; learning</h3>
+    <p>Linear and generalised linear models, tidymodels, trees and ensembles, PCA, clustering and an optional deep-learning track.</p>
+    <a class="stretched" href="lessons/09-regression/38-simple-regression.html" aria-label="Start Level 4"></a>
+  </div>
+</div>
+```
+
+## How every lesson works
+
+```{=html}
+<div class="feature-grid">
+  <div><div class="icon">🎯</div><h4>Clear objectives</h4><p>What you will be able to do at the end, stated up front.</p></div>
+  <div><div class="icon">💡</div><h4>Intuition first</h4><p>Every idea starts from a concrete problem and a picture or simulation. The maths is there, in collapsible "Going deeper" boxes.</p></div>
+  <div><div class="icon">🔎</div><h4>How to read the output</h4><p>Line-by-line guides to what R prints, so you can explain your results in words.</p></div>
+  <div><div class="icon">⚠️</div><h4>Common pitfalls</h4><p>The misconceptions students (and researchers!) fall into, and how to avoid them.</p></div>
+  <div><div class="icon">▶️</div><h4>Exercises in the browser</h4><p>Edit and run R code on the page — no installation needed — with hints and solutions.</p></div>
+  <div><div class="icon">🧪</div><h4>Modern, reproducible R</h4><p>Native pipe, tidyverse, tidymodels, Quarto and project-based workflows.</p></div>
+</div>
+```
+
+## Who is this for?
+
+- **University students** in statistics, economics, biology, psychology, engineering and the social sciences who need R for their courses or thesis.
+- **Self-learners** who want a structured path rather than scattered tutorials.
+- **Instructors** looking for open material: the course can support a module of up to **9 ECTS / 72 hours**. All sources are on [GitHub](https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners).
+
+No previous programming or statistics knowledge is assumed. If you can install software on your computer, you are ready.
+
+::: {.callout-tip}
+## New here?
+Read [Start here](setup.qmd) (10 minutes) to install R, choose an editor and learn how the interactive exercises work. Then open [Lesson 1](lessons/01-foundations/01-what-is-r.qmd).
+:::
