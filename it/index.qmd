@@ -16,7 +16,7 @@ title-block-banner: false
 
 <section class="hero">
   <div class="eyebrow">From Data to Models with R · Gratuito · Aperto · Interattivo</div>
-  <h1>Impara R e la statistica,<br>un passo alla volta.</h1>
+  <h1>Impara R e la Statistica,<br>un passo alla volta.</h1>
   <p class="lead">
     Un corso universitario completo che ti accompagna dalla prima riga di codice R
     fino alla regressione, al machine learning e al clustering — pensato per studenti

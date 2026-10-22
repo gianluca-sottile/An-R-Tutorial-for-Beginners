@@ -31,6 +31,7 @@ website:
   description: "From your first line of R to statistical modelling and machine learning — a free, open course with interactive exercises."
   site-url: https://gianluca-sottile.github.io/An-R-Tutorial-for-Beginners/
   repo-url: https://github.com/gianluca-sottile/An-R-Tutorial-for-Beginners
+  repo-branch: master
   repo-actions: [edit, issue]
   favicon: images/logo.svg
   page-navigation: true

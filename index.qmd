@@ -16,7 +16,7 @@ title-block-banner: false
 
 <section class="hero">
   <div class="eyebrow">From Data to Models with R · Free · Open · Interactive</div>
-  <h1>Learn R and statistics,<br>one step at a time.</h1>
+  <h1>Learn R and Statistics,<br>one step at a time.</h1>
   <p class="lead">
     A complete university course that takes you from your first line of R code to
     regression, machine learning and clustering — written for students who do
